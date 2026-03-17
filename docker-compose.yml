@@ -1,8 +1,8 @@
 services:
-  api:
+  server:
     build:
       context: .
-      dockerfile: apps/api/Dockerfile
+      dockerfile: server/Dockerfile
     environment:
       BBTODO_API_HOST: ${BBTODO_API_HOST}
       BBTODO_API_PORT: ${BBTODO_API_PORT}
@@ -30,9 +30,9 @@ services:
   web:
     build:
       context: .
-      dockerfile: apps/web/Dockerfile
+      dockerfile: web/Dockerfile
     depends_on:
-      api:
+      server:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1/healthz | grep -q ok"]

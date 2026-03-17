@@ -3,13 +3,13 @@
   "private": true,
   "version": "0.1.0",
   "workspaces": [
-    "apps/api",
-    "apps/web"
+    "server",
+    "web"
   ],
   "scripts": {
-    "build": "npm run build --workspace @bbtodo/api && npm run build --workspace @bbtodo/web",
-    "dev": "concurrently \"npm run dev --workspace @bbtodo/api\" \"npm run dev --workspace @bbtodo/web\"",
-    "test": "npm run test --workspace @bbtodo/api && npm run test --workspace @bbtodo/web"
+    "build": "npm run build --workspace @bbtodo/server && npm run build --workspace @bbtodo/web",
+    "dev": "concurrently \"npm run dev --workspace @bbtodo/server\" \"npm run dev --workspace @bbtodo/web\"",
+    "test": "npm run test --workspace @bbtodo/server && npm run test --workspace @bbtodo/web"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

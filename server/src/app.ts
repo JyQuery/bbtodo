@@ -192,14 +192,14 @@ export function buildApp(options: {
     schema: {
       response: {
         200: z.object({
-          app: z.literal("bbtodo-api"),
+          app: z.literal("bbtodo-server"),
           status: z.literal("ok")
         })
       },
       tags: ["system"]
     },
     handler: async () => ({
-      app: "bbtodo-api",
+      app: "bbtodo-server",
       status: "ok"
     } as const)
   });

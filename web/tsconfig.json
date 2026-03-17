@@ -1,5 +1,5 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "jsx": "react-jsx",
     "types": [
@@ -12,4 +12,3 @@
     "vite.config.ts"
   ]
 }
-

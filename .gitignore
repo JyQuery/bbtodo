@@ -6,5 +6,5 @@ coverage/
 Thumbs.db
 .env
 .env.local
-apps/api/data/
-apps/api/openapi/
+server/data/
+server/openapi/

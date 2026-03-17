@@ -5,7 +5,7 @@
 - fixed `Todo`, `In Progress`, and `Done` columns
 - generic OIDC login for browser users
 - personal API tokens for scripts and automation
-- a React/Vite frontend, Fastify API, and SQLite persistence
+- a React/Vite frontend, Fastify server, and SQLite persistence
 
 ## Local development
 
