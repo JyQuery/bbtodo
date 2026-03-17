@@ -1,12 +1,12 @@
+import "dotenv/config";
+
 import { buildApp } from "./app.js";
+import { loadConfig } from "./config.js";
 
-const port = Number(process.env.PORT ?? "3000");
-const host = process.env.HOST ?? "0.0.0.0";
+const config = loadConfig();
+const app = buildApp({ config });
 
-const app = buildApp();
-
-app.listen({ host, port }).catch((error) => {
+app.listen({ host: config.apiHost, port: config.apiPort }).catch((error) => {
   app.log.error(error);
   process.exit(1);
 });
-

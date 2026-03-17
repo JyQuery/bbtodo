@@ -10,9 +10,16 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "fastify": "^5.8.2"
+    "@fastify/cookie": "^11.0.2",
+    "better-sqlite3": "^12.8.0",
+    "dotenv": "^17.3.1",
+    "drizzle-orm": "^0.45.1",
+    "fastify": "^5.8.2",
+    "openid-client": "^6.8.2",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.5.0",
     "tsx": "^4.21.0",
     "vitest": "^4.1.0"
