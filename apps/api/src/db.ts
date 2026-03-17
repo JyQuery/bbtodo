@@ -1,12 +1,15 @@
 import Database from "better-sqlite3";
+import { and, desc, eq } from "drizzle-orm";
 import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { and, eq } from "drizzle-orm";
-import { sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 const timestamps = {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull()
 };
+
+export const taskStatusValues = ["todo", "in_progress", "done"] as const;
+export type TaskStatus = (typeof taskStatusValues)[number];
 
 export const users = sqliteTable(
   "users",
@@ -26,21 +29,70 @@ export const users = sqliteTable(
   })
 );
 
-export const sessions = sqliteTable("sessions", {
-  id: text("id").primaryKey(),
-  userId: text("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  expiresAt: text("expires_at").notNull(),
-  createdAt: text("created_at").notNull()
-});
+export const sessions = sqliteTable(
+  "sessions",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    expiresAt: text("expires_at").notNull(),
+    createdAt: text("created_at").notNull()
+  },
+  (table) => ({
+    userIdIdx: index("sessions_user_id_idx").on(table.userId),
+    expiresAtIdx: index("sessions_expires_at_idx").on(table.expiresAt)
+  })
+);
+
+export const projects = sqliteTable(
+  "projects",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    ...timestamps
+  },
+  (table) => ({
+    userUpdatedAtIdx: index("projects_user_updated_at_idx").on(
+      table.userId,
+      table.updatedAt
+    )
+  })
+);
+
+export const tasks = sqliteTable(
+  "tasks",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    status: text("status", { enum: taskStatusValues }).notNull(),
+    ...timestamps
+  },
+  (table) => ({
+    projectStatusUpdatedAtIdx: index("tasks_project_status_updated_at_idx").on(
+      table.projectId,
+      table.status,
+      table.updatedAt
+    )
+  })
+);
 
 export type DatabaseClient = BetterSQLite3Database<{
   users: typeof users;
   sessions: typeof sessions;
+  projects: typeof projects;
+  tasks: typeof tasks;
 }>;
 
 export type UserRecord = typeof users.$inferSelect;
+export type ProjectRecord = typeof projects.$inferSelect;
+export type TaskRecord = typeof tasks.$inferSelect;
 
 export interface DatabaseServices {
   database: Database.Database;
@@ -73,6 +125,29 @@ export function createDatabase(sqlitePath: string): DatabaseServices {
 
     CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON sessions (user_id);
     CREATE INDEX IF NOT EXISTS sessions_expires_at_idx ON sessions (expires_at);
+
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS projects_user_updated_at_idx
+      ON projects (user_id, updated_at);
+
+    CREATE TABLE IF NOT EXISTS tasks (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      status TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS tasks_project_status_updated_at_idx
+      ON tasks (project_id, status, updated_at);
   `);
 
   return {
@@ -80,7 +155,9 @@ export function createDatabase(sqlitePath: string): DatabaseServices {
     db: drizzle(database, {
       schema: {
         users,
-        sessions
+        sessions,
+        projects,
+        tasks
       }
     })
   };
@@ -165,4 +242,185 @@ export function getUserForSession(db: DatabaseClient, sessionId: string) {
 
 export function deleteSession(db: DatabaseClient, sessionId: string) {
   db.delete(sessions).where(eq(sessions.id, sessionId)).run();
+}
+
+export function listProjectsForUser(db: DatabaseClient, userId: string) {
+  return db
+    .select()
+    .from(projects)
+    .where(eq(projects.userId, userId))
+    .orderBy(desc(projects.updatedAt))
+    .all();
+}
+
+export function createProject(db: DatabaseClient, userId: string, name: string) {
+  const now = new Date().toISOString();
+  const project = {
+    id: crypto.randomUUID(),
+    userId,
+    name,
+    createdAt: now,
+    updatedAt: now
+  };
+
+  db.insert(projects).values(project).run();
+  return project;
+}
+
+export function getOwnedProject(
+  db: DatabaseClient,
+  userId: string,
+  projectId: string
+) {
+  return db
+    .select()
+    .from(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
+    .get();
+}
+
+export function deleteOwnedProject(
+  db: DatabaseClient,
+  userId: string,
+  projectId: string
+) {
+  const project = getOwnedProject(db, userId, projectId);
+  if (!project) {
+    return false;
+  }
+
+  db.delete(projects).where(eq(projects.id, projectId)).run();
+  return true;
+}
+
+export function listTasksForProject(
+  db: DatabaseClient,
+  input: {
+    userId: string;
+    projectId: string;
+    status?: TaskStatus;
+  }
+) {
+  const project = getOwnedProject(db, input.userId, input.projectId);
+  if (!project) {
+    return null;
+  }
+
+  const filters = [eq(tasks.projectId, input.projectId)];
+  if (input.status) {
+    filters.push(eq(tasks.status, input.status));
+  }
+
+  return db
+    .select()
+    .from(tasks)
+    .where(and(...filters))
+    .orderBy(desc(tasks.updatedAt))
+    .all();
+}
+
+function touchProject(db: DatabaseClient, projectId: string, updatedAt: string) {
+  db.update(projects).set({ updatedAt }).where(eq(projects.id, projectId)).run();
+}
+
+export function createTask(
+  db: DatabaseClient,
+  input: {
+    userId: string;
+    projectId: string;
+    title: string;
+  }
+) {
+  const project = getOwnedProject(db, input.userId, input.projectId);
+  if (!project) {
+    return null;
+  }
+
+  const now = new Date().toISOString();
+  const task = {
+    id: crypto.randomUUID(),
+    projectId: input.projectId,
+    title: input.title,
+    status: "todo" as TaskStatus,
+    createdAt: now,
+    updatedAt: now
+  };
+
+  db.insert(tasks).values(task).run();
+  touchProject(db, input.projectId, now);
+
+  return task;
+}
+
+export function getOwnedTask(
+  db: DatabaseClient,
+  input: {
+    userId: string;
+    projectId: string;
+    taskId: string;
+  }
+) {
+  const result = db
+    .select({ task: tasks })
+    .from(tasks)
+    .innerJoin(projects, eq(tasks.projectId, projects.id))
+    .where(
+      and(
+        eq(tasks.id, input.taskId),
+        eq(tasks.projectId, input.projectId),
+        eq(projects.userId, input.userId)
+      )
+    )
+    .get();
+
+  return result?.task ?? null;
+}
+
+export function updateOwnedTask(
+  db: DatabaseClient,
+  input: {
+    userId: string;
+    projectId: string;
+    taskId: string;
+    title?: string;
+    status?: TaskStatus;
+  }
+) {
+  const task = getOwnedTask(db, input);
+  if (!task) {
+    return null;
+  }
+
+  const updatedAt = new Date().toISOString();
+  db
+    .update(tasks)
+    .set({
+      title: input.title ?? task.title,
+      status: input.status ?? task.status,
+      updatedAt
+    })
+    .where(eq(tasks.id, task.id))
+    .run();
+
+  touchProject(db, input.projectId, updatedAt);
+
+  return db.select().from(tasks).where(eq(tasks.id, task.id)).get() ?? null;
+}
+
+export function deleteOwnedTask(
+  db: DatabaseClient,
+  input: {
+    userId: string;
+    projectId: string;
+    taskId: string;
+  }
+) {
+  const task = getOwnedTask(db, input);
+  if (!task) {
+    return false;
+  }
+
+  db.delete(tasks).where(eq(tasks.id, task.id)).run();
+  touchProject(db, input.projectId, new Date().toISOString());
+  return true;
 }

@@ -1,23 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { AppConfig } from "./config.js";
-import type { OidcProvider } from "./oidc.js";
 import { buildApp } from "./app.js";
+import {
+  createMutableMockOidcProvider,
+  loginWithOidc,
+  testConfig
+} from "./test-helpers.js";
 
-const testConfig: AppConfig = {
-  apiHost: "127.0.0.1",
-  apiPort: 3000,
-  publicOrigin: "http://localhost:5173",
-  sessionSecret: "12345678901234567890123456789012",
-  sessionTtlHours: 168,
-  sqlitePath: ":memory:",
-  oidcIssuer: "https://issuer.example.com",
-  oidcClientId: "bbtodo-test",
-  oidcClientSecret: "top-secret",
-  oidcScopes: "openid profile email"
-};
-
-const createdApps: Array<ReturnType<typeof buildApp>> = [];
+const createdApps: ReturnType<typeof buildApp>[] = [];
 
 afterEach(async () => {
   while (createdApps.length > 0) {
@@ -28,43 +18,16 @@ afterEach(async () => {
   }
 });
 
-function createMockOidcProvider(): OidcProvider {
-  return {
-    async createLoginRequest() {
-      return {
-        redirectUrl: "https://issuer.example.com/authorize?state=test-state",
-        flowState: {
-          codeVerifier: "test-code-verifier",
-          nonce: "test-nonce",
-          state: "test-state"
-        }
-      };
-    },
-    async completeLogin(callbackUrl, flowState) {
-      expect(callbackUrl.toString()).toBe(
-        "http://localhost:5173/auth/callback?code=auth-code&state=test-state"
-      );
-      expect(flowState).toEqual({
-        codeVerifier: "test-code-verifier",
-        nonce: "test-nonce",
-        state: "test-state"
-      });
-
-      return {
-        issuer: testConfig.oidcIssuer,
-        subject: "user-123",
-        email: "hello@example.com",
-        displayName: "bbtodo Tester"
-      };
-    }
-  };
-}
-
 describe("auth routes", () => {
   it("rejects /api/v1/me without a session", async () => {
+    const oidc = createMutableMockOidcProvider({
+      subject: "user-123",
+      email: "hello@example.com",
+      displayName: "bbtodo Tester"
+    });
     const app = buildApp({
       config: testConfig,
-      oidcProvider: createMockOidcProvider()
+      oidcProvider: oidc.provider
     });
     createdApps.push(app);
 
@@ -77,48 +40,31 @@ describe("auth routes", () => {
   });
 
   it("creates a session after the OIDC callback and clears it on logout", async () => {
+    const oidc = createMutableMockOidcProvider({
+      subject: "user-123",
+      email: "hello@example.com",
+      displayName: "bbtodo Tester"
+    });
     const app = buildApp({
       config: testConfig,
-      oidcProvider: createMockOidcProvider()
+      oidcProvider: oidc.provider
     });
     createdApps.push(app);
 
-    const loginResponse = await app.inject({
-      method: "GET",
-      url: "/auth/login"
-    });
+    const session = await loginWithOidc(app);
 
-    expect(loginResponse.statusCode).toBe(302);
-    expect(loginResponse.headers.location).toBe(
+    expect(session.loginResponse.statusCode).toBe(302);
+    expect(session.loginResponse.headers.location).toBe(
       "https://issuer.example.com/authorize?state=test-state"
     );
-
-    const transactionCookie = loginResponse.cookies.find(
-      (cookie) => cookie.name === "bbtodo_oidc"
-    );
-    expect(transactionCookie).toBeDefined();
-
-    const callbackResponse = await app.inject({
-      method: "GET",
-      url: "/auth/callback?code=auth-code&state=test-state",
-      cookies: {
-        bbtodo_oidc: transactionCookie!.value
-      }
-    });
-
-    expect(callbackResponse.statusCode).toBe(302);
-    expect(callbackResponse.headers.location).toBe("/");
-
-    const sessionCookie = callbackResponse.cookies.find(
-      (cookie) => cookie.name === "bbtodo_session"
-    );
-    expect(sessionCookie).toBeDefined();
+    expect(session.callbackResponse.statusCode).toBe(302);
+    expect(session.callbackResponse.headers.location).toBe("/");
 
     const meResponse = await app.inject({
       method: "GET",
       url: "/api/v1/me",
       cookies: {
-        bbtodo_session: sessionCookie!.value
+        bbtodo_session: session.sessionCookie
       }
     });
 
@@ -132,7 +78,7 @@ describe("auth routes", () => {
       method: "POST",
       url: "/auth/logout",
       cookies: {
-        bbtodo_session: sessionCookie!.value
+        bbtodo_session: session.sessionCookie
       }
     });
 
@@ -142,11 +88,10 @@ describe("auth routes", () => {
       method: "GET",
       url: "/api/v1/me",
       cookies: {
-        bbtodo_session: sessionCookie!.value
+        bbtodo_session: session.sessionCookie
       }
     });
 
     expect(afterLogoutResponse.statusCode).toBe(401);
   });
 });
-

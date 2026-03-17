@@ -1,9 +1,46 @@
 import cookie from "@fastify/cookie";
+import swagger from "@fastify/swagger";
+import swaggerUi from "@fastify/swagger-ui";
 import Fastify from "fastify";
+import {
+  jsonSchemaTransform,
+  serializerCompiler,
+  type ZodTypeProvider,
+  validatorCompiler
+} from "fastify-type-provider-zod";
 import { z } from "zod";
 
+import {
+  createProjectBodySchema,
+  createTaskBodySchema,
+  errorResponseSchema,
+  listTasksQuerySchema,
+  meResponseSchema,
+  projectParamsSchema,
+  projectResponseSchema,
+  taskParamsSchema,
+  taskResponseSchema,
+  toMeResponse,
+  toProjectResponse,
+  toTaskResponse,
+  updateTaskBodySchema
+} from "./api-schemas.js";
 import type { AppConfig } from "./config.js";
-import { createDatabase, createSession, deleteSession, getUserForSession, upsertUser } from "./db.js";
+import {
+  createDatabase,
+  createProject,
+  createSession,
+  createTask,
+  deleteOwnedProject,
+  deleteOwnedTask,
+  deleteSession,
+  getUserForSession,
+  listProjectsForUser,
+  listTasksForProject,
+  updateOwnedTask,
+  upsertUser,
+  type UserRecord
+} from "./db.js";
 import { authFlowStateSchema, createOidcProvider, type OidcProvider } from "./oidc.js";
 
 const AUTH_FLOW_COOKIE = "bbtodo_oidc";
@@ -46,6 +83,40 @@ function getSignedSessionId(
   return unsigned.valid ? unsigned.value : null;
 }
 
+async function requireSessionUser(
+  app: ReturnType<typeof Fastify>,
+  request: {
+    cookies: Record<string, string | undefined>;
+  },
+  reply: {
+    clearCookie: ReturnType<typeof Fastify>["clearCookie"];
+    status: ReturnType<typeof Fastify>["status"];
+    send: ReturnType<typeof Fastify>["send"];
+  },
+  getUser: (sessionId: string) => UserRecord | null
+) {
+  const sessionId = getSignedSessionId(app, request.cookies[SESSION_COOKIE]);
+  if (!sessionId) {
+    reply.status(401).send({
+      message: "Authentication required."
+    });
+    return null;
+  }
+
+  const user = getUser(sessionId);
+  if (!user) {
+    reply.clearCookie(SESSION_COOKIE, {
+      path: "/"
+    });
+    reply.status(401).send({
+      message: "Authentication required."
+    });
+    return null;
+  }
+
+  return user;
+}
+
 export function buildApp(options: {
   config: AppConfig;
   oidcProvider?: OidcProvider;
@@ -60,107 +131,426 @@ export function buildApp(options: {
   app.register(cookie, {
     secret: options.config.sessionSecret
   });
+  app.setValidatorCompiler(validatorCompiler);
+  app.setSerializerCompiler(serializerCompiler);
+  app.register(swagger, {
+    openapi: {
+      info: {
+        title: "bbtodo API",
+        version: "0.1.0",
+        description: "Minimal kanban and todo API for bbtodo."
+      },
+      openapi: "3.1.0",
+      servers: [
+        {
+          url: options.config.publicOrigin
+        }
+      ]
+    },
+    transform: jsonSchemaTransform
+  });
+  app.register(swaggerUi, {
+    routePrefix: "/docs"
+  });
 
-  app.get("/health", async () => {
-    return {
+  app.after(() => {
+    const typedApp = app.withTypeProvider<ZodTypeProvider>();
+
+  typedApp.route({
+    method: "GET",
+    url: "/health",
+    schema: {
+      response: {
+        200: z.object({
+          app: z.literal("bbtodo-api"),
+          status: z.literal("ok")
+        })
+      },
+      tags: ["system"]
+    },
+    handler: async () => ({
       app: "bbtodo-api",
       status: "ok"
-    };
+    } as const)
   });
 
-  app.get("/auth/login", async (_request, reply) => {
-    const loginRequest = await oidcProvider.createLoginRequest();
-    reply.setCookie(AUTH_FLOW_COOKIE, JSON.stringify(loginRequest.flowState), {
-      httpOnly: true,
-      maxAge: 10 * 60,
-      path: "/auth",
-      sameSite: "lax",
-      secure: secureCookie,
-      signed: true
-    });
-
-    return reply.redirect(loginRequest.redirectUrl);
-  });
-
-  app.get("/auth/callback", async (request, reply) => {
-    const callbackQuery = callbackQuerySchema.parse(request.query);
-    const flowState = parseSignedCookie(
-      app,
-      request.cookies[AUTH_FLOW_COOKIE],
-      authFlowStateSchema
-    );
-
-    if (!flowState) {
-      return reply.status(400).send({
-        message: "Missing or invalid OIDC flow cookie."
+  typedApp.route({
+    method: "GET",
+    url: "/auth/login",
+    schema: {
+      response: {
+        302: z.null()
+      },
+      tags: ["auth"]
+    },
+    handler: async (_request, reply) => {
+      const loginRequest = await oidcProvider.createLoginRequest();
+      reply.setCookie(AUTH_FLOW_COOKIE, JSON.stringify(loginRequest.flowState), {
+        httpOnly: true,
+        maxAge: 10 * 60,
+        path: "/auth",
+        sameSite: "lax",
+        secure: secureCookie,
+        signed: true
       });
+
+      return reply.redirect(loginRequest.redirectUrl);
     }
-
-    const callbackUrl = new URL(
-      `${options.config.publicOrigin}/auth/callback?code=${encodeURIComponent(callbackQuery.code)}&state=${encodeURIComponent(callbackQuery.state)}`
-    );
-    const identity = await oidcProvider.completeLogin(callbackUrl, flowState);
-    const user = await upsertUser(database.db, identity);
-    const expiresAt = new Date(
-      Date.now() + options.config.sessionTtlHours * 60 * 60 * 1000
-    ).toISOString();
-    const session = createSession(database.db, {
-      userId: user.id,
-      expiresAt
-    });
-
-    reply.clearCookie(AUTH_FLOW_COOKIE, {
-      path: "/auth"
-    });
-    reply.setCookie(SESSION_COOKIE, session.id, {
-      expires: new Date(expiresAt),
-      httpOnly: true,
-      path: "/",
-      sameSite: "lax",
-      secure: secureCookie,
-      signed: true
-    });
-
-    return reply.redirect("/");
   });
 
-  app.post("/auth/logout", async (request, reply) => {
-    const sessionId = getSignedSessionId(app, request.cookies[SESSION_COOKIE]);
-    if (sessionId) {
-      deleteSession(database.db, sessionId);
-    }
+  typedApp.route({
+    method: "GET",
+    url: "/auth/callback",
+    schema: {
+      querystring: callbackQuerySchema,
+      response: {
+        302: z.null(),
+        400: errorResponseSchema
+      },
+      tags: ["auth"]
+    },
+    handler: async (request, reply) => {
+      const flowState = parseSignedCookie(
+        app,
+        request.cookies[AUTH_FLOW_COOKIE],
+        authFlowStateSchema
+      );
 
-    reply.clearCookie(SESSION_COOKIE, {
-      path: "/"
-    });
+      if (!flowState) {
+        return reply.status(400).send({
+          message: "Missing or invalid OIDC flow cookie."
+        });
+      }
 
-    return reply.status(204).send();
-  });
-
-  app.get("/api/v1/me", async (request, reply) => {
-    const sessionId = getSignedSessionId(app, request.cookies[SESSION_COOKIE]);
-    if (!sessionId) {
-      return reply.status(401).send({
-        message: "Authentication required."
+      const callbackUrl = new URL(
+        `${options.config.publicOrigin}/auth/callback?code=${encodeURIComponent(request.query.code)}&state=${encodeURIComponent(request.query.state)}`
+      );
+      const identity = await oidcProvider.completeLogin(callbackUrl, flowState);
+      const user = await upsertUser(database.db, identity);
+      const expiresAt = new Date(
+        Date.now() + options.config.sessionTtlHours * 60 * 60 * 1000
+      ).toISOString();
+      const session = createSession(database.db, {
+        userId: user.id,
+        expiresAt
       });
-    }
 
-    const user = getUserForSession(database.db, sessionId);
-    if (!user) {
+      reply.clearCookie(AUTH_FLOW_COOKIE, {
+        path: "/auth"
+      });
+      reply.setCookie(SESSION_COOKIE, session.id, {
+        expires: new Date(expiresAt),
+        httpOnly: true,
+        path: "/",
+        sameSite: "lax",
+        secure: secureCookie,
+        signed: true
+      });
+
+      return reply.redirect("/");
+    }
+  });
+
+  typedApp.route({
+    method: "POST",
+    url: "/auth/logout",
+    schema: {
+      response: {
+        204: z.null()
+      },
+      tags: ["auth"]
+    },
+    handler: async (request, reply) => {
+      const sessionId = getSignedSessionId(app, request.cookies[SESSION_COOKIE]);
+      if (sessionId) {
+        deleteSession(database.db, sessionId);
+      }
+
       reply.clearCookie(SESSION_COOKIE, {
         path: "/"
       });
 
-      return reply.status(401).send({
-        message: "Authentication required."
-      });
+      return reply.status(204).send(null);
     }
+  });
 
-    return {
-      email: user.email,
-      id: user.id,
-      name: user.displayName
-    };
+  typedApp.route({
+    method: "GET",
+    url: "/api/v1/me",
+    schema: {
+      response: {
+        200: meResponseSchema,
+        401: errorResponseSchema
+      },
+      tags: ["auth"]
+    },
+    handler: async (request, reply) => {
+      const user = await requireSessionUser(
+        app,
+        request,
+        reply,
+        (sessionId) => getUserForSession(database.db, sessionId)
+      );
+      if (!user) {
+        return;
+      }
+
+      return toMeResponse(user);
+    }
+  });
+
+  typedApp.route({
+    method: "GET",
+    url: "/api/v1/projects",
+    schema: {
+      response: {
+        200: z.array(projectResponseSchema),
+        401: errorResponseSchema
+      },
+      tags: ["projects"]
+    },
+    handler: async (request, reply) => {
+      const user = await requireSessionUser(
+        app,
+        request,
+        reply,
+        (sessionId) => getUserForSession(database.db, sessionId)
+      );
+      if (!user) {
+        return;
+      }
+
+      return listProjectsForUser(database.db, user.id).map(toProjectResponse);
+    }
+  });
+
+  typedApp.route({
+    method: "POST",
+    url: "/api/v1/projects",
+    schema: {
+      body: createProjectBodySchema,
+      response: {
+        201: projectResponseSchema,
+        401: errorResponseSchema
+      },
+      tags: ["projects"]
+    },
+    handler: async (request, reply) => {
+      const user = await requireSessionUser(
+        app,
+        request,
+        reply,
+        (sessionId) => getUserForSession(database.db, sessionId)
+      );
+      if (!user) {
+        return;
+      }
+
+      const project = createProject(database.db, user.id, request.body.name.trim());
+      return reply.status(201).send(toProjectResponse(project));
+    }
+  });
+
+  typedApp.route({
+    method: "DELETE",
+    url: "/api/v1/projects/:projectId",
+    schema: {
+      params: projectParamsSchema,
+      response: {
+        204: z.null(),
+        401: errorResponseSchema,
+        404: errorResponseSchema
+      },
+      tags: ["projects"]
+    },
+    handler: async (request, reply) => {
+      const user = await requireSessionUser(
+        app,
+        request,
+        reply,
+        (sessionId) => getUserForSession(database.db, sessionId)
+      );
+      if (!user) {
+        return;
+      }
+
+      const deleted = deleteOwnedProject(database.db, user.id, request.params.projectId);
+      if (!deleted) {
+        return reply.status(404).send({
+          message: "Project not found."
+        });
+      }
+
+      return reply.status(204).send(null);
+    }
+  });
+
+  typedApp.route({
+    method: "GET",
+    url: "/api/v1/projects/:projectId/tasks",
+    schema: {
+      params: projectParamsSchema,
+      querystring: listTasksQuerySchema,
+      response: {
+        200: z.array(taskResponseSchema),
+        401: errorResponseSchema,
+        404: errorResponseSchema
+      },
+      tags: ["tasks"]
+    },
+    handler: async (request, reply) => {
+      const user = await requireSessionUser(
+        app,
+        request,
+        reply,
+        (sessionId) => getUserForSession(database.db, sessionId)
+      );
+      if (!user) {
+        return;
+      }
+
+      const tasks = listTasksForProject(database.db, {
+        userId: user.id,
+        projectId: request.params.projectId,
+        status: request.query.status
+      });
+      if (!tasks) {
+        return reply.status(404).send({
+          message: "Project not found."
+        });
+      }
+
+      return tasks.map(toTaskResponse);
+    }
+  });
+
+  typedApp.route({
+    method: "POST",
+    url: "/api/v1/projects/:projectId/tasks",
+    schema: {
+      body: createTaskBodySchema,
+      params: projectParamsSchema,
+      response: {
+        201: taskResponseSchema,
+        401: errorResponseSchema,
+        404: errorResponseSchema
+      },
+      tags: ["tasks"]
+    },
+    handler: async (request, reply) => {
+      const user = await requireSessionUser(
+        app,
+        request,
+        reply,
+        (sessionId) => getUserForSession(database.db, sessionId)
+      );
+      if (!user) {
+        return;
+      }
+
+      const task = createTask(database.db, {
+        userId: user.id,
+        projectId: request.params.projectId,
+        title: request.body.title.trim()
+      });
+      if (!task) {
+        return reply.status(404).send({
+          message: "Project not found."
+        });
+      }
+
+      return reply.status(201).send(toTaskResponse(task));
+    }
+  });
+
+  typedApp.route({
+    method: "PATCH",
+    url: "/api/v1/projects/:projectId/tasks/:taskId",
+    schema: {
+      body: updateTaskBodySchema,
+      params: taskParamsSchema,
+      response: {
+        200: taskResponseSchema,
+        401: errorResponseSchema,
+        404: errorResponseSchema
+      },
+      tags: ["tasks"]
+    },
+    handler: async (request, reply) => {
+      const user = await requireSessionUser(
+        app,
+        request,
+        reply,
+        (sessionId) => getUserForSession(database.db, sessionId)
+      );
+      if (!user) {
+        return;
+      }
+
+      const task = updateOwnedTask(database.db, {
+        userId: user.id,
+        projectId: request.params.projectId,
+        taskId: request.params.taskId,
+        title: request.body.title?.trim(),
+        status: request.body.status
+      });
+      if (!task) {
+        return reply.status(404).send({
+          message: "Task not found."
+        });
+      }
+
+      return toTaskResponse(task);
+    }
+  });
+
+  typedApp.route({
+    method: "DELETE",
+    url: "/api/v1/projects/:projectId/tasks/:taskId",
+    schema: {
+      params: taskParamsSchema,
+      response: {
+        204: z.null(),
+        401: errorResponseSchema,
+        404: errorResponseSchema
+      },
+      tags: ["tasks"]
+    },
+    handler: async (request, reply) => {
+      const user = await requireSessionUser(
+        app,
+        request,
+        reply,
+        (sessionId) => getUserForSession(database.db, sessionId)
+      );
+      if (!user) {
+        return;
+      }
+
+      const deleted = deleteOwnedTask(database.db, {
+        userId: user.id,
+        projectId: request.params.projectId,
+        taskId: request.params.taskId
+      });
+      if (!deleted) {
+        return reply.status(404).send({
+          message: "Task not found."
+        });
+      }
+
+      return reply.status(204).send(null);
+    }
+  });
+
+  typedApp.route({
+    method: "GET",
+    url: "/docs/openapi.json",
+    schema: {
+      hide: true
+    },
+    handler: async () => app.swagger()
+  });
+
   });
 
   app.addHook("onClose", async () => {
