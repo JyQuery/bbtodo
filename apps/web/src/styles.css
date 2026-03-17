@@ -1,0 +1,55 @@
+:root {
+  color: #1f2937;
+  background: linear-gradient(180deg, #f7f4ea 0%, #ebe8df 100%);
+  font-family: "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+}
+
+.hero-card {
+  max-width: 38rem;
+  padding: 2rem;
+  border-radius: 1.5rem;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 24px 60px rgba(67, 56, 38, 0.14);
+}
+
+.eyebrow {
+  margin: 0 0 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.75rem;
+  color: #8a6d3b;
+}
+
+h1 {
+  margin: 0 0 1rem;
+  font-size: clamp(2.4rem, 4vw, 3.6rem);
+  line-height: 1;
+}
+
+.body-copy {
+  margin: 0;
+  color: #4b5563;
+  line-height: 1.6;
+}
+
