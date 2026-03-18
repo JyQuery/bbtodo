@@ -8,3 +8,5 @@ Thumbs.db
 .env.local
 server/data/
 server/openapi/
+web/playwright-report/
+web/test-results/

@@ -102,7 +102,7 @@ function EmptyState({
 
 function ProjectGridSkeleton() {
   return (
-    <section className="project-grid" aria-hidden="true">
+    <section aria-hidden="true" className="project-grid">
       {Array.from({ length: 4 }).map((_, index) => (
         <article className="project-card skeleton-card" key={index} style={itemStyle(index)}>
           <div className="skeleton-line skeleton-line--small" />
@@ -121,7 +121,7 @@ function ProjectGridSkeleton() {
 
 function BoardSkeleton() {
   return (
-    <section className="board-grid" aria-hidden="true">
+    <section aria-hidden="true" className="board-grid" data-testid="board-grid">
       {columns.map((column, index) => (
         <article className="board-column skeleton-column" key={column.key} style={itemStyle(index)}>
           <div className="board-column__header">
@@ -166,26 +166,17 @@ function LoadingState() {
   return (
     <main className="loading-shell">
       <div className="loading-shell__inner">
-        <section className="page-intro">
-          <article className="hero-panel">
-            <div className="skeleton-line skeleton-line--small" />
-            <div className="skeleton-line skeleton-line--hero" />
-            <div className="skeleton-line skeleton-line--body" />
-            <div className="skeleton-line skeleton-line--body short" />
-            <MetricRibbon
-              items={[
-                { label: "Boards", value: "Loading" },
-                { label: "Access", value: "Checking" },
-                { label: "Sync", value: "Preparing" }
-              ]}
-            />
-          </article>
-          <aside className="surface-panel surface-panel--form">
+        <section className="surface-strip loading-strip">
+          <div className="loading-strip__copy">
             <div className="skeleton-line skeleton-line--small" />
             <div className="skeleton-line skeleton-line--medium" />
-            <div className="skeleton-line skeleton-line--body" />
-            <div className="skeleton-button" />
-          </aside>
+            <div className="skeleton-line skeleton-line--body short" />
+          </div>
+          <div className="loading-strip__meta">
+            <div className="skeleton-pill" />
+            <div className="skeleton-pill" />
+            <div className="skeleton-pill" />
+          </div>
         </section>
         <BoardSkeleton />
       </div>
@@ -337,49 +328,41 @@ function ProjectsPage() {
 
   return (
     <main className="page-shell">
-      <section className="page-intro">
-        <article className="hero-panel">
+      <section className="page-header">
+        <div className="page-header__copy">
           <p className="eyebrow">Projects</p>
-          <h1>One board per project, clear enough to scan in seconds.</h1>
-          <p className="lead-copy">
-            Create a board when work starts, keep the same three lanes everywhere, and let the web UI and API stay in step.
-          </p>
-          <MetricRibbon
-            items={[
-              { label: "Boards", value: projectCount > 0 ? `${projectCount} active` : "Ready to start" },
-              { label: "Lanes", value: "Todo, In Progress, Done" },
-              { label: "Access", value: "Browser and API" }
-            ]}
-          />
-        </article>
+          <h1 className="page-title">Boards</h1>
+          <p className="page-summary">One board per project, with the same three lanes every time.</p>
+        </div>
+        <div className="page-header__meta">
+          <span className="label-chip">{projectCount} boards</span>
+          <span className="label-chip label-chip--soft">Todo / In Progress / Done</span>
+        </div>
+      </section>
 
-        <aside className="surface-panel surface-panel--form">
-          <p className="panel-kicker">Create board</p>
-          <h2>Start a new project.</h2>
-          <p className="panel-copy">Each project gets one kanban board with the same three columns.</p>
-          <form
-            className="stack-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              createProjectMutation.mutate(name.trim());
-            }}
-          >
-            <label className="field">
-              <span className="field__label">Project name</span>
-              <input
-                maxLength={120}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="Billing cleanup"
-                required
-                value={name}
-              />
-              <span className="field__hint">Use one clear name so the board is easy to find later.</span>
-            </label>
-            <button className="primary-button" disabled={createProjectMutation.isPending || name.trim().length === 0} type="submit">
-              {createProjectMutation.isPending ? "Creating board..." : "Create board"}
-            </button>
-          </form>
-        </aside>
+      <section className="surface-strip">
+        <form
+          className="compose-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            createProjectMutation.mutate(name.trim());
+          }}
+        >
+          <label className="field">
+            <span className="field__label">Project name</span>
+            <input
+              maxLength={120}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Billing cleanup"
+              required
+              value={name}
+            />
+            <span className="field__hint">Each project gets one board with fixed Todo, In Progress, and Done lanes.</span>
+          </label>
+          <button className="primary-button" disabled={createProjectMutation.isPending || name.trim().length === 0} type="submit">
+            {createProjectMutation.isPending ? "Creating board..." : "Create board"}
+          </button>
+        </form>
       </section>
 
       {projectsQuery.error ? <ErrorBanner error={projectsQuery.error} /> : null}
@@ -410,9 +393,9 @@ function ProjectsPage() {
               </div>
               <div className="project-card__body">
                 <h2>{project.name}</h2>
-                <p className="project-card__summary">Fixed lanes keep the board familiar, even when the project itself changes fast.</p>
+                <p className="project-card__summary">A steady three-lane board that stays easy to scan as the project changes.</p>
               </div>
-              <div className="project-track" aria-label="Board columns">
+              <div aria-label="Board columns" className="project-track">
                 <span>Todo</span>
                 <span>In Progress</span>
                 <span>Done</span>
@@ -535,53 +518,48 @@ function BoardPage() {
   }
 
   return (
-    <main className="page-shell">
-      <section className="page-intro">
-        <article className="hero-panel">
-          <button className="back-link" onClick={() => navigate("/")} type="button">
-            Back to projects
-          </button>
-          <p className="eyebrow">Board</p>
-          <h1>{project?.name ?? "Loading board"}</h1>
-          <p className="lead-copy">
-            Add a task, move it forward one lane at a time, and clear it out when the work is finished.
-          </p>
-          <MetricRibbon
-            items={[
-              { label: "Tasks", value: `${tasks.length} total` },
-              { label: "Finished", value: `${doneCount} done` },
-              { label: "Updated", value: project ? formatDate(project.updatedAt) : "Syncing" }
-            ]}
-          />
-        </article>
-
-        <aside className="surface-panel surface-panel--form">
-          <p className="panel-kicker">Add task</p>
-          <h2>Drop the next step on the board.</h2>
-          <p className="panel-copy">New tasks land in Todo so the flow stays predictable.</p>
-          <form
-            className="stack-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              createTaskMutation.mutate(title.trim());
-            }}
-          >
-            <label className="field">
-              <span className="field__label">Task title</span>
-              <input
-                maxLength={240}
-                onChange={(event) => setTitle(event.target.value)}
-                placeholder="Draft release note summary"
-                required
-                value={title}
-              />
-              <span className="field__hint">Keep titles short enough to scan from the board view.</span>
-            </label>
-            <button className="primary-button" disabled={createTaskMutation.isPending || title.trim().length === 0} type="submit">
-              {createTaskMutation.isPending ? "Adding task..." : "Add task"}
+    <main className="page-shell page-shell--board">
+      <section className="workspace-header">
+        <div className="surface-strip workspace-summary">
+          <div className="workspace-summary__top">
+            <button className="back-link" onClick={() => navigate("/")} type="button">
+              Back to projects
             </button>
-          </form>
-        </aside>
+            <div className="page-header__meta">
+              <span className="label-chip">{tasks.length} tasks</span>
+              <span className="label-chip label-chip--soft">{doneCount} done</span>
+              <span className="label-chip">{project ? `Updated ${formatDate(project.updatedAt)}` : "Syncing"}</span>
+            </div>
+          </div>
+          <div className="workspace-summary__copy">
+            <p className="eyebrow">Board</p>
+            <h1 className="page-title workspace-title">{project?.name ?? "Loading board"}</h1>
+            <p className="page-summary">Move work forward one lane at a time and keep the whole board visible at once.</p>
+          </div>
+        </div>
+
+        <form
+          className="surface-strip workspace-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            createTaskMutation.mutate(title.trim());
+          }}
+        >
+          <label className="field">
+            <span className="field__label">Task title</span>
+            <input
+              maxLength={240}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="Draft release note summary"
+              required
+              value={title}
+            />
+            <span className="field__hint">New tasks start in Todo so the flow stays predictable.</span>
+          </label>
+          <button className="primary-button" disabled={createTaskMutation.isPending || title.trim().length === 0} type="submit">
+            {createTaskMutation.isPending ? "Adding task..." : "Add task"}
+          </button>
+        </form>
       </section>
 
       {projectsQuery.error ? <ErrorBanner error={projectsQuery.error} /> : null}
@@ -601,7 +579,7 @@ function BoardPage() {
       ) : null}
 
       {!projectsQuery.isPending && !tasksQuery.isPending && project ? (
-        <section className="board-grid">
+        <section className="board-grid" data-testid="board-grid">
           {groupedTasks.map((column, columnIndex) => (
             <div className="board-column" key={column.key} style={itemStyle(columnIndex)}>
               <div className="board-column__header">
@@ -665,49 +643,41 @@ function ApiTokensPage() {
 
   return (
     <main className="page-shell">
-      <section className="page-intro">
-        <article className="hero-panel">
+      <section className="page-header">
+        <div className="page-header__copy">
           <p className="eyebrow">Automation</p>
-          <h1>Personal tokens for scripts that need a direct line in.</h1>
-          <p className="lead-copy">
-            Tokens use the same project and task endpoints as the app, so small tools can stay close to the board without extra setup.
-          </p>
-          <MetricRibbon
-            items={[
-              { label: "Tokens", value: tokenCount > 0 ? `${tokenCount} active` : "None yet" },
-              { label: "Reveal", value: "Shown once" },
-              { label: "Format", value: "Bearer token" }
-            ]}
-          />
-        </article>
+          <h1 className="page-title">API tokens</h1>
+          <p className="page-summary">Issue a token for scripts and revoke it when the tool no longer needs access.</p>
+        </div>
+        <div className="page-header__meta">
+          <span className="label-chip">{tokenCount} active</span>
+          <span className="label-chip label-chip--soft">Shown once on creation</span>
+        </div>
+      </section>
 
-        <aside className="surface-panel surface-panel--form">
-          <p className="panel-kicker">Create token</p>
-          <h2>Name the script or tool.</h2>
-          <p className="panel-copy">Use distinct names so revoking access later is obvious.</p>
-          <form
-            className="stack-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              createTokenMutation.mutate(name.trim());
-            }}
-          >
-            <label className="field">
-              <span className="field__label">Token name</span>
-              <input
-                maxLength={120}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="Ops sync script"
-                required
-                value={name}
-              />
-              <span className="field__hint">The raw token is only visible at creation time.</span>
-            </label>
-            <button className="primary-button" disabled={createTokenMutation.isPending || name.trim().length === 0} type="submit">
-              {createTokenMutation.isPending ? "Creating token..." : "Create token"}
-            </button>
-          </form>
-        </aside>
+      <section className="surface-strip">
+        <form
+          className="compose-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            createTokenMutation.mutate(name.trim());
+          }}
+        >
+          <label className="field">
+            <span className="field__label">Token name</span>
+            <input
+              maxLength={120}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Ops sync script"
+              required
+              value={name}
+            />
+            <span className="field__hint">Give each token a distinct name so revocation stays obvious later.</span>
+          </label>
+          <button className="primary-button" disabled={createTokenMutation.isPending || name.trim().length === 0} type="submit">
+            {createTokenMutation.isPending ? "Creating token..." : "Create token"}
+          </button>
+        </form>
       </section>
 
       {tokensQuery.error ? <ErrorBanner error={tokensQuery.error} /> : null}
