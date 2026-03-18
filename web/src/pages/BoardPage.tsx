@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import ReactMarkdown from "react-markdown";
 import { Navigate, useParams, useSearchParams } from "react-router-dom";
 
 import { api, type BoardLane, type Task } from "../api";
@@ -12,6 +13,7 @@ function TaskCard({
   onDelete,
   onDragEnd,
   onDragStart,
+  onOpen,
   task,
   taskIndex
 }: {
@@ -19,6 +21,7 @@ function TaskCard({
   onDelete: (taskId: string) => void;
   onDragEnd: () => void;
   onDragStart: (task: Task) => void;
+  onOpen: (task: Task) => void;
   task: Task;
   taskIndex: number;
 }) {
@@ -32,13 +35,22 @@ function TaskCard({
       className={`task-card${isDragging ? " is-dragging" : ""}${isConfirmOpen ? " is-confirm-open" : ""}`}
       data-testid={`task-card-${task.id}`}
       draggable="true"
+      onClick={() => onOpen(task)}
       onDragEnd={onDragEnd}
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = "move";
         event.dataTransfer.setData("text/plain", task.id);
         onDragStart(task);
       }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen(task);
+        }
+      }}
+      role="button"
       style={itemStyle(taskIndex)}
+      tabIndex={0}
     >
       <div className="task-card__meta">
         <time className="task-card__timestamp" dateTime={task.updatedAt}>
@@ -49,21 +61,32 @@ function TaskCard({
             aria-expanded={isConfirmOpen}
             aria-label={`Delete task ${task.title}`}
             className="icon-button danger-button"
-            onClick={() => setIsConfirmOpen((current) => !current)}
+            onClick={(event) => {
+              event.stopPropagation();
+              setIsConfirmOpen((current) => !current);
+            }}
             type="button"
           >
             <span aria-hidden="true">x</span>
           </button>
           {isConfirmOpen ? (
-            <div className="task-delete-popover" role="alertdialog">
+            <div className="task-delete-popover" onClick={(event) => event.stopPropagation()} role="alertdialog">
               <p>Delete this task?</p>
               <div className="task-delete-popover__actions">
-                <button className="text-button" onClick={() => setIsConfirmOpen(false)} type="button">
+                <button
+                  className="text-button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setIsConfirmOpen(false);
+                  }}
+                  type="button"
+                >
                   Cancel
                 </button>
                 <button
                   className="ghost-button danger-button"
-                  onClick={() => {
+                  onClick={(event) => {
+                    event.stopPropagation();
                     setIsConfirmOpen(false);
                     onDelete(task.id);
                   }}
@@ -81,6 +104,112 @@ function TaskCard({
   );
 }
 
+function TaskEditorDialog({
+  error,
+  isPending,
+  onClose,
+  onSave,
+  task
+}: {
+  error: Error | null;
+  isPending: boolean;
+  onClose: () => void;
+  onSave: (input: { body: string; title: string }) => void;
+  task: Task;
+}) {
+  const [title, setTitle] = useState(task.title);
+  const [body, setBody] = useState(task.body);
+
+  useEffect(() => {
+    setTitle(task.title);
+    setBody(task.body);
+  }, [task.body, task.id, task.title]);
+
+  return (
+    <div className="dialog-scrim" onClick={onClose}>
+      <section
+        aria-labelledby="edit-task-title"
+        aria-modal="true"
+        className="dialog-panel dialog-panel--task-editor"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+      >
+        <div className="dialog-header">
+          <h2 id="edit-task-title">Edit Card</h2>
+          <button
+            aria-label="Close edit task dialog"
+            className="icon-button"
+            onClick={onClose}
+            type="button"
+          >
+            <span aria-hidden="true">x</span>
+          </button>
+        </div>
+        <form
+          className="dialog-form task-editor"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSave({
+              body,
+              title: title.trim()
+            });
+          }}
+        >
+          <div className="task-editor__grid">
+            <div className="task-editor__fields">
+              <label className="field">
+                <span className="field__label">Title</span>
+                <input
+                  autoFocus
+                  maxLength={240}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="Task title"
+                  required
+                  value={title}
+                />
+              </label>
+              <label className="field field--editor">
+                <span className="field__label">Body</span>
+                <textarea
+                  aria-label="Task body"
+                  maxLength={12000}
+                  onChange={(event) => setBody(event.target.value)}
+                  placeholder="Write markdown here"
+                  rows={12}
+                  value={body}
+                />
+              </label>
+            </div>
+
+            <section className="task-editor__preview-panel">
+              <div className="task-editor__preview-header">
+                <h3>Preview</h3>
+                <span className="task-editor__preview-hint">Markdown</span>
+              </div>
+              <div className="markdown-preview" data-testid="task-markdown-preview">
+                {body.trim() ? (
+                  <ReactMarkdown>{body}</ReactMarkdown>
+                ) : (
+                  <p className="markdown-preview__empty">Nothing to preview yet.</p>
+                )}
+              </div>
+            </section>
+          </div>
+          {error ? <ErrorBanner error={error} /> : null}
+          <div className="dialog-actions">
+            <button className="text-button" onClick={onClose} type="button">
+              Cancel
+            </button>
+            <button className="primary-button" disabled={isPending || title.trim().length === 0} type="submit">
+              {isPending ? "Saving..." : "Save card"}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
 export function BoardPage() {
   const { projectId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -89,7 +218,9 @@ export function BoardPage() {
   const [draftTitle, setDraftTitle] = useState("");
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dropTargetLaneId, setDropTargetLaneId] = useState<string | null>(null);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [laneName, setLaneName] = useState("");
+
   const projectsQuery = useQuery({
     queryKey: ["projects"],
     queryFn: () => api.listProjects()
@@ -104,17 +235,39 @@ export function BoardPage() {
     queryKey: ["tasks", projectId],
     queryFn: () => api.listTasks(projectId ?? "")
   });
+
   const isCreateLaneDialogOpen = searchParams.get("createLane") === "1";
   const boardSearch = searchParams.get("q")?.trim().toLowerCase() ?? "";
+  const project = projectsQuery.data?.find((candidate) => candidate.id === projectId);
+  const lanes = lanesQuery.data ?? project?.laneSummaries ?? [];
+  const tasks = tasksQuery.data ?? [];
+  const draggedTask = draggedTaskId ? tasks.find((task) => task.id === draggedTaskId) ?? null : null;
+  const editingTask = editingTaskId ? tasks.find((task) => task.id === editingTaskId) ?? null : null;
+
+  const visibleTasks = boardSearch
+    ? tasks.filter((task) => {
+        const haystack = `${task.title}\n${task.body}`.toLowerCase();
+        return haystack.includes(boardSearch);
+      })
+    : tasks;
+  const groupedTasks = lanes.map((lane) => ({
+    ...lane,
+    tasks: visibleTasks.filter((task) => task.laneId === lane.id)
+  }));
+
+  async function invalidateBoardData() {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["tasks", projectId] }),
+      queryClient.invalidateQueries({ queryKey: ["projects"] }),
+      queryClient.invalidateQueries({ queryKey: ["lanes", projectId] })
+    ]);
+  }
 
   const createLaneMutation = useMutation({
     mutationFn: (name: string) => api.createLane(projectId ?? "", name),
     onSuccess: async () => {
       closeCreateLaneDialog();
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["lanes", projectId] }),
-        queryClient.invalidateQueries({ queryKey: ["projects"] })
-      ]);
+      await invalidateBoardData();
     }
   });
 
@@ -127,51 +280,33 @@ export function BoardPage() {
     onSuccess: async () => {
       setComposerLaneId(null);
       setDraftTitle("");
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["tasks", projectId] }),
-        queryClient.invalidateQueries({ queryKey: ["projects"] }),
-        queryClient.invalidateQueries({ queryKey: ["lanes", projectId] })
-      ]);
+      await invalidateBoardData();
     }
   });
 
-  const updateTaskMutation = useMutation({
-    mutationFn: ({ laneId, position, task }: { laneId: string; position: number; task: Task }) =>
-      api.updateTask(projectId ?? "", task.id, { laneId, position }),
+  const moveTaskMutation = useMutation({
+    mutationFn: ({ laneId, position, taskId }: { laneId: string; position: number; taskId: string }) =>
+      api.updateTask(projectId ?? "", taskId, { laneId, position }),
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["tasks", projectId] }),
-        queryClient.invalidateQueries({ queryKey: ["projects"] }),
-        queryClient.invalidateQueries({ queryKey: ["lanes", projectId] })
-      ]);
+      await invalidateBoardData();
+    }
+  });
+
+  const saveTaskMutation = useMutation({
+    mutationFn: ({ body, taskId, title }: { body: string; taskId: string; title: string }) =>
+      api.updateTask(projectId ?? "", taskId, { body, title }),
+    onSuccess: async () => {
+      closeTaskDialog();
+      await invalidateBoardData();
     }
   });
 
   const deleteTaskMutation = useMutation({
     mutationFn: (taskId: string) => api.deleteTask(projectId ?? "", taskId),
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["tasks", projectId] }),
-        queryClient.invalidateQueries({ queryKey: ["projects"] }),
-        queryClient.invalidateQueries({ queryKey: ["lanes", projectId] })
-      ]);
+      await invalidateBoardData();
     }
   });
-
-  const project = projectsQuery.data?.find((candidate) => candidate.id === projectId);
-  const lanes = lanesQuery.data ?? project?.laneSummaries ?? [];
-  const tasks = tasksQuery.data ?? [];
-  const draggedTask = draggedTaskId ? tasks.find((task) => task.id === draggedTaskId) ?? null : null;
-  const visibleTasks = boardSearch
-    ? tasks.filter((task) => {
-        const haystack = `${task.title}\n${task.body}`.toLowerCase();
-        return haystack.includes(boardSearch);
-      })
-    : tasks;
-  const groupedTasks = lanes.map((lane) => ({
-    ...lane,
-    tasks: visibleTasks.filter((task) => task.laneId === lane.id)
-  }));
 
   function updateBoardParams(updater: (params: URLSearchParams) => void) {
     const nextParams = new URLSearchParams(searchParams);
@@ -197,6 +332,11 @@ export function BoardPage() {
     setDraftTitle("");
   }
 
+  function closeTaskDialog() {
+    setEditingTaskId(null);
+    saveTaskMutation.reset();
+  }
+
   function handleDrop(lane: BoardLane) {
     setDropTargetLaneId(null);
     if (!draggedTask || draggedTask.laneId === lane.id) {
@@ -205,23 +345,30 @@ export function BoardPage() {
     }
 
     const nextPosition = tasks.filter((task) => task.laneId === lane.id && task.id !== draggedTask.id).length;
-    updateTaskMutation.mutate({
+    moveTaskMutation.mutate({
       laneId: lane.id,
       position: nextPosition,
-      task: draggedTask
+      taskId: draggedTask.id
     });
     setDraggedTaskId(null);
   }
 
   useEffect(() => {
-    if (!isCreateLaneDialogOpen) {
+    if (!isCreateLaneDialogOpen && !editingTask) {
       return;
     }
 
     function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        closeCreateLaneDialog();
+      if (event.key !== "Escape") {
+        return;
       }
+
+      if (editingTask) {
+        closeTaskDialog();
+        return;
+      }
+
+      closeCreateLaneDialog();
     }
 
     document.addEventListener("keydown", handleEscape);
@@ -229,7 +376,15 @@ export function BoardPage() {
     return () => {
       document.removeEventListener("keydown", handleEscape);
     };
-  }, [isCreateLaneDialogOpen]);
+  }, [editingTask, isCreateLaneDialogOpen]);
+
+  useEffect(() => {
+    if (!editingTaskId || editingTask || tasksQuery.isPending) {
+      return;
+    }
+
+    setEditingTaskId(null);
+  }, [editingTask, editingTaskId, tasksQuery.isPending]);
 
   if (!projectId) {
     return <Navigate replace to="/" />;
@@ -294,12 +449,27 @@ export function BoardPage() {
         </div>
       ) : null}
 
+      {editingTask ? (
+        <TaskEditorDialog
+          error={saveTaskMutation.error}
+          isPending={saveTaskMutation.isPending}
+          onClose={closeTaskDialog}
+          onSave={({ body, title }) =>
+            saveTaskMutation.mutate({
+              body,
+              taskId: editingTask.id,
+              title
+            })
+          }
+          task={editingTask}
+        />
+      ) : null}
+
       {projectsQuery.error ? <ErrorBanner error={projectsQuery.error} /> : null}
       {lanesQuery.error ? <ErrorBanner error={lanesQuery.error} /> : null}
       {tasksQuery.error ? <ErrorBanner error={tasksQuery.error} /> : null}
-      {createLaneMutation.error ? <ErrorBanner error={createLaneMutation.error} /> : null}
       {createTaskMutation.error ? <ErrorBanner error={createTaskMutation.error} /> : null}
-      {updateTaskMutation.error ? <ErrorBanner error={updateTaskMutation.error} /> : null}
+      {moveTaskMutation.error ? <ErrorBanner error={moveTaskMutation.error} /> : null}
       {deleteTaskMutation.error ? <ErrorBanner error={deleteTaskMutation.error} /> : null}
 
       {projectsQuery.isPending || lanesQuery.isPending || tasksQuery.isPending ? <BoardSkeleton /> : null}
@@ -321,7 +491,7 @@ export function BoardPage() {
               key={lane.id}
               onDoubleClick={(event) => {
                 const target = event.target as HTMLElement;
-                if (target.closest("button, input, form, a")) {
+                if (target.closest("button, input, textarea, form, a")) {
                   return;
                 }
 
@@ -411,6 +581,7 @@ export function BoardPage() {
                       setDraggedTaskId(currentTask.id);
                       setDropTargetLaneId(null);
                     }}
+                    onOpen={(taskToEdit) => setEditingTaskId(taskToEdit.id)}
                     task={task}
                     taskIndex={taskIndex}
                   />

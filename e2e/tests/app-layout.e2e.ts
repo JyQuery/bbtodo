@@ -155,7 +155,7 @@ const projectsForGrid: Project[] = [
 
 const tasks: Task[] = [
   {
-    body: "Callback logs mention retry scope.",
+    body: "Callback logs mention **retry** scope.",
     createdAt: "2026-03-18T07:00:00.000Z",
     id: "task-1",
     laneId: laneId("project-1", "todo"),
@@ -753,8 +753,24 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
     "2026-03-18T07:10:00.000Z"
   );
 
+  await page.getByTestId("task-card-task-1").click();
+  const editDialog = page.getByRole("dialog", { name: "Edit Card" });
+  await expect(editDialog).toBeVisible();
+  await expect(editDialog.getByLabel("Title")).toHaveValue("Review retry settings");
+  await expect(editDialog.getByLabel("Task body")).toHaveValue("Callback logs mention **retry** scope.");
+  await expect(editDialog.locator(".markdown-preview strong")).toHaveText("retry");
+  await editDialog.getByLabel("Title").fill("Review retry scope");
+  await editDialog
+    .getByLabel("Task body")
+    .fill("Callback logs mention **scope**.\n\n- Keep raw claims\n- Verify issuer");
+  await expect(editDialog.locator(".markdown-preview strong")).toHaveText("scope");
+  await expect(editDialog.locator(".markdown-preview li")).toHaveCount(2);
+  await editDialog.getByRole("button", { name: "Save card" }).click();
+  await expect(editDialog).toHaveCount(0);
+  await expect(page.getByTestId("task-card-task-1").getByText("Review retry scope")).toBeVisible();
+
   await page.getByLabel("Search cards").fill("callback");
-  await expect(page.getByText("Review retry settings")).toBeVisible();
+  await expect(page.getByText("Review retry scope")).toBeVisible();
   await expect(page.getByText("Tighten callback logging")).toBeVisible();
   await expect(page.getByText("Remove healthcheck loop")).toHaveCount(0);
   await page.getByLabel("Search cards").fill("");
