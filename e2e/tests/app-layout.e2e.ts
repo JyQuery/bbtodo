@@ -441,6 +441,12 @@ test("board workspace uses the full available width", async ({ page }) => {
   await expect(page.locator(".board-column__note")).toHaveCount(0);
   await expect(page.locator(".board-column__header > span")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Move to / })).toHaveCount(0);
+  await expect(page.getByTestId("task-card-task-1").locator(".label-chip")).toHaveCount(0);
+  await expect(page.getByTestId("task-card-task-1").locator(".task-card__timestamp")).toHaveText("2026-03-18");
+  await expect(page.getByTestId("task-card-task-1").locator(".task-card__timestamp")).toHaveAttribute(
+    "datetime",
+    "2026-03-18T07:10:00.000Z"
+  );
 
   const todoColumn = page.getByTestId("board-column-todo");
   const todoColumnBox = await todoColumn.boundingBox();

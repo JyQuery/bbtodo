@@ -862,6 +862,7 @@ input:focus {
 }
 
 .project-card__timestamp,
+.task-card__timestamp,
 .token-row__timestamp {
   font-size: 0.84rem;
 }
@@ -869,6 +870,14 @@ input:focus {
 .project-card__timestamp {
   margin-top: auto;
   padding-top: 0.45rem;
+  color: rgba(16, 32, 34, 0.42);
+  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 0.72rem;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+}
+
+.task-card__timestamp {
   color: rgba(16, 32, 34, 0.42);
   font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
   font-size: 0.72rem;

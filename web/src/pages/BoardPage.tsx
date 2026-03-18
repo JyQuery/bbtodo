@@ -4,7 +4,7 @@ import { Navigate, useParams } from "react-router-dom";
 
 import { api, type Task, type TaskStatus } from "../api";
 import { columns } from "../app/constants";
-import { formatDate, getTaskInputLabel, itemStyle } from "../app/utils";
+import { formatIsoDate, getTaskInputLabel, itemStyle } from "../app/utils";
 import { BoardSkeleton, EmptyState, ErrorBanner } from "../components/ui";
 import { useDismissableLayer } from "../hooks/useDismissableLayer";
 
@@ -42,7 +42,9 @@ function TaskCard({
       style={itemStyle(taskIndex)}
     >
       <div className="task-card__meta">
-        <span className="label-chip label-chip--soft">Updated {formatDate(task.updatedAt)}</span>
+        <time className="task-card__timestamp" dateTime={task.updatedAt}>
+          {formatIsoDate(task.updatedAt)}
+        </time>
         <div className="task-card__delete-menu" ref={confirmRef}>
           <button
             aria-expanded={isConfirmOpen}
