@@ -330,7 +330,6 @@ h3 {
 
 .preview-panel,
 .workspace-summary,
-.workspace-form,
 .token-reveal__copy,
 .empty-state__copy,
 .loading-strip__copy,
@@ -421,21 +420,9 @@ h3 {
   min-width: 0;
 }
 
-.workspace-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(20rem, 28rem);
-  gap: 1rem;
-  align-items: start;
-}
-
 .workspace-summary__top {
   align-items: flex-start;
   flex-wrap: wrap;
-}
-
-.workspace-form {
-  gap: 1rem;
-  align-content: start;
 }
 
 .loading-strip {
@@ -811,6 +798,7 @@ input:focus {
   display: grid;
   gap: 0.85rem;
   align-content: start;
+  min-height: 8rem;
 }
 
 .task-card {
@@ -858,6 +846,23 @@ input:focus {
   height: 1px;
   margin: 0 auto;
   background: linear-gradient(90deg, transparent, var(--accent), transparent);
+}
+
+.lane-composer {
+  display: grid;
+  gap: 0.85rem;
+  padding: 0.95rem;
+  border-radius: 1.2rem;
+  border: 1px dashed rgba(16, 32, 34, 0.18);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.lane-composer__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .token-reveal {
@@ -1074,8 +1079,7 @@ input:focus {
 }
 
 @media (max-width: 1100px) {
-  .landing-panel,
-  .workspace-header {
+  .landing-panel {
     grid-template-columns: 1fr;
   }
 

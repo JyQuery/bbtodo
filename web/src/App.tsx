@@ -63,6 +63,10 @@ function getAvatarLetter(user: User) {
   return source.charAt(0).toUpperCase();
 }
 
+function getTaskInputLabel(columnLabel: string) {
+  return `New task title for ${columnLabel}`;
+}
+
 function MetricRibbon({ items }: { items: Array<{ label: string; value: string }> }) {
   return (
     <div className="metric-ribbon">
@@ -517,7 +521,8 @@ function BoardPage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [title, setTitle] = useState("");
+  const [composerStatus, setComposerStatus] = useState<TaskStatus | null>(null);
+  const [draftTitle, setDraftTitle] = useState("");
   const projectsQuery = useQuery({
     queryKey: ["projects"],
     queryFn: () => api.listProjects()
@@ -529,9 +534,17 @@ function BoardPage() {
   });
 
   const createTaskMutation = useMutation({
-    mutationFn: (taskTitle: string) => api.createTask(projectId ?? "", taskTitle),
+    mutationFn: async ({ status, title }: { status: TaskStatus; title: string }) => {
+      const createdTask = await api.createTask(projectId ?? "", title);
+      if (status === "todo") {
+        return createdTask;
+      }
+
+      return api.updateTask(projectId ?? "", createdTask.id, { status });
+    },
     onSuccess: async () => {
-      setTitle("");
+      setComposerStatus(null);
+      setDraftTitle("");
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["tasks", projectId] }),
         queryClient.invalidateQueries({ queryKey: ["projects"] })
@@ -568,6 +581,16 @@ function BoardPage() {
     tasks: tasks.filter((task) => task.status === column.key)
   }));
 
+  function openComposer(status: TaskStatus) {
+    setComposerStatus(status);
+    setDraftTitle("");
+  }
+
+  function closeComposer() {
+    setComposerStatus(null);
+    setDraftTitle("");
+  }
+
   if (!projectId) {
     return <Navigate replace to="/" />;
   }
@@ -589,32 +612,9 @@ function BoardPage() {
           <div className="workspace-summary__copy">
             <p className="eyebrow">Board</p>
             <h1 className="page-title workspace-title">{project?.name ?? "Loading board"}</h1>
-            <p className="page-summary">Move work forward one lane at a time and keep the whole board visible at once.</p>
+            <p className="page-summary">Double-click any lane to add a task, then move work forward one lane at a time.</p>
           </div>
         </div>
-
-        <form
-          className="surface-strip workspace-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            createTaskMutation.mutate(title.trim());
-          }}
-        >
-          <label className="field">
-            <span className="field__label">Task title</span>
-            <input
-              maxLength={240}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="Draft release note summary"
-              required
-              value={title}
-            />
-            <span className="field__hint">New tasks start in Todo so the flow stays predictable.</span>
-          </label>
-          <button className="primary-button" disabled={createTaskMutation.isPending || title.trim().length === 0} type="submit">
-            {createTaskMutation.isPending ? "Adding task..." : "Add task"}
-          </button>
-        </form>
       </section>
 
       {projectsQuery.error ? <ErrorBanner error={projectsQuery.error} /> : null}
@@ -636,7 +636,20 @@ function BoardPage() {
       {!projectsQuery.isPending && !tasksQuery.isPending && project ? (
         <section className="board-grid" data-testid="board-grid">
           {groupedTasks.map((column, columnIndex) => (
-            <div className="board-column" key={column.key} style={itemStyle(columnIndex)}>
+            <div
+              className="board-column"
+              data-testid={`board-column-${column.key}`}
+              key={column.key}
+              onDoubleClick={(event) => {
+                const target = event.target as HTMLElement;
+                if (target.closest("button, input, form, a")) {
+                  return;
+                }
+
+                openComposer(column.key);
+              }}
+              style={itemStyle(columnIndex)}
+            >
               <div className="board-column__header">
                 <div>
                   <h2>{column.label}</h2>
@@ -644,6 +657,50 @@ function BoardPage() {
                 <span>{column.tasks.length}</span>
               </div>
               <div className="board-column__content">
+                {composerStatus === column.key ? (
+                  <form
+                    className="lane-composer"
+                    data-testid={`lane-composer-${column.key}`}
+                    onDoubleClick={(event) => event.stopPropagation()}
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      createTaskMutation.mutate({
+                        status: column.key,
+                        title: draftTitle.trim()
+                      });
+                    }}
+                  >
+                    <label className="field">
+                      <span className="field__label">New task</span>
+                      <input
+                        aria-label={getTaskInputLabel(column.label)}
+                        autoFocus
+                        maxLength={240}
+                        onChange={(event) => setDraftTitle(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") {
+                            closeComposer();
+                          }
+                        }}
+                        placeholder={`Add to ${column.label}`}
+                        required
+                        value={draftTitle}
+                      />
+                    </label>
+                    <div className="lane-composer__actions">
+                      <button
+                        className="primary-button"
+                        disabled={createTaskMutation.isPending || draftTitle.trim().length === 0}
+                        type="submit"
+                      >
+                        {createTaskMutation.isPending ? "Adding..." : "Add task"}
+                      </button>
+                      <button className="text-button" onClick={() => closeComposer()} type="button">
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                ) : null}
                 {column.tasks.map((task, taskIndex) => (
                   <TaskCard
                     key={task.id}
@@ -653,7 +710,7 @@ function BoardPage() {
                     taskIndex={taskIndex}
                   />
                 ))}
-                {column.tasks.length === 0 ? (
+                {column.tasks.length === 0 && composerStatus !== column.key ? (
                   <div className="column-empty">
                     <span className="column-empty__rule" />
                     <p>No tasks in this lane yet.</p>
