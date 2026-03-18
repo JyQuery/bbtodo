@@ -5,8 +5,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, type Project } from "../api";
 import { columns } from "../app/constants";
 import { formatDate, itemStyle } from "../app/utils";
-import { EmptyState, ErrorBanner } from "../components/common";
-import { ProjectGridSkeleton } from "../components/skeletons";
+import { EmptyState, ErrorBanner, ProjectGridSkeleton } from "../components/ui";
 import { useDismissableLayer } from "../hooks/useDismissableLayer";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 

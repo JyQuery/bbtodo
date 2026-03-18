@@ -1,6 +1,6 @@
 import { columns, loginPreview } from "../app/constants";
 import { itemStyle } from "../app/utils";
-import { MetricRibbon } from "../components/common";
+import { MetricRibbon } from "../components/ui";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
 export function LoginPage() {

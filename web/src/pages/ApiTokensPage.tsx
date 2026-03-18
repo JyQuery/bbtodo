@@ -3,8 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../api";
 import { formatDate, formatDateTime, itemStyle } from "../app/utils";
-import { EmptyState, ErrorBanner } from "../components/common";
-import { TokenListSkeleton } from "../components/skeletons";
+import { EmptyState, ErrorBanner, TokenListSkeleton } from "../components/ui";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
 export function ApiTokensPage() {

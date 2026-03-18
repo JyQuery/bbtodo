@@ -3,8 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { api, isApiError } from "./api";
 import { queryClient } from "./app/queryClient";
-import { ErrorBanner } from "./components/common";
-import { LoadingState } from "./components/skeletons";
+import { ErrorBanner, LoadingState } from "./components/ui";
 import { AppShell } from "./layout/AppShell";
 import { ApiTokensPage } from "./pages/ApiTokensPage";
 import { BoardPage } from "./pages/BoardPage";

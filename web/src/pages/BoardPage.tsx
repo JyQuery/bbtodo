@@ -5,8 +5,7 @@ import { Navigate, useParams } from "react-router-dom";
 import { api, type Task, type TaskStatus } from "../api";
 import { columns } from "../app/constants";
 import { formatDate, getTaskInputLabel, itemStyle } from "../app/utils";
-import { EmptyState, ErrorBanner } from "../components/common";
-import { BoardSkeleton } from "../components/skeletons";
+import { BoardSkeleton, EmptyState, ErrorBanner } from "../components/ui";
 import { useDismissableLayer } from "../hooks/useDismissableLayer";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
