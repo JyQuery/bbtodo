@@ -417,7 +417,6 @@ function ProjectCard({
       tabIndex={0}
     >
       <div className="project-card__meta">
-        <span className="label-chip">Board {String(index + 1).padStart(2, "0")}</span>
         <div className="project-card__delete-menu" ref={confirmRef}>
           <button
             aria-expanded={isConfirmOpen}

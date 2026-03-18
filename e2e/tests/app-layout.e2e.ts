@@ -187,6 +187,7 @@ test("projects page uses a modal create flow and removes extra board chrome", as
   await expect(page.locator(".page-shell > .surface-strip")).toHaveCount(0);
   await expect(page.locator(".page-header__meta .label-chip")).toHaveCount(0);
   await expect(page.locator(".page-header__meta .label-chip--soft")).toHaveCount(0);
+  await expect(page.locator(".project-card .label-chip")).toHaveCount(0);
   await expect(page.locator(".project-card__summary")).toHaveCount(0);
   await expect(page.locator(".project-track")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Open board" })).toHaveCount(0);
@@ -223,6 +224,12 @@ test("project cards open on click and delete through a confirmation popover", as
 
   const projectCard = page.getByTestId("project-card-project-1");
   await expect(projectCard).toBeVisible();
+  const projectTitle = projectCard.getByRole("heading", { name: "Billing cleanup" });
+  const projectCardBox = await projectCard.boundingBox();
+  const projectTitleBox = await projectTitle.boundingBox();
+  expect(projectCardBox).not.toBeNull();
+  expect(projectTitleBox).not.toBeNull();
+  expect(((projectTitleBox?.y ?? 0) - (projectCardBox?.y ?? 0)) / (projectCardBox?.height ?? 1)).toBeLessThan(0.28);
 
   await projectCard.click();
   await expect(page).toHaveURL(/\/projects\/project-1$/);
