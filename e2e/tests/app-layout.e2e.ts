@@ -189,6 +189,7 @@ test("board workspace uses the full available width", async ({ page }) => {
 
   await expect(page.locator(".board-column")).toHaveCount(3);
   await expect(page.locator(".board-column__note")).toHaveCount(0);
+  await expect(page.locator(".board-column__header > span")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Move to / })).toHaveCount(0);
 
   const todoColumn = page.getByTestId("board-column-todo");

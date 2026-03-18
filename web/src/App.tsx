@@ -744,7 +744,6 @@ function BoardPage() {
                 <div>
                   <h2>{column.label}</h2>
                 </div>
-                <span>{column.tasks.length}</span>
               </div>
               <div className="board-column__content">
                 {composerStatus === column.key ? (
