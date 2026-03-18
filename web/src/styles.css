@@ -443,8 +443,8 @@ h3 {
 .hero-panel--simple {
   justify-items: center;
   align-content: center;
-  min-height: auto;
-  width: min(100%, 28rem);
+  min-height: min(60dvh, 34rem);
+  width: min(50vw, 44rem);
   margin: auto;
   text-align: center;
 }

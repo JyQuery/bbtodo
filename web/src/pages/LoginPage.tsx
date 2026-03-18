@@ -8,7 +8,6 @@ export function LoginPage() {
             <span aria-hidden="true" className="brand-mark__pill hero-panel__pill">
               bb
             </span>
-            <p className="eyebrow">BBTodo</p>
           </div>
           <h1>BBTodo</h1>
           <div className="cta-row">

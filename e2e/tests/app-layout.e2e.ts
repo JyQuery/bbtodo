@@ -191,6 +191,7 @@ test("login screen uses the updated cool accent palette", async ({ page }) => {
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: "BBTodo" })).toBeVisible();
+  await expect(page.locator(".hero-panel__brand .eyebrow")).toHaveCount(0);
   await expect(page.locator(".preview-panel")).toHaveCount(0);
   await expect(page.locator(".metric-ribbon")).toHaveCount(0);
   await expect(page.getByText("Live shape")).toHaveCount(0);
@@ -203,6 +204,7 @@ test("login screen uses the updated cool accent palette", async ({ page }) => {
   const panelCenterX = (loginPanelBox?.x ?? 0) + (loginPanelBox?.width ?? 0) / 2;
   const viewportCenterX = (viewport?.width ?? 0) / 2;
   expect(Math.abs(panelCenterX - viewportCenterX)).toBeLessThan(20);
+  expect((loginPanelBox?.width ?? 0) / (viewport?.width ?? 1)).toBeGreaterThan(0.45);
 
   const accent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim());
   expect(accent).toBe("#2f7774");
