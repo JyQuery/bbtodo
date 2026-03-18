@@ -254,6 +254,7 @@ test("project cards open on click and delete through a confirmation popover", as
   const projectTitleBox = await projectTitle.boundingBox();
   expect(projectCardBox).not.toBeNull();
   expect(projectTitleBox).not.toBeNull();
+  expect(projectCardBox?.width ?? 0).toBeLessThan(700);
   expect(((projectTitleBox?.y ?? 0) - (projectCardBox?.y ?? 0)) / (projectCardBox?.height ?? 1)).toBeLessThan(0.28);
 
   await projectCard.click();

@@ -649,6 +649,8 @@ input:focus {
   grid-column: span 4;
   display: grid;
   gap: 1rem;
+  width: 100%;
+  max-width: 30rem;
   min-height: 14.5rem;
   padding: 1.2rem;
   background: var(--surface-strong);
@@ -657,6 +659,7 @@ input:focus {
     var(--shadow-soft);
   overflow: hidden;
   position: relative;
+  justify-self: start;
   cursor: pointer;
   animation: rise-in 620ms var(--ease) both;
   animation-delay: calc(var(--item-index) * 90ms);
@@ -678,6 +681,7 @@ input:focus {
 
 .project-card--featured {
   grid-column: span 8;
+  max-width: 40rem;
 }
 
 .project-card__body {
