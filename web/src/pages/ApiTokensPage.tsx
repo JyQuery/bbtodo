@@ -41,11 +41,9 @@ export function ApiTokensPage() {
       <section className="page-header">
         <div className="page-header__copy">
           <h1 className="page-title">API tokens</h1>
-          <p className="page-summary">Issue a token for scripts and revoke it when the tool no longer needs access.</p>
         </div>
         <div className="page-header__meta">
           <span className="label-chip">{tokenCount} active</span>
-          <span className="label-chip label-chip--soft">Shown once on creation</span>
         </div>
       </section>
 
