@@ -191,6 +191,13 @@ test("board workspace uses the full available width", async ({ page }) => {
   await expect(page.locator(".board-column__note")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Move to / })).toHaveCount(0);
 
+  const todoColumn = page.getByTestId("board-column-todo");
+  const todoColumnBox = await todoColumn.boundingBox();
+  const todoCardBox = await page.getByTestId("task-card-task-1").boundingBox();
+  expect(todoColumnBox).not.toBeNull();
+  expect(todoCardBox).not.toBeNull();
+  expect(((todoCardBox?.y ?? 0) - (todoColumnBox?.y ?? 0)) / (todoColumnBox?.height ?? 1)).toBeLessThan(0.3);
+
   const inProgressColumn = page.getByTestId("board-column-in_progress");
   await inProgressColumn.dblclick();
 

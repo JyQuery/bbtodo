@@ -762,6 +762,7 @@ input:focus {
 
 .board-column {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 1rem;
   min-height: 100%;
   padding: 1rem;
@@ -770,6 +771,7 @@ input:focus {
     var(--surface);
   position: relative;
   overflow: hidden;
+  align-content: start;
   animation: rise-in 620ms var(--ease) both;
   animation-delay: calc(var(--item-index) * 100ms);
   transition:
@@ -818,6 +820,7 @@ input:focus {
   display: grid;
   gap: 0.85rem;
   align-content: start;
+  align-items: start;
   min-height: 8rem;
 }
 
