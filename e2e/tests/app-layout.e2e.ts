@@ -281,10 +281,15 @@ test("project cards open on click and delete through a confirmation popover", as
   const projectTitle = projectCard.getByRole("heading", { name: "Billing cleanup" });
   const projectCardBox = await projectCard.boundingBox();
   const projectTitleBox = await projectTitle.boundingBox();
+  const projectTimestamp = projectCard.locator(".project-card__timestamp");
+  const projectTimestampBox = await projectTimestamp.boundingBox();
   expect(projectCardBox).not.toBeNull();
   expect(projectTitleBox).not.toBeNull();
+  expect(projectTimestampBox).not.toBeNull();
   expect(projectCardBox?.width ?? 0).toBeLessThan(700);
   expect(((projectTitleBox?.y ?? 0) - (projectCardBox?.y ?? 0)) / (projectCardBox?.height ?? 1)).toBeLessThan(0.28);
+  await expect(projectTimestamp).toHaveText("2026-03-18T07:30:00.000Z");
+  expect(((projectTimestampBox?.y ?? 0) - (projectCardBox?.y ?? 0)) / (projectCardBox?.height ?? 1)).toBeGreaterThan(0.72);
 
   await projectCard.click();
   await expect(page).toHaveURL(/\/projects\/project-1$/);

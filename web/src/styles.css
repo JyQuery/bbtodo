@@ -792,8 +792,9 @@ input:focus {
 
 .project-card__body {
   display: grid;
+  grid-template-rows: auto 1fr auto;
   gap: 0.45rem;
-  align-content: start;
+  min-height: 100%;
   padding-top: 0.1rem;
 }
 
@@ -807,6 +808,16 @@ input:focus {
 .project-card__timestamp,
 .token-row__timestamp {
   font-size: 0.84rem;
+}
+
+.project-card__timestamp {
+  margin-top: auto;
+  padding-top: 0.45rem;
+  color: rgba(16, 32, 34, 0.42);
+  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 0.72rem;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
 }
 
 .project-card__lane-counts {

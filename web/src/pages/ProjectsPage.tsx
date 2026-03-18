@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { api, type Project } from "../api";
 import { columns } from "../app/constants";
-import { formatDate, itemStyle } from "../app/utils";
+import { itemStyle } from "../app/utils";
 import { EmptyState, ErrorBanner, ProjectGridSkeleton } from "../components/ui";
 import { useDismissableLayer } from "../hooks/useDismissableLayer";
 
@@ -85,7 +85,6 @@ function ProjectCard({
       </div>
       <div className="project-card__body">
         <h2>{project.name}</h2>
-        <p className="project-card__timestamp">Updated {formatDate(project.updatedAt)}</p>
         <div aria-label={`Lane counts for ${project.name}`} className="project-card__lane-counts">
           {columns.map((column) => (
             <div
@@ -98,6 +97,9 @@ function ProjectCard({
             </div>
           ))}
         </div>
+        <time className="project-card__timestamp" dateTime={project.updatedAt}>
+          {project.updatedAt}
+        </time>
       </div>
     </article>
   );
