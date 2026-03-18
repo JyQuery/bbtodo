@@ -23,6 +23,7 @@ The server also binds to a fixed internal host (`0.0.0.0`) in containers, so `AP
 The server also binds to a fixed internal port (`3000`), so `API_PORT` is not configurable.
 Browser login sessions use a fixed 24-hour lifetime, so `SESSION_TTL_HOURS` is not configurable.
 Set `CLIENT_URL` to the browser-facing base URL of the app so OIDC callbacks and cookie behavior use the right origin.
+Set `SERVER_PORT` to choose which host port publishes the server container; it defaults to `3000`.
 
 ## API highlights
 
@@ -56,7 +57,7 @@ Run the full stack with:
 docker compose up --build
 ```
 
-The compose stack exposes the web app on `http://localhost:8080` and stores SQLite data at `/data/bbtodo.sqlite` inside the `bbtodo_sqlite` named volume. If you deploy without Compose, mount `/data` yourself.
+The compose stack exposes the web app on `http://localhost:8080`, exposes the server on `http://localhost:3000` by default, and stores SQLite data at `/data/bbtodo.sqlite` inside the `bbtodo_sqlite` named volume. If you deploy without Compose, mount `/data` yourself.
 
 ## Tests
 

@@ -23,6 +23,8 @@ services:
     volumes:
       # The server always stores SQLite at /data/bbtodo.sqlite, so mount /data.
       - bbtodo_sqlite:/data
+    ports:
+      - "${SERVER_PORT:-3000}:3000"
 
   web:
     build:
