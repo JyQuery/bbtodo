@@ -87,13 +87,13 @@ const projects: Project[] = [
     createdAt: "2026-03-17T09:00:00.000Z",
     id: "project-1",
     laneSummaries: createDefaultLaneSummaries("project-1", {
-      todo: 1,
+      todo: 2,
       in_progress: 1,
       done: 1
     }),
     name: "Billing cleanup",
     taskCounts: {
-      todo: 1,
+      todo: 2,
       in_progress: 1,
       done: 1
     },
@@ -186,6 +186,17 @@ const tasks: Task[] = [
     status: "done",
     title: "Remove healthcheck loop",
     updatedAt: "2026-03-18T07:50:00.000Z"
+  },
+  {
+    body: "Queue the copy pass after retry scope lands.",
+    createdAt: "2026-03-18T07:05:00.000Z",
+    id: "task-4",
+    laneId: laneId("project-1", "todo"),
+    position: 1,
+    projectId: "project-1",
+    status: "todo",
+    title: "Queue copy pass",
+    updatedAt: "2026-03-18T07:15:00.000Z"
   }
 ];
 
@@ -213,7 +224,7 @@ async function mockAuthenticated(
 ) {
   let nextProjectId = options?.nextProjectId ?? 2;
   let nextLaneId = 1;
-  let nextTaskId = 4;
+  let nextTaskId = 5;
   let isAuthenticated = true;
   const projectState = (options?.projects ?? projects).map((project) => structuredClone(project));
   const taskState = (options?.tasks ?? tasks).map((task) => structuredClone(task));
@@ -578,7 +589,7 @@ test("projects page uses a modal create flow and removes extra board chrome", as
   await expect(page.locator(".project-track")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Open board" })).toHaveCount(0);
   await expect(page.getByRole("button", { exact: true, name: "Delete" })).toHaveCount(0);
-  await expect(page.getByTestId("project-card-project-1").getByLabel("Todo 1")).toBeVisible();
+  await expect(page.getByTestId("project-card-project-1").getByLabel("Todo 2")).toBeVisible();
   await expect(page.getByTestId("project-card-project-1").getByLabel("In Progress 1")).toBeVisible();
   await expect(page.getByTestId("project-card-project-1").getByLabel("Done 1")).toBeVisible();
   await expect(page.locator(".subnav__current")).toHaveCount(0);
@@ -782,6 +793,22 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   expect(todoCardBox).not.toBeNull();
   expect(((todoCardBox?.y ?? 0) - (todoColumnBox?.y ?? 0)) / (todoColumnBox?.height ?? 1)).toBeLessThan(0.3);
 
+  const reorderTransfer = await page.evaluateHandle(() => new DataTransfer());
+  const queueCopyCard = page.getByTestId("task-card-task-4");
+  const retryCard = page.getByTestId("task-card-task-1");
+  const retryCardBox = await retryCard.boundingBox();
+  expect(retryCardBox).not.toBeNull();
+  await queueCopyCard.dispatchEvent("dragstart", { dataTransfer: reorderTransfer });
+  await retryCard.dispatchEvent("dragover", {
+    clientY: (retryCardBox?.y ?? 0) + (retryCardBox?.height ?? 0) * 0.25,
+    dataTransfer: reorderTransfer
+  });
+  await expect(page.getByTestId(`task-drop-indicator-${laneId("project-1", "todo")}-0`)).toBeVisible();
+  await todoColumn.dispatchEvent("drop", { dataTransfer: reorderTransfer });
+  const todoTitles = todoColumn.locator(".task-card__title");
+  await expect(todoTitles.nth(0)).toHaveText("Queue copy pass");
+  await expect(todoTitles.nth(1)).toHaveText("Review retry scope");
+
   await page.getByRole("button", { name: "Create Lane" }).click();
   const laneDialog = page.getByRole("dialog", { name: "Create Lane" });
   await expect(laneDialog).toBeVisible();
@@ -790,7 +817,7 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
 
   await expect(page.getByRole("heading", { name: "Ready for QA" })).toBeVisible();
 
-  const qaColumn = page.getByRole("heading", { name: "Ready for QA" }).locator("..").locator("..");
+  const qaColumn = page.getByTestId("board-column-project-1-lane-custom-1");
   await qaColumn.dblclick();
 
   const laneInput = page.getByLabel("New task title for Ready for QA");
@@ -800,9 +827,18 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
 
   await expect(page.getByText("Ship progress note")).toBeVisible();
 
+  const moveTransfer = await page.evaluateHandle(() => new DataTransfer());
+  await retryCard.dispatchEvent("dragstart", { dataTransfer: moveTransfer });
+  await qaColumn.locator(".board-column__content").dispatchEvent("dragover", { dataTransfer: moveTransfer });
+  await expect(page.getByTestId(`task-drop-indicator-project-1-lane-custom-1-1`)).toBeVisible();
+  await expect(qaColumn).toHaveClass(/is-drop-target/);
+  await qaColumn.dispatchEvent("drop", { dataTransfer: moveTransfer });
+  await expect(qaColumn.getByText("Review retry scope")).toBeVisible();
+  await expect(todoColumn.getByText("Review retry scope")).toHaveCount(0);
+
   await expect(page.locator(".column-empty")).toHaveCount(0);
 
-  const createdCard = page.getByTestId("task-card-task-4");
+  const createdCard = page.getByTestId("task-card-task-5");
   await createdCard.getByLabel("Delete task Ship progress note").click();
   await expect(createdCard.getByRole("button", { exact: true, name: "Delete" })).toBeVisible();
   await createdCard.getByRole("button", { exact: true, name: "Delete" }).click();

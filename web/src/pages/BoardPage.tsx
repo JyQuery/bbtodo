@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { type DragEvent, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import { Navigate, useParams, useSearchParams } from "react-router-dom";
@@ -9,17 +9,19 @@ import { BoardSkeleton, EmptyState, ErrorBanner } from "../components/ui";
 import { useDismissableLayer } from "../hooks/useDismissableLayer";
 
 function TaskCard({
-  isDragging,
+  isDragDisabled,
   onDelete,
   onDragEnd,
+  onDragOver,
   onDragStart,
   onOpen,
   task,
   taskIndex
 }: {
-  isDragging: boolean;
+  isDragDisabled: boolean;
   onDelete: (taskId: string) => void;
   onDragEnd: () => void;
+  onDragOver: (event: DragEvent<HTMLElement>) => void;
   onDragStart: (task: Task) => void;
   onOpen: (task: Task) => void;
   task: Task;
@@ -32,11 +34,12 @@ function TaskCard({
 
   return (
     <article
-      className={`task-card${isDragging ? " is-dragging" : ""}${isConfirmOpen ? " is-confirm-open" : ""}`}
+      className={`task-card${isDragDisabled ? "" : " is-draggable"}${isConfirmOpen ? " is-confirm-open" : ""}`}
       data-testid={`task-card-${task.id}`}
-      draggable="true"
+      draggable={!isDragDisabled}
       onClick={() => onOpen(task)}
       onDragEnd={onDragEnd}
+      onDragOver={onDragOver}
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = "move";
         event.dataTransfer.setData("text/plain", task.id);
@@ -217,7 +220,7 @@ export function BoardPage() {
   const [composerLaneId, setComposerLaneId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
-  const [dropTargetLaneId, setDropTargetLaneId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ laneId: string; position: number } | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [laneName, setLaneName] = useState("");
 
@@ -243,16 +246,24 @@ export function BoardPage() {
   const tasks = tasksQuery.data ?? [];
   const draggedTask = draggedTaskId ? tasks.find((task) => task.id === draggedTaskId) ?? null : null;
   const editingTask = editingTaskId ? tasks.find((task) => task.id === editingTaskId) ?? null : null;
+  const isBoardFiltered = boardSearch.length > 0;
 
-  const visibleTasks = boardSearch
-    ? tasks.filter((task) => {
-        const haystack = `${task.title}\n${task.body}`.toLowerCase();
-        return haystack.includes(boardSearch);
-      })
-    : tasks;
+  function taskMatchesBoardSearch(task: Task) {
+    if (!boardSearch) {
+      return true;
+    }
+
+    const haystack = `${task.title}\n${task.body}`.toLowerCase();
+    return haystack.includes(boardSearch);
+  }
+
   const groupedTasks = lanes.map((lane) => ({
     ...lane,
-    tasks: visibleTasks.filter((task) => task.laneId === lane.id)
+    displayTasks: tasks
+      .filter((task) => task.laneId === lane.id)
+      .filter((task) => taskMatchesBoardSearch(task))
+      .filter((task) => task.id !== draggedTaskId),
+    tasks: tasks.filter((task) => task.laneId === lane.id)
   }));
 
   async function invalidateBoardData() {
@@ -307,6 +318,7 @@ export function BoardPage() {
       await invalidateBoardData();
     }
   });
+  const isDragDisabled = isBoardFiltered || moveTaskMutation.isPending || saveTaskMutation.isPending;
 
   function updateBoardParams(updater: (params: URLSearchParams) => void) {
     const nextParams = new URLSearchParams(searchParams);
@@ -337,20 +349,92 @@ export function BoardPage() {
     saveTaskMutation.reset();
   }
 
-  function handleDrop(lane: BoardLane) {
-    setDropTargetLaneId(null);
-    if (!draggedTask || draggedTask.laneId === lane.id) {
+  function handleDrop(lane: { id: string; tasks: Task[] }) {
+    const target = dropTarget ?? {
+      laneId: lane.id,
+      position: lane.tasks.filter((task) => task.id !== draggedTaskId).length
+    };
+
+    setDropTarget(null);
+    if (!draggedTask) {
       setDraggedTaskId(null);
       return;
     }
 
-    const nextPosition = tasks.filter((task) => task.laneId === lane.id && task.id !== draggedTask.id).length;
     moveTaskMutation.mutate({
-      laneId: lane.id,
-      position: nextPosition,
+      laneId: target.laneId,
+      position: target.position,
       taskId: draggedTask.id
     });
     setDraggedTaskId(null);
+  }
+
+  function handleColumnDragOver(
+    event: DragEvent<HTMLElement>,
+    lane: { displayTasks: Task[]; id: string }
+  ) {
+    if (!draggedTaskId || isDragDisabled) {
+      return;
+    }
+
+    const target = event.target as HTMLElement;
+    if (target.closest(".task-card")) {
+      return;
+    }
+
+    event.preventDefault();
+    setDropTarget((current) => {
+      const next = {
+        laneId: lane.id,
+        position: lane.displayTasks.length
+      };
+
+      if (current?.laneId === next.laneId && current.position === next.position) {
+        return current;
+      }
+
+      return next;
+    });
+  }
+
+  function handleCardDragOver(
+    event: DragEvent<HTMLElement>,
+    input: {
+      laneId: string;
+      taskIndex: number;
+    }
+  ) {
+    if (!draggedTaskId || isDragDisabled) {
+      return;
+    }
+
+    event.preventDefault();
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const insertAfter = event.clientY > bounds.top + bounds.height / 2;
+    const nextPosition = input.taskIndex + (insertAfter ? 1 : 0);
+
+    setDropTarget((current) => {
+      if (current?.laneId === input.laneId && current.position === nextPosition) {
+        return current;
+      }
+
+      return {
+        laneId: input.laneId,
+        position: nextPosition
+      };
+    });
+  }
+
+  function renderDropIndicator(laneId: string, position: number) {
+    if (!draggedTaskId || dropTarget?.laneId !== laneId || dropTarget.position !== position) {
+      return null;
+    }
+
+    return (
+      <div className="task-drop-indicator" data-testid={`task-drop-indicator-${laneId}-${position}`}>
+        <span>Drop here</span>
+      </div>
+    );
   }
 
   useEffect(() => {
@@ -486,7 +570,7 @@ export function BoardPage() {
         <section className="board-grid board-grid--lanes" data-testid="board-grid">
           {groupedTasks.map((lane, laneIndex) => (
             <div
-              className={`board-column${dropTargetLaneId === lane.id ? " is-drop-target" : ""}`}
+              className={`board-column${dropTarget?.laneId === lane.id ? " is-drop-target" : ""}`}
               data-testid={`board-column-${lane.systemKey ?? lane.id}`}
               key={lane.id}
               onDoubleClick={(event) => {
@@ -499,17 +583,7 @@ export function BoardPage() {
               }}
               onDragLeave={(event) => {
                 if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null)) {
-                  setDropTargetLaneId((current) => (current === lane.id ? null : current));
-                }
-              }}
-              onDragOver={(event) => {
-                if (!draggedTaskId) {
-                  return;
-                }
-
-                event.preventDefault();
-                if (dropTargetLaneId !== lane.id) {
-                  setDropTargetLaneId(lane.id);
+                  setDropTarget((current) => (current?.laneId === lane.id ? null : current));
                 }
               }}
               onDrop={(event) => {
@@ -523,7 +597,10 @@ export function BoardPage() {
                   <h2>{lane.name}</h2>
                 </div>
               </div>
-              <div className="board-column__content">
+              <div
+                className="board-column__content"
+                onDragOver={(event) => handleColumnDragOver(event, lane)}
+              >
                 {composerLaneId === lane.id ? (
                   <form
                     className="lane-composer"
@@ -568,24 +645,37 @@ export function BoardPage() {
                     </div>
                   </form>
                 ) : null}
-                {lane.tasks.map((task, taskIndex) => (
-                  <TaskCard
-                    key={task.id}
-                    isDragging={draggedTaskId === task.id}
-                    onDelete={(taskId) => deleteTaskMutation.mutate(taskId)}
-                    onDragEnd={() => {
-                      setDraggedTaskId(null);
-                      setDropTargetLaneId(null);
-                    }}
-                    onDragStart={(currentTask) => {
-                      setDraggedTaskId(currentTask.id);
-                      setDropTargetLaneId(null);
-                    }}
-                    onOpen={(taskToEdit) => setEditingTaskId(taskToEdit.id)}
-                    task={task}
-                    taskIndex={taskIndex}
-                  />
+                {renderDropIndicator(lane.id, 0)}
+                {lane.displayTasks.map((task, taskIndex) => (
+                  <div key={task.id}>
+                    {taskIndex > 0 ? renderDropIndicator(lane.id, taskIndex) : null}
+                    <TaskCard
+                      isDragDisabled={isDragDisabled}
+                      onDelete={(taskId) => deleteTaskMutation.mutate(taskId)}
+                      onDragEnd={() => {
+                        setDraggedTaskId(null);
+                        setDropTarget(null);
+                      }}
+                      onDragOver={(event) =>
+                        handleCardDragOver(event, {
+                          laneId: lane.id,
+                          taskIndex
+                        })
+                      }
+                      onDragStart={(currentTask) => {
+                        setDraggedTaskId(currentTask.id);
+                        setDropTarget({
+                          laneId: lane.id,
+                          position: taskIndex
+                        });
+                      }}
+                      onOpen={(taskToEdit) => setEditingTaskId(taskToEdit.id)}
+                      task={task}
+                      taskIndex={taskIndex}
+                    />
+                  </div>
                 ))}
+                {renderDropIndicator(lane.id, lane.displayTasks.length)}
               </div>
             </div>
           ))}
