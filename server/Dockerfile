@@ -6,6 +6,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY tsconfig.json ./
+COPY drizzle drizzle
 COPY src src
 
 RUN npm run build
@@ -19,6 +20,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist dist
+COPY --from=builder /app/drizzle drizzle
 
 VOLUME ["/data"]
 EXPOSE 3000
