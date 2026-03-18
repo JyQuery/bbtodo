@@ -805,17 +805,20 @@ input:focus {
 
 .project-grid {
   display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 22rem));
+  grid-auto-rows: 15.75rem;
   gap: 1rem;
+  justify-content: start;
+  align-content: start;
 }
 
 .project-card {
-  grid-column: span 4;
   display: grid;
   gap: 1rem;
   width: 100%;
-  max-width: 30rem;
-  min-height: 14.5rem;
+  max-width: none;
+  min-height: 0;
+  height: 100%;
   padding: 1.2rem;
   background: var(--surface-strong);
   box-shadow:
@@ -841,11 +844,6 @@ input:focus {
   border-radius: 999px;
   background: radial-gradient(circle, rgba(47, 119, 116, 0.16), transparent 70%);
   pointer-events: none;
-}
-
-.project-card--featured {
-  grid-column: span 8;
-  max-width: 40rem;
 }
 
 .project-card__body {
@@ -1392,11 +1390,6 @@ input:focus {
   .hero-panel--landing {
     min-height: auto;
   }
-
-  .project-card,
-  .project-card--featured {
-    grid-column: span 6;
-  }
 }
 
 @media (max-width: 860px) {
@@ -1481,11 +1474,12 @@ input:focus {
 
   .project-grid {
     grid-template-columns: 1fr;
+    grid-auto-rows: auto;
   }
 
-  .project-card,
-  .project-card--featured {
-    grid-column: span 1;
+  .project-card {
+    height: auto;
+    min-height: 14.5rem;
   }
 
   .token-row,

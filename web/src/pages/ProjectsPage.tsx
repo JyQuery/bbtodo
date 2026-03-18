@@ -26,7 +26,7 @@ function ProjectCard({
 
   return (
     <article
-      className={`project-card${index === 0 ? " project-card--featured" : ""}${isConfirmOpen ? " is-confirm-open" : ""}`}
+      className={`project-card${isConfirmOpen ? " is-confirm-open" : ""}`}
       data-testid={`project-card-${project.id}`}
       onClick={() => onOpen(project.id)}
       onKeyDown={(event) => {

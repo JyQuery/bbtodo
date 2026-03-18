@@ -20,6 +20,43 @@ const projects = [
   }
 ];
 
+const projectsForGrid = [
+  ...projects,
+  {
+    createdAt: "2026-03-17T10:00:00.000Z",
+    id: "project-2",
+    name: "Roadmap review",
+    taskCounts: {
+      todo: 0,
+      in_progress: 0,
+      done: 0
+    },
+    updatedAt: "2026-03-18T08:10:00.000Z"
+  },
+  {
+    createdAt: "2026-03-17T11:00:00.000Z",
+    id: "project-3",
+    name: "Release prep",
+    taskCounts: {
+      todo: 2,
+      in_progress: 1,
+      done: 0
+    },
+    updatedAt: "2026-03-18T08:20:00.000Z"
+  },
+  {
+    createdAt: "2026-03-17T12:00:00.000Z",
+    id: "project-4",
+    name: "Customer follow-up",
+    taskCounts: {
+      todo: 1,
+      in_progress: 0,
+      done: 3
+    },
+    updatedAt: "2026-03-18T08:30:00.000Z"
+  }
+];
+
 const tasks = [
   {
     createdAt: "2026-03-18T07:00:00.000Z",
@@ -61,11 +98,17 @@ async function mockUnauthenticated(page: Page) {
   });
 }
 
-async function mockAuthenticated(page: Page) {
-  let nextProjectId = 2;
+async function mockAuthenticated(
+  page: Page,
+  options?: {
+    projects?: typeof projects;
+    nextProjectId?: number;
+  }
+) {
+  let nextProjectId = options?.nextProjectId ?? 2;
   let nextTaskId = 4;
   let isAuthenticated = true;
-  const projectState = projects.map((project) => ({ ...project }));
+  const projectState = (options?.projects ?? projects).map((project) => ({ ...project }));
   const taskState = tasks.map((task) => ({ ...task }));
 
   await page.route("**/auth/logout", async (route) => {
@@ -211,7 +254,10 @@ test("login screen uses the updated cool accent palette", async ({ page }) => {
 });
 
 test("projects page uses a modal create flow and removes extra board chrome", async ({ page }) => {
-  await mockAuthenticated(page);
+  await mockAuthenticated(page, {
+    projects: projectsForGrid,
+    nextProjectId: 5
+  });
 
   await page.goto("/");
 
@@ -229,9 +275,9 @@ test("projects page uses a modal create flow and removes extra board chrome", as
   await expect(page.locator(".project-track")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Open board" })).toHaveCount(0);
   await expect(page.getByRole("button", { exact: true, name: "Delete" })).toHaveCount(0);
-  await expect(page.getByLabel("Todo 1")).toBeVisible();
-  await expect(page.getByLabel("In Progress 1")).toBeVisible();
-  await expect(page.getByLabel("Done 1")).toBeVisible();
+  await expect(page.getByTestId("project-card-project-1").getByLabel("Todo 1")).toBeVisible();
+  await expect(page.getByTestId("project-card-project-1").getByLabel("In Progress 1")).toBeVisible();
+  await expect(page.getByTestId("project-card-project-1").getByLabel("Done 1")).toBeVisible();
   await expect(page.locator(".subnav__current")).toHaveCount(0);
   await expect(page.locator(".topbar__identity")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "API tokens" })).toHaveCount(0);
@@ -256,9 +302,28 @@ test("projects page uses a modal create flow and removes extra board chrome", as
   const createProjectLinkBox = await createProjectLink.boundingBox();
   const createProjectBackground = await createProjectLink.evaluate((element) => getComputedStyle(element).backgroundColor);
   const createProjectHeight = await createProjectLink.evaluate((element) => parseFloat(getComputedStyle(element).height));
+  const projectGridBox = await page.locator(".project-grid").boundingBox();
+  const firstCard = page.getByTestId("project-card-project-1");
+  const secondCard = page.getByTestId("project-card-project-2");
+  const thirdCard = page.getByTestId("project-card-project-3");
+  const firstCardBox = await firstCard.boundingBox();
+  const secondCardBox = await secondCard.boundingBox();
+  const thirdCardBox = await thirdCard.boundingBox();
   const viewportWidth = page.viewportSize()?.width ?? 0;
   expect(projectsPageBox).not.toBeNull();
   expect((projectsPageBox?.width ?? 0)).toBeGreaterThan(viewportWidth - 80);
+  expect(projectGridBox).not.toBeNull();
+  expect(firstCardBox).not.toBeNull();
+  expect(secondCardBox).not.toBeNull();
+  expect(thirdCardBox).not.toBeNull();
+  expect((firstCardBox?.x ?? 0) - (projectGridBox?.x ?? 0)).toBeLessThan(24);
+  expect((firstCardBox?.y ?? 0) - (projectGridBox?.y ?? 0)).toBeLessThan(24);
+  expect(Math.abs((firstCardBox?.width ?? 0) - (secondCardBox?.width ?? 0))).toBeLessThan(2);
+  expect(Math.abs((firstCardBox?.width ?? 0) - (thirdCardBox?.width ?? 0))).toBeLessThan(2);
+  expect(Math.abs((firstCardBox?.height ?? 0) - (secondCardBox?.height ?? 0))).toBeLessThan(2);
+  expect(Math.abs((firstCardBox?.height ?? 0) - (thirdCardBox?.height ?? 0))).toBeLessThan(2);
+  expect(Math.abs((firstCardBox?.y ?? 0) - (secondCardBox?.y ?? 0))).toBeLessThan(16);
+  expect((secondCardBox?.x ?? 0) - ((firstCardBox?.x ?? 0) + (firstCardBox?.width ?? 0))).toBeLessThan(32);
   expect(createProjectLinkBox).not.toBeNull();
   expect((createProjectLinkBox?.x ?? 0)).toBeGreaterThan(120);
   expect(createProjectBackground).toBe("rgba(0, 0, 0, 0)");
@@ -272,7 +337,7 @@ test("projects page uses a modal create flow and removes extra board chrome", as
   await dialog.getByLabel("Project name").fill("Roadmap review");
   await dialog.getByRole("button", { exact: true, name: "Create Project" }).click();
 
-  await expect(page).toHaveURL(/\/projects\/project-2$/);
+  await expect(page).toHaveURL(/\/projects\/project-5$/);
   await expect(page).toHaveTitle("Roadmap review | BBTodo");
   await expect(page.getByTestId("board-grid")).toBeVisible();
   await expect(page.locator(".subnav__current")).toHaveText("Roadmap review");
