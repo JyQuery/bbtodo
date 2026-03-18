@@ -1,6 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 type TaskStatus = "todo" | "in_progress" | "done";
+type UserTheme = "sea" | "ember" | "midnight";
 
 interface BoardLane {
   createdAt: string;
@@ -37,7 +38,8 @@ interface Task {
 const user = {
   email: "operator@example.com",
   id: "user-1",
-  name: "Nadia Vale"
+  name: "Nadia Vale",
+  theme: "sea" as UserTheme
 };
 
 function laneId(projectId: string, suffix: TaskStatus) {
@@ -226,6 +228,7 @@ async function mockAuthenticated(
   let nextLaneId = 1;
   let nextTaskId = 5;
   let isAuthenticated = true;
+  const currentUser = structuredClone(user);
   const projectState = (options?.projects ?? projects).map((project) => structuredClone(project));
   const taskState = (options?.tasks ?? tasks).map((task) => structuredClone(task));
 
@@ -331,6 +334,7 @@ async function mockAuthenticated(
           name?: string;
           position?: number;
           status?: TaskStatus;
+          theme?: UserTheme;
           title?: string;
         }
       | null;
@@ -342,7 +346,11 @@ async function mockAuthenticated(
           return;
         }
 
-        await fulfillJson(route, 200, user);
+        await fulfillJson(route, 200, currentUser);
+        return;
+      case "PATCH /api/v1/me/theme":
+        currentUser.theme = body?.theme ?? currentUser.theme;
+        await fulfillJson(route, 200, currentUser);
         return;
       case "GET /api/v1/projects":
         syncAllProjects();
@@ -643,6 +651,17 @@ test("projects page uses a modal create flow and removes extra board chrome", as
   expect(createProjectBackground).toBe("rgba(0, 0, 0, 0)");
   expect(createProjectHeight).toBeLessThan(36);
   await expect(page.locator(".subnav__action-mark")).toHaveText("+");
+  await page.getByLabel("Open account menu").click();
+  await expect(page.getByRole("button", { pressed: true, name: /Sea Cool glass and teal accents/i })).toBeVisible();
+  await page.getByRole("button", { name: /Ember Warm paper and copper highlights/i }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "ember");
+  const emberAccent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim());
+  expect(emberAccent).toBe("#b85e3f");
+  await page.getByRole("button", { name: /Midnight Dark slate with electric aqua/i }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "midnight");
+  const midnightAccent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim());
+  expect(midnightAccent).toBe("#58c6c0");
+  await page.getByLabel("Open account menu").click();
 
   await createProjectLink.click();
 

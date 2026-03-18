@@ -1,10 +1,12 @@
 export type TaskStatus = "todo" | "in_progress" | "done";
+export type UserTheme = "sea" | "ember" | "midnight";
 export type TaskCounts = Record<TaskStatus, number>;
 
 export interface User {
   email: string | null;
   id: string;
   name: string | null;
+  theme: UserTheme;
 }
 
 export interface BoardLane {
@@ -152,6 +154,12 @@ export const api = {
   logout() {
     return request<null>("/auth/logout", {
       method: "POST"
+    });
+  },
+  updateTheme(theme: UserTheme) {
+    return request<User>("/api/v1/me/theme", {
+      body: JSON.stringify({ theme }),
+      method: "PATCH"
     });
   },
   updateTask(
