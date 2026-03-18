@@ -578,7 +578,6 @@ function TaskCard({
 
 function BoardPage() {
   const { projectId } = useParams();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [composerStatus, setComposerStatus] = useState<TaskStatus | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
@@ -636,7 +635,6 @@ function BoardPage() {
 
   const project = projectsQuery.data?.find((candidate) => candidate.id === projectId);
   const tasks = tasksQuery.data ?? [];
-  const doneCount = tasks.filter((task) => task.status === "done").length;
   const draggedTask = draggedTaskId ? tasks.find((task) => task.id === draggedTaskId) ?? null : null;
   const groupedTasks = columns.map((column) => ({
     ...column,
@@ -670,24 +668,6 @@ function BoardPage() {
 
   return (
     <main className="page-shell page-shell--board">
-      <div className="surface-strip workspace-summary">
-        <div className="workspace-summary__top">
-          <button className="back-link" onClick={() => navigate("/")} type="button">
-            Back to projects
-          </button>
-          <div className="page-header__meta">
-            <span className="label-chip">{tasks.length} tasks</span>
-            <span className="label-chip label-chip--soft">{doneCount} done</span>
-            <span className="label-chip">{project ? `Updated ${formatDate(project.updatedAt)}` : "Syncing"}</span>
-          </div>
-        </div>
-        <div className="workspace-summary__copy">
-          <p className="eyebrow">Board</p>
-          <h1 className="page-title workspace-title">{project?.name ?? "Loading board"}</h1>
-          <p className="page-summary">Double-click any lane to add a task, then move work forward one lane at a time.</p>
-        </div>
-      </div>
-
       {projectsQuery.error ? <ErrorBanner error={projectsQuery.error} /> : null}
       {tasksQuery.error ? <ErrorBanner error={tasksQuery.error} /> : null}
       {createTaskMutation.error ? <ErrorBanner error={createTaskMutation.error} /> : null}
