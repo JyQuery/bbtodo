@@ -106,7 +106,7 @@ function EmptyState({
       <div className="empty-state__copy">
         <p className="eyebrow">{eyebrow}</p>
         <h2>{title}</h2>
-        <p className="lead-copy">{copy}</p>
+        {copy ? <p className="lead-copy">{copy}</p> : null}
       </div>
       <div aria-hidden="true" className="empty-state__art">
         <span />
@@ -998,7 +998,6 @@ function ApiTokensPage() {
     <main className="page-shell">
       <section className="page-header">
         <div className="page-header__copy">
-          <p className="eyebrow">Automation</p>
           <h1 className="page-title">API tokens</h1>
           <p className="page-summary">Issue a token for scripts and revoke it when the tool no longer needs access.</p>
         </div>
@@ -1025,7 +1024,6 @@ function ApiTokensPage() {
               required
               value={name}
             />
-            <span className="field__hint">Give each token a distinct name so revocation stays obvious later.</span>
           </label>
           <button className="primary-button" disabled={createTokenMutation.isPending || name.trim().length === 0} type="submit">
             {createTokenMutation.isPending ? "Creating token..." : "Create token"}
@@ -1052,7 +1050,7 @@ function ApiTokensPage() {
 
       {!tokensQuery.isPending && tokensQuery.data && tokensQuery.data.length === 0 ? (
         <EmptyState
-          copy="Create one when a local script, CLI, or small integration needs to call the bbtodo API."
+          copy=""
           eyebrow="No tokens"
           title="You have not issued any API tokens yet."
         />

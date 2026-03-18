@@ -241,7 +241,11 @@ test("projects page uses a modal create flow and removes extra board chrome", as
   await expect(page.getByRole("menuitem", { name: "Sign out" })).toBeVisible();
 
   await page.getByRole("menuitem", { name: "API tokens" }).click();
+  await expect(page).toHaveTitle("API Tokens | BBTodo");
   await expect(page.getByRole("heading", { exact: true, name: "API tokens" })).toBeVisible();
+  await expect(page.locator(".page-header .eyebrow")).toHaveCount(0);
+  await expect(page.locator(".field__hint")).toHaveCount(0);
+  await expect(page.locator(".empty-state .lead-copy")).toHaveCount(0);
 });
 
 test("project cards open on click and delete through a confirmation popover", async ({ page }) => {
