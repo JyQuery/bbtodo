@@ -37,7 +37,10 @@ export function AppShell({ user }: { user: User }) {
               </NavLink>
               {location.pathname === "/" ? (
                 <Link className="subnav__action" to="/?createProject=1">
-                  Create Project
+                  <span aria-hidden="true" className="subnav__action-mark">
+                    +
+                  </span>
+                  <span>Create Project</span>
                 </Link>
               ) : null}
             </nav>

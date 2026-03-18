@@ -228,11 +228,16 @@ test("projects page uses a modal create flow and removes extra board chrome", as
   const projectsPageBox = await page.locator(".page-shell--projects").boundingBox();
   const createProjectLink = page.getByRole("link", { name: "Create Project" });
   const createProjectLinkBox = await createProjectLink.boundingBox();
+  const createProjectBackground = await createProjectLink.evaluate((element) => getComputedStyle(element).backgroundColor);
+  const createProjectHeight = await createProjectLink.evaluate((element) => parseFloat(getComputedStyle(element).height));
   const viewportWidth = page.viewportSize()?.width ?? 0;
   expect(projectsPageBox).not.toBeNull();
   expect((projectsPageBox?.width ?? 0)).toBeGreaterThan(viewportWidth - 80);
   expect(createProjectLinkBox).not.toBeNull();
   expect((createProjectLinkBox?.x ?? 0)).toBeGreaterThan(120);
+  expect(createProjectBackground).toBe("rgba(0, 0, 0, 0)");
+  expect(createProjectHeight).toBeLessThan(36);
+  await expect(page.locator(".subnav__action-mark")).toHaveText("+");
 
   await createProjectLink.click();
 
