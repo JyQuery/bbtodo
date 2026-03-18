@@ -6,11 +6,13 @@ import type {
   ProjectRecord,
   ProjectTaskCounts,
   TaskRecord,
+  UserTheme,
   UserRecord
 } from "./db.js";
-import { taskStatusValues } from "./db.js";
+import { taskStatusValues, userThemeValues } from "./db.js";
 
 export const taskStatusSchema = z.enum(taskStatusValues);
+export const userThemeSchema = z.enum(userThemeValues);
 
 export const errorResponseSchema = z.object({
   message: z.string()
@@ -19,7 +21,12 @@ export const errorResponseSchema = z.object({
 export const meResponseSchema = z.object({
   email: z.string().nullable(),
   id: z.string(),
-  name: z.string().nullable()
+  name: z.string().nullable(),
+  theme: userThemeSchema
+});
+
+export const updateThemeBodySchema = z.object({
+  theme: userThemeSchema
 });
 
 export const taskCountsResponseSchema = z.object({
@@ -146,7 +153,8 @@ export function toMeResponse(user: UserRecord) {
   return meResponseSchema.parse({
     email: user.email ?? null,
     id: user.id,
-    name: user.displayName ?? null
+    name: user.displayName ?? null,
+    theme: user.theme satisfies UserTheme
   });
 }
 

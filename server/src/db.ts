@@ -16,6 +16,8 @@ const timestamps = {
 
 export const taskStatusValues = ["todo", "in_progress", "done"] as const;
 export type TaskStatus = (typeof taskStatusValues)[number];
+export const userThemeValues = ["sea", "ember", "midnight"] as const;
+export type UserTheme = (typeof userThemeValues)[number];
 
 export const defaultLaneTemplates = [
   { name: "Todo", systemKey: "todo" },
@@ -31,6 +33,7 @@ export const users = sqliteTable(
     subject: text("subject").notNull(),
     email: text("email"),
     displayName: text("display_name"),
+    theme: text("theme", { enum: userThemeValues }).notNull().default("sea"),
     ...timestamps
   },
   (table) => [uniqueIndex("users_issuer_subject_idx").on(table.issuer, table.subject)]
@@ -285,6 +288,7 @@ export function createDatabase(sqlitePath: string): DatabaseServices {
       subject TEXT NOT NULL,
       email TEXT,
       display_name TEXT,
+      theme TEXT NOT NULL DEFAULT 'sea',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -362,6 +366,11 @@ export function createDatabase(sqlitePath: string): DatabaseServices {
       ON api_tokens (user_id, updated_at);
   `);
 
+  const userColumns = getTableColumns(database, "users");
+  if (!userColumns.has("theme")) {
+    database.exec("ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'sea';");
+  }
+
   const taskColumns = getTableColumns(database, "tasks");
   if (!taskColumns.has("body")) {
     database.exec("ALTER TABLE tasks ADD COLUMN body TEXT NOT NULL DEFAULT '';");
@@ -410,6 +419,7 @@ export async function upsertUser(
       subject: input.subject,
       email: input.email,
       displayName: input.displayName,
+      theme: "sea",
       createdAt: now,
       updatedAt: now
     })
@@ -434,6 +444,27 @@ export async function upsertUser(
   }
 
   return existing;
+}
+
+export function updateUserTheme(
+  db: DatabaseClient,
+  input: {
+    theme: UserTheme;
+    userId: string;
+  }
+) {
+  const updatedAt = new Date().toISOString();
+
+  db
+    .update(users)
+    .set({
+      theme: input.theme,
+      updatedAt
+    })
+    .where(eq(users.id, input.userId))
+    .run();
+
+  return db.select().from(users).where(eq(users.id, input.userId)).get() ?? null;
 }
 
 export function createSession(

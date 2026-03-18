@@ -31,6 +31,7 @@ import {
   toMeResponse,
   toProjectResponse,
   toTaskResponse,
+  updateThemeBodySchema,
   updateTaskBodySchema
 } from "./api-schemas.js";
 import type { AppConfig } from "./config.js";
@@ -53,6 +54,7 @@ import {
   listApiTokensForUser,
   listProjectsForUser,
   listTasksForProject,
+  updateUserTheme,
   updateOwnedTask,
   upsertUser,
   type UserRecord
@@ -329,6 +331,32 @@ export function buildApp(options: {
       }
 
       return toMeResponse(user);
+    }
+  });
+
+  typedApp.route({
+    method: "PATCH",
+    url: "/api/v1/me/theme",
+    schema: {
+      body: updateThemeBodySchema,
+      response: {
+        200: meResponseSchema,
+        401: errorResponseSchema
+      },
+      tags: ["auth"]
+    },
+    handler: async (request, reply) => {
+      const user = await requireApiUser(app, database.db, request, reply);
+      if (!user) {
+        return;
+      }
+
+      const updatedUser = updateUserTheme(database.db, {
+        userId: user.id,
+        theme: request.body.theme
+      });
+
+      return toMeResponse(updatedUser ?? user);
     }
   });
 
