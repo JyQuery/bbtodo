@@ -10,9 +10,11 @@
 ## Local development
 
 1. Copy `.env.example` to `.env` and fill in your OIDC settings.
-2. Install dependencies with `npm install`.
-3. Run the API and web app together with `npm run dev`.
-4. Open `http://localhost:5173` for Vite development or `http://localhost:8080` when using Docker Compose.
+2. Install server dependencies with `cd server && npm install`.
+3. Install web dependencies with `cd web && npm install`.
+4. Run the server with `cd server && npm run dev`.
+5. Run the web app with `cd web && npm run dev`.
+6. Open `http://localhost:5173` for Vite development or `http://localhost:8080` when using Docker Compose.
 
 The frontend uses `API_ORIGIN` in development so `/api`, `/auth`, `/docs`, and `/health` requests can proxy to the API.
 
@@ -52,9 +54,9 @@ The compose stack exposes the web app on `http://localhost:8080` and stores SQLi
 
 ## Tests
 
-Run the workspace build and tests with:
+Run builds and tests from each package:
 
 ```bash
-npm run build
-npm run test
+cd server && npm run build && npm run test
+cd web && npm run build && npm run test
 ```
