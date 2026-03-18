@@ -20,6 +20,7 @@ The frontend uses `API_ORIGIN` in development so `/api`, `/auth`, `/docs`, and `
 
 The server stores SQLite at the fixed path `/data/bbtodo.sqlite`. For containerized deployments, mount `/data` to persist the database file.
 The server also binds to a fixed internal host (`0.0.0.0`) in containers, so `API_HOST` is not configurable.
+Browser login sessions use a fixed 24-hour lifetime, so `SESSION_TTL_HOURS` is not configurable.
 
 ## API highlights
 

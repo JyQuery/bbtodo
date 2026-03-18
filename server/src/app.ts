@@ -56,6 +56,7 @@ import { authFlowStateSchema, createOidcProvider, type OidcProvider } from "./oi
 
 const AUTH_FLOW_COOKIE = "bbtodo_oidc";
 const SESSION_COOKIE = "bbtodo_session";
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const callbackQuerySchema = z.object({
   code: z.string().min(1),
   state: z.string().min(1)
@@ -259,9 +260,7 @@ export function buildApp(options: {
       );
       const identity = await oidcProvider.completeLogin(callbackUrl, flowState);
       const user = await upsertUser(database.db, identity);
-      const expiresAt = new Date(
-        Date.now() + options.config.sessionTtlHours * 60 * 60 * 1000
-      ).toISOString();
+      const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
       const session = createSession(database.db, {
         userId: user.id,
         expiresAt
