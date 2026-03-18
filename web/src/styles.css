@@ -161,6 +161,13 @@ h3 {
   align-items: stretch;
 }
 
+.landing-panel--simple {
+  min-height: calc(100dvh - 2rem);
+  display: grid;
+  place-items: center;
+  max-width: none;
+}
+
 .centered-state {
   display: grid;
   place-items: center;
@@ -432,6 +439,27 @@ h3 {
   min-height: calc(100dvh - 5rem);
 }
 
+.hero-panel--simple {
+  justify-items: center;
+  align-content: center;
+  min-height: auto;
+  width: min(100%, 28rem);
+  text-align: center;
+}
+
+.hero-panel__brand {
+  display: grid;
+  justify-items: center;
+  gap: 0.9rem;
+}
+
+.hero-panel__pill {
+  width: 3.4rem;
+  height: 3.4rem;
+  border-radius: 1.15rem;
+  font-size: 1.4rem;
+}
+
 .preview-panel,
 .token-reveal__copy,
 .empty-state__copy,
@@ -510,6 +538,11 @@ h3 {
   flex-wrap: wrap;
   gap: 0.75rem;
   align-items: center;
+}
+
+.hero-panel--simple .cta-row {
+  width: 100%;
+  justify-content: center;
 }
 
 .compose-form {
@@ -1415,6 +1448,10 @@ input:focus {
 @media (max-width: 720px) {
   h1 {
     font-size: clamp(2.2rem, 12vw, 3.2rem);
+  }
+
+  .hero-panel--simple {
+    width: 100%;
   }
 
   .project-grid {

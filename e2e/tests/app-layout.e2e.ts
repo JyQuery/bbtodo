@@ -190,7 +190,12 @@ test("login screen uses the updated cool accent palette", async ({ page }) => {
 
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: "Simple boards for work that should stay clear." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "BBTodo" })).toBeVisible();
+  await expect(page.locator(".preview-panel")).toHaveCount(0);
+  await expect(page.locator(".metric-ribbon")).toHaveCount(0);
+  await expect(page.getByText("Live shape")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Sign in with OIDC" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Read API docs" })).toBeVisible();
 
   const accent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim());
   expect(accent).toBe("#2f7774");
@@ -292,7 +297,7 @@ test("sign out redirects back to the login screen", async ({ page }) => {
 
   await expect(page).toHaveURL("/");
   await expect(page).toHaveTitle("BBTodo");
-  await expect(page.getByRole("heading", { name: "Simple boards for work that should stay clear." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "BBTodo" })).toBeVisible();
 });
 
 test("project cards open on click and delete through a confirmation popover", async ({ page }) => {
