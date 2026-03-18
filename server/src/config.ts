@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 const configSchema = z.object({
-  apiHost: z.string().default("0.0.0.0"),
   apiPort: z.coerce.number().int().positive().default(3000),
   publicOrigin: z.url(),
   sessionSecret: z.string().min(32),
@@ -16,7 +15,6 @@ export type AppConfig = z.infer<typeof configSchema>;
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   return configSchema.parse({
-    apiHost: env.API_HOST,
     apiPort: env.API_PORT,
     publicOrigin: env.PUBLIC_ORIGIN,
     sessionSecret: env.SESSION_SECRET,

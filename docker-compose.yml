@@ -4,7 +4,6 @@ services:
       context: ./server
       dockerfile: Dockerfile
     environment:
-      API_HOST: ${API_HOST}
       API_PORT: ${API_PORT}
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN}
       SESSION_SECRET: ${SESSION_SECRET}

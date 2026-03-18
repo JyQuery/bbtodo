@@ -19,6 +19,7 @@
 The frontend uses `API_ORIGIN` in development so `/api`, `/auth`, `/docs`, and `/health` requests can proxy to the API.
 
 The server stores SQLite at the fixed path `/data/bbtodo.sqlite`. For containerized deployments, mount `/data` to persist the database file.
+The server also binds to a fixed internal host (`0.0.0.0`) in containers, so `API_HOST` is not configurable.
 
 ## API highlights
 

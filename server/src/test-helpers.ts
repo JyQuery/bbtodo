@@ -4,7 +4,6 @@ import type { AppConfig } from "./config.js";
 import type { OidcProvider } from "./oidc.js";
 
 export const testConfig: AppConfig = {
-  apiHost: "127.0.0.1",
   apiPort: 3000,
   publicOrigin: "http://localhost:5173",
   sessionSecret: "12345678901234567890123456789012",
