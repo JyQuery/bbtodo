@@ -1,4 +1,4 @@
-import { startTransition, useState, type CSSProperties } from "react";
+import { startTransition, useEffect, useRef, useState, type CSSProperties } from "react";
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 
@@ -56,6 +56,11 @@ function formatDateTime(value: string) {
     hour: "numeric",
     minute: "2-digit"
   }).format(new Date(value));
+}
+
+function getAvatarLetter(user: User) {
+  const source = user.name?.trim() || user.email?.trim() || "bbtodo";
+  return source.charAt(0).toUpperCase();
 }
 
 function MetricRibbon({ items }: { items: Array<{ label: string; value: string }> }) {
@@ -245,6 +250,8 @@ function LoginScreen() {
 
 function AppShell({ user }: { user: User }) {
   const queryClient = useQueryClient();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const logoutMutation = useMutation({
     mutationFn: () => api.logout(),
     onSuccess: () => {
@@ -252,6 +259,33 @@ function AppShell({ user }: { user: User }) {
       void queryClient.invalidateQueries({ queryKey: ["me"] });
     }
   });
+  const avatarLetter = getAvatarLetter(user);
+
+  useEffect(() => {
+    if (!isMenuOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isMenuOpen]);
 
   return (
     <div className="app-frame">
@@ -273,14 +307,35 @@ function AppShell({ user }: { user: User }) {
           </div>
 
           <div className="topbar__meta">
-            <div className="topbar__identity">
-              <p className="topbar__label">Signed in with OIDC</p>
-              <p className="topbar__value">{user.name ?? "bbtodo workspace"}</p>
-              <p className="topbar__subvalue">{user.email ?? "Authenticated session"}</p>
+            <div className="avatar-menu" ref={menuRef}>
+              <button
+                aria-expanded={isMenuOpen}
+                aria-haspopup="menu"
+                aria-label="Open account menu"
+                className="avatar-button"
+                onClick={() => setIsMenuOpen((current) => !current)}
+                type="button"
+              >
+                <span aria-hidden="true" className="avatar-button__letter">
+                  {avatarLetter}
+                </span>
+              </button>
+              {isMenuOpen ? (
+                <div className="avatar-dropdown" role="menu">
+                  <button
+                    className="menu-item danger-button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      logoutMutation.mutate();
+                    }}
+                    role="menuitem"
+                    type="button"
+                  >
+                    {logoutMutation.isPending ? "Signing out..." : "Sign out"}
+                  </button>
+                </div>
+              ) : null}
             </div>
-            <button className="ghost-button" onClick={() => logoutMutation.mutate()} type="button">
-              {logoutMutation.isPending ? "Signing out..." : "Sign out"}
-            </button>
           </div>
         </header>
 

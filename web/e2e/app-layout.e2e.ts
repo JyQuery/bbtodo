@@ -100,6 +100,13 @@ test("projects page removes the oversized intro section", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Boards" })).toBeVisible();
   await expect(page.locator(".page-intro")).toHaveCount(0);
   await expect(page.getByLabel("Project name")).toBeVisible();
+  await expect(page.locator(".topbar__identity")).toHaveCount(0);
+  await expect(page.getByLabel("Open account menu")).toHaveText("N");
+  await expect(page.getByRole("menuitem", { name: "Sign out" })).toHaveCount(0);
+
+  await page.getByLabel("Open account menu").click();
+
+  await expect(page.getByRole("menuitem", { name: "Sign out" })).toBeVisible();
 });
 
 test("board workspace uses the full available width", async ({ page }) => {
