@@ -416,6 +416,10 @@ h3 {
   flex-wrap: wrap;
 }
 
+.page-header--actions-only {
+  justify-content: flex-end;
+}
+
 .page-title {
   font-size: clamp(1.8rem, 3vw, 2.8rem);
   line-height: 0.98;

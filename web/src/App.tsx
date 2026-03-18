@@ -551,10 +551,7 @@ function ProjectsPage() {
 
   return (
     <main className="page-shell page-shell--projects">
-      <section className="page-header">
-        <div className="page-header__copy">
-          <h1 className="page-title">Boards</h1>
-        </div>
+      <section className="page-header page-header--actions-only">
         <div className="page-header__meta">
           <button className="primary-button" onClick={() => setIsCreateDialogOpen(true)} type="button">
             Create board

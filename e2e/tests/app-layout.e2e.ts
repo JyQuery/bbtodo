@@ -191,7 +191,8 @@ test("projects page uses a modal create flow and removes extra board chrome", as
   await page.goto("/");
 
   await expect(page).toHaveTitle("Projects | BBTodo");
-  await expect(page.getByRole("heading", { name: "Boards" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Boards" })).toHaveCount(0);
+  await expect(page.locator(".page-shell--projects .page-header__copy")).toHaveCount(0);
   await expect(page.locator(".page-intro")).toHaveCount(0);
   await expect(page.locator(".page-header .eyebrow")).toHaveCount(0);
   await expect(page.locator(".page-header .page-summary")).toHaveCount(0);
