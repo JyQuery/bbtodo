@@ -199,6 +199,7 @@ test("board workspace uses the full available width", async ({ page }) => {
   const doneColumn = page.getByTestId("board-column-done");
   await todoCard.dragTo(doneColumn);
   await expect(doneColumn.getByText("Review retry settings")).toBeVisible();
+  await expect(page.locator(".column-empty")).toHaveCount(0);
 
   const createdCard = page.getByTestId("task-card-task-4");
   await createdCard.getByLabel("Delete task Ship progress note").click();

@@ -342,7 +342,6 @@ h3 {
 .page-summary,
 .field__hint,
 .project-card__summary,
-.column-empty,
 .token-row__timestamp {
   color: var(--ink-soft);
   line-height: 1.62;
@@ -857,26 +856,6 @@ input:focus {
   position: relative;
   margin-left: auto;
   z-index: 5;
-}
-
-.column-empty {
-  display: grid;
-  gap: 0.8rem;
-  min-height: 10rem;
-  padding: 1rem;
-  border-radius: 1.2rem;
-  border: 1px dashed rgba(16, 32, 34, 0.16);
-  background: rgba(255, 255, 255, 0.34);
-  place-content: center;
-  text-align: center;
-}
-
-.column-empty__rule {
-  display: block;
-  width: 4rem;
-  height: 1px;
-  margin: 0 auto;
-  background: linear-gradient(90deg, transparent, var(--accent), transparent);
 }
 
 .lane-composer {

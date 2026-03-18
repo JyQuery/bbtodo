@@ -803,12 +803,6 @@ function BoardPage() {
                     taskIndex={taskIndex}
                   />
                 ))}
-                {column.tasks.length === 0 && composerStatus !== column.key ? (
-                  <div className="column-empty">
-                    <span className="column-empty__rule" />
-                    <p>No tasks in this lane yet.</p>
-                  </div>
-                ) : null}
               </div>
             </div>
           ))}
