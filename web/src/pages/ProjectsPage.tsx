@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { api, type Project } from "../api";
 import { columns } from "../app/constants";
-import { itemStyle } from "../app/utils";
+import { formatIsoDate, itemStyle } from "../app/utils";
 import { EmptyState, ErrorBanner, ProjectGridSkeleton } from "../components/ui";
 import { useDismissableLayer } from "../hooks/useDismissableLayer";
 
@@ -98,7 +98,7 @@ function ProjectCard({
           ))}
         </div>
         <time className="project-card__timestamp" dateTime={project.updatedAt}>
-          {project.updatedAt}
+          {formatIsoDate(project.updatedAt)}
         </time>
       </div>
     </article>

@@ -326,7 +326,8 @@ test("project cards open on click and delete through a confirmation popover", as
   expect(projectTimestampBox).not.toBeNull();
   expect(projectCardBox?.width ?? 0).toBeLessThan(700);
   expect(((projectTitleBox?.y ?? 0) - (projectCardBox?.y ?? 0)) / (projectCardBox?.height ?? 1)).toBeLessThan(0.28);
-  await expect(projectTimestamp).toHaveText("2026-03-18T07:30:00.000Z");
+  await expect(projectTimestamp).toHaveText("2026-03-18");
+  await expect(projectTimestamp).toHaveAttribute("datetime", "2026-03-18T07:30:00.000Z");
   expect(((projectTimestampBox?.y ?? 0) - (projectCardBox?.y ?? 0)) / (projectCardBox?.height ?? 1)).toBeGreaterThan(0.72);
 
   await projectCard.click();

@@ -35,6 +35,10 @@ export function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
+export function formatIsoDate(value: string) {
+  return value.slice(0, 10);
+}
+
 export function getAvatarLetter(user: User) {
   const source = user.name?.trim() || user.email?.trim() || "bbtodo";
   return source.charAt(0).toUpperCase();
