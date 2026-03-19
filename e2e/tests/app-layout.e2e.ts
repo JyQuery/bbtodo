@@ -350,6 +350,31 @@ async function mockAuthenticated(
     );
   }
 
+  function syncReusableTagColors(tags: TaskTag[]) {
+    const colorsByKey = new Map(
+      tags
+        .map((taskTag) => [taskTag.label.trim().toLowerCase(), taskTag.color] as const)
+        .filter(([key]) => key.length > 0)
+    );
+    if (colorsByKey.size === 0) {
+      return;
+    }
+
+    taskState.forEach((task) => {
+      task.tags = task.tags.map((taskTag) => {
+        const nextColor = colorsByKey.get(taskTag.label.trim().toLowerCase());
+        if (!nextColor || nextColor === taskTag.color) {
+          return taskTag;
+        }
+
+        return {
+          ...taskTag,
+          color: nextColor
+        };
+      });
+    });
+  }
+
   function reindexLane(projectId: string, laneIdValue: string) {
     sortTasksForProject(projectId, laneIdValue).forEach((task, index) => {
       task.position = index;
@@ -605,6 +630,7 @@ async function mockAuthenticated(
         updatedAt: "2026-03-18T08:00:00.000Z"
       };
       taskState.push(createdTask);
+      syncReusableTagColors(createdTask.tags);
       syncProject(projectId);
       await fulfillJson(route, 201, createdTask);
       return;
@@ -675,6 +701,7 @@ async function mockAuthenticated(
       task.body = body?.body ?? task.body;
       if (body?.tags !== undefined) {
         task.tags = body.tags;
+        syncReusableTagColors(task.tags);
       }
       task.title = body?.title ?? task.title;
       task.status = body?.status ?? nextLane.systemKey ?? task.status;
@@ -1093,6 +1120,13 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   await expect(updatedTaskTags).toHaveText(["backend", "release"]);
   await expect(updatedTaskTags.nth(0)).toHaveCSS("background-color", "rgb(255, 241, 217)");
   await expect(updatedTaskTags.nth(1)).toHaveCSS("background-color", "rgb(242, 229, 255)");
+  await page.getByTestId("task-card-task-2").click();
+  await expect(editDialog).toBeVisible();
+  const recoloredBackendSuggestion = editDialog.getByRole("button", { name: "Add tag backend" });
+  await expect(recoloredBackendSuggestion).toBeVisible();
+  await expect(recoloredBackendSuggestion).toHaveCSS("background-color", "rgb(255, 241, 217)");
+  await editDialog.getByLabel("Close edit task dialog").click();
+  await expect(editDialog).toHaveCount(0);
 
   await page.getByLabel("Search cards").fill("callback");
   await expect(page.getByText("Review retry scope")).toBeVisible();

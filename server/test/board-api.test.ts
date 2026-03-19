@@ -281,6 +281,118 @@ describe("projects and tasks API", () => {
     ]);
   });
 
+  it("updates the shared color for existing tags across the user's tasks", async () => {
+    const oidc = createMutableMockOidcProvider({
+      subject: "user-1",
+      email: "one@example.com",
+      displayName: "User One"
+    });
+    const app = buildApp({
+      config: testConfig,
+      oidcProvider: oidc.provider,
+      sqlitePath: ":memory:"
+    });
+    createdApps.push(app);
+
+    const session = await loginWithOidc(app);
+
+    const firstProjectResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects",
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        name: "Platform board"
+      }
+    });
+    const secondProjectResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects",
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        name: "Marketing board"
+      }
+    });
+
+    const firstProject = firstProjectResponse.json();
+    const secondProject = secondProjectResponse.json();
+
+    const firstTaskResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/projects/${firstProject.id}/tasks`,
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        title: "Instrument callbacks",
+        tags: [tag("backend", "sky")]
+      }
+    });
+    const secondTaskResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/projects/${secondProject.id}/tasks`,
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        title: "Sync launch copy",
+        tags: [tag("backend", "sky"), tag("shared", "moss")]
+      }
+    });
+
+    const firstTask = firstTaskResponse.json();
+    const secondTask = secondTaskResponse.json();
+
+    const updateTaskResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/projects/${firstProject.id}/tasks/${firstTask.id}`,
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        tags: [tag("backend", "amber")]
+      }
+    });
+
+    expect(updateTaskResponse.statusCode).toBe(200);
+    expect(updateTaskResponse.json()).toMatchObject({
+      id: firstTask.id,
+      tags: [tag("backend", "amber")]
+    });
+
+    const secondProjectTasksResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/projects/${secondProject.id}/tasks`,
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      }
+    });
+
+    expect(secondProjectTasksResponse.statusCode).toBe(200);
+    expect(secondProjectTasksResponse.json()).toHaveLength(1);
+    expect(secondProjectTasksResponse.json()[0]).toMatchObject({
+      id: secondTask.id,
+      tags: [tag("backend", "amber"), tag("shared", "moss")]
+    });
+
+    const taskTagsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/task-tags",
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      }
+    });
+
+    expect(taskTagsResponse.statusCode).toBe(200);
+    expect(taskTagsResponse.json()).toEqual([
+      tag("backend", "amber"),
+      tag("shared", "moss")
+    ]);
+  });
+
   it("isolates projects and tasks between users and exposes OpenAPI", async () => {
     const oidc = createMutableMockOidcProvider({
       subject: "owner",

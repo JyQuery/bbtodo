@@ -315,6 +315,45 @@ function replaceTaskTags(db: DatabaseClient, taskId: string, tags: TaskTagInput[
   });
 }
 
+function syncTaskTagColorsForUser(db: DatabaseClient, userId: string, tags: TaskTagInput[] | undefined) {
+  const desiredColorsByKey = new Map(
+    normalizeTaskTags(tags).map((tag) => [tag.label.toLowerCase(), tag.color] as const)
+  );
+  if (desiredColorsByKey.size === 0) {
+    return;
+  }
+
+  const rows = db
+    .select({
+      color: taskTags.color,
+      id: taskTags.id,
+      label: taskTags.tag
+    })
+    .from(taskTags)
+    .innerJoin(tasks, eq(taskTags.taskId, tasks.id))
+    .innerJoin(projects, eq(tasks.projectId, projects.id))
+    .where(eq(projects.userId, userId))
+    .all();
+
+  rows.forEach((row) => {
+    const normalizedLabel = normalizeTaskTagLabel(row.label);
+    if (!normalizedLabel) {
+      return;
+    }
+
+    const desiredColor = desiredColorsByKey.get(normalizedLabel.toLowerCase());
+    if (!desiredColor || normalizeTaskTagColor(row.color) === desiredColor) {
+      return;
+    }
+
+    db
+      .update(taskTags)
+      .set({ color: desiredColor })
+      .where(eq(taskTags.id, row.id))
+      .run();
+  });
+}
+
 function getLatestMigrationEntry() {
   const journalPath = resolve(DRIZZLE_MIGRATIONS_PATH, "meta", "_journal.json");
   if (!existsSync(journalPath)) {
@@ -1347,6 +1386,7 @@ export function createTask(
 
   db.insert(tasks).values(task).run();
   replaceTaskTags(db, task.id, input.tags ?? []);
+  syncTaskTagColorsForUser(db, input.userId, input.tags);
   touchProject(db, input.projectId, now);
 
   return getTaskWithTags(db, task.id);
@@ -1447,6 +1487,7 @@ export function updateOwnedTask(
 
   if (input.tags !== undefined) {
     replaceTaskTags(db, task.id, input.tags);
+    syncTaskTagColorsForUser(db, input.userId, input.tags);
   }
 
   touchProject(db, input.projectId, updatedAt);
