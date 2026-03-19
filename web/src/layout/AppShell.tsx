@@ -11,10 +11,10 @@ import {
 } from "react-router-dom";
 
 import { api, type TaskTag, type User } from "../api";
-import { getTaskTagStyle } from "../app/tag-colors";
+import { defaultTaskTagColor, getTaskTagStyle } from "../app/tag-colors";
 import { themeOptions } from "../app/constants";
 import { formatTagInput, getAvatarLetter, normalizeTagKey, parseTagInput } from "../app/utils";
-import { ChevronDownIcon, ErrorBanner, PencilIcon } from "../components/ui";
+import { ChevronDownIcon, CloseIcon, ErrorBanner, PencilIcon } from "../components/ui";
 import { useDismissableLayer } from "../hooks/useDismissableLayer";
 
 export function AppShell({ user }: { user: User }) {
@@ -78,6 +78,10 @@ export function AppShell({ user }: { user: User }) {
   const navSearch = boardMatch || isProjectsRoute ? searchParams.get("q") ?? "" : "";
   const navTagSearch = boardMatch ? searchParams.get("tags") ?? "" : "";
   const availableTagFilters = taskTagsQuery.data ?? [];
+  const availableTagFilterMap = useMemo(
+    () => new Map(availableTagFilters.map((tag) => [normalizeTagKey(tag.label), tag])),
+    [availableTagFilters]
+  );
   const availableTagFilterKeys = useMemo(
     () => new Set(availableTagFilters.map((tag) => normalizeTagKey(tag.label))),
     [availableTagFilters]
@@ -97,10 +101,19 @@ export function AppShell({ user }: { user: User }) {
     () => parseTagInput(committedTagFilterInput),
     [committedTagFilterInput]
   );
+  const selectedTagFilterChips = useMemo(
+    () =>
+      committedTagFilters.map((label) => ({
+        color: availableTagFilterMap.get(normalizeTagKey(label))?.color ?? defaultTaskTagColor,
+        label
+      })),
+    [availableTagFilterMap, committedTagFilters]
+  );
   const committedTagFilterKeys = useMemo(
     () => new Set(committedTagFilters.map((tag) => normalizeTagKey(tag))),
     [committedTagFilters]
   );
+  const tagFilterInputValue = hasTagFilterDraft ? tagFilterDraftValue.trimStart() : "";
   const visibleTagFilterOptions = useMemo(
     () =>
       availableTagFilters.filter((tag) => {
@@ -168,6 +181,48 @@ export function AppShell({ user }: { user: User }) {
     });
   }
 
+  function composeTagFilterValue(tags: string[], draftValue: string) {
+    const nextTags = formatTagInput(tags);
+    const nextDraft = draftValue.trimStart();
+
+    if (nextTags && nextDraft) {
+      return `${nextTags}, ${nextDraft}`;
+    }
+
+    return nextTags || nextDraft;
+  }
+
+  function updateTagFilterSearch(draftValue: string) {
+    updateRouteParams((params) => {
+      const nextValue = composeTagFilterValue(committedTagFilters, draftValue);
+      if (nextValue.trim()) {
+        params.set("tags", nextValue);
+      } else {
+        params.delete("tags");
+      }
+    });
+  }
+
+  function removeTagFilter(tagToRemove: string) {
+    const nextTags = committedTagFilters.filter(
+      (tag) => normalizeTagKey(tag) !== normalizeTagKey(tagToRemove)
+    );
+
+    updateRouteParams((params) => {
+      const nextValue = composeTagFilterValue(nextTags, tagFilterInputValue);
+      if (nextValue.trim()) {
+        params.set("tags", nextValue);
+      } else {
+        params.delete("tags");
+      }
+    });
+
+    setIsTagFilterOpen(true);
+    window.requestAnimationFrame(() => {
+      tagFilterInputRef.current?.focus();
+    });
+  }
+
   function selectTagFilter(tag: TaskTag) {
     const nextTags = committedTagFilters.some(
       (selectedTag) => normalizeTagKey(selectedTag) === normalizeTagKey(tag.label)
@@ -176,7 +231,7 @@ export function AppShell({ user }: { user: User }) {
       : [...committedTagFilters, tag.label];
 
     updateRouteParams((params) => {
-      const nextValue = formatTagInput(nextTags);
+      const nextValue = composeTagFilterValue(nextTags, "");
       if (nextValue) {
         params.set("tags", nextValue);
       } else {
@@ -320,21 +375,43 @@ export function AppShell({ user }: { user: User }) {
                   </label>
                   {boardMatch ? (
                     <div className="subnav__search subnav__search--tag-filter" ref={tagFilterRef}>
-                      <div className={`subnav__search-combo${isTagFilterOpen ? " is-open" : ""}`}>
+                      <div
+                        className={`subnav__search-combo${isTagFilterOpen ? " is-open" : ""}`}
+                        onClick={() => {
+                          setIsTagFilterOpen(true);
+                          tagFilterInputRef.current?.focus();
+                        }}
+                        role="presentation"
+                      >
+                        <div className="subnav__tag-filter-field">
+                          {selectedTagFilterChips.map((tag) => (
+                            <span
+                              className="subnav__tag-filter-chip"
+                              key={tag.label}
+                              style={getTaskTagStyle(tag.color)}
+                            >
+                              <span aria-hidden="true" className="subnav__tag-filter-chip-swatch" />
+                              <span className="subnav__tag-filter-chip-label">{tag.label}</span>
+                              <button
+                                aria-label={`Remove tag filter ${tag.label}`}
+                                className="subnav__tag-filter-chip-remove"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  removeTagFilter(tag.label);
+                                }}
+                                type="button"
+                              >
+                                <CloseIcon />
+                              </button>
+                            </span>
+                          ))}
                         <input
                           aria-controls="tag-filter-dropdown"
                           aria-expanded={isTagFilterOpen}
                           aria-label="Filter by tags"
                           onChange={(event) => {
                             setIsTagFilterOpen(true);
-                            updateRouteParams((params) => {
-                              const value = event.target.value;
-                              if (value.trim()) {
-                                params.set("tags", value);
-                              } else {
-                                params.delete("tags");
-                              }
-                            });
+                            updateTagFilterSearch(event.target.value);
                           }}
                           onFocus={() => setIsTagFilterOpen(true)}
                           onKeyDown={(event) => {
@@ -346,21 +423,33 @@ export function AppShell({ user }: { user: User }) {
                             if (event.key === "Escape") {
                               setIsTagFilterOpen(false);
                             }
+
+                            if (
+                              (event.key === "Backspace" || event.key === "Delete") &&
+                              tagFilterInputValue.length === 0 &&
+                              committedTagFilters.length > 0
+                            ) {
+                              event.preventDefault();
+                              removeTagFilter(committedTagFilters.at(-1) ?? "");
+                            }
                           }}
-                          placeholder="tags"
+                          placeholder={selectedTagFilterChips.length > 0 ? "Add tag" : "tags"}
                           ref={tagFilterInputRef}
                           type="search"
-                          value={navTagSearch}
+                          value={tagFilterInputValue}
                         />
+                        </div>
                         <button
                           aria-expanded={isTagFilterOpen}
                           aria-label="Show tag filter suggestions"
                           className="subnav__search-toggle"
-                          onClick={() => {
+                          onClick={(event) => {
+                            event.stopPropagation();
                             setIsTagFilterOpen((current) => !current);
-                            window.requestAnimationFrame(() => {
-                              tagFilterInputRef.current?.focus();
-                            });
+                            tagFilterInputRef.current?.focus();
+                          }}
+                          onMouseDown={(event) => {
+                            event.preventDefault();
                           }}
                           type="button"
                         >

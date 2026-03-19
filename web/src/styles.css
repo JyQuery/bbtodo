@@ -596,7 +596,7 @@ h3 {
 
 .subnav__search-combo {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   min-height: 2.5rem;
   padding: 0.14rem 0.22rem 0.14rem 0.12rem;
   border: 1px solid var(--line);
@@ -618,9 +618,81 @@ h3 {
     0 18px 30px -28px rgba(18, 34, 36, 0.22);
 }
 
+.subnav__tag-filter-field {
+  display: flex;
+  align-items: center;
+  align-content: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 0.36rem;
+  flex-wrap: wrap;
+  padding: 0.12rem 0;
+}
+
+.subnav__tag-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  min-height: 1.9rem;
+  max-width: 100%;
+  padding: 0.18rem 0.24rem 0.18rem 0.56rem;
+  border: 1px solid var(--tag-border, var(--line));
+  border-radius: 999px;
+  background: var(--tag-bg, var(--surface-muted));
+  color: var(--tag-fg, var(--ink-soft));
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.subnav__tag-filter-chip-swatch {
+  width: 0.68rem;
+  height: 0.68rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tag-fg, var(--ink-soft)) 84%, white 16%);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.52);
+}
+
+.subnav__tag-filter-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subnav__tag-filter-chip-remove {
+  display: inline-grid;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  transition:
+    transform 220ms var(--ease),
+    background-color 220ms var(--ease),
+    color 220ms var(--ease);
+}
+
+.subnav__tag-filter-chip-remove:hover {
+  background: color-mix(in srgb, var(--tag-fg, var(--ink-soft)) 12%, transparent);
+}
+
+.subnav__tag-filter-chip-remove:active {
+  transform: scale(0.94);
+}
+
+.subnav__tag-filter-chip-remove .ui-icon {
+  width: 0.72rem;
+  height: 0.72rem;
+}
+
 .subnav__search--tag-filter input {
   min-height: 2.18rem;
-  padding: 0.46rem 0.68rem 0.46rem 0.8rem;
+  flex: 1 1 6rem;
+  width: 0;
+  min-width: 5rem;
+  padding: 0.34rem 0.68rem 0.34rem 0.24rem;
   border: none;
   background: transparent;
   box-shadow: none;
@@ -635,6 +707,7 @@ h3 {
   place-items: center;
   width: 2rem;
   height: 2rem;
+  margin-top: 0.08rem;
   padding: 0;
   border: none;
   border-radius: 999px;
