@@ -273,25 +273,34 @@ function TaskCardPreview({
 }) {
   return (
     <article className="task-card task-card--drag-overlay">
-      <div className="task-card__meta">
-        <time className="task-card__timestamp" dateTime={task.updatedAt}>
-          {formatIsoDate(task.updatedAt)}
-        </time>
-      </div>
-      <p className="task-card__title">{task.title}</p>
       {task.tags.length > 0 ? (
-        <div className="task-card__tags">
-          {task.tags.map((tag) => (
-            <span
-              className={`task-tag${activeTagKeys.has(normalizeTagKey(tag.label)) ? " is-active" : ""}`}
-              key={tag.label}
-              style={getTaskTagStyle(tag.color)}
-            >
-              {tag.label}
-            </span>
-          ))}
+        <>
+          <p className="task-card__title">{task.title}</p>
+          <div className="task-card__footer">
+            <div className="task-card__tags">
+              {task.tags.map((tag) => (
+                <span
+                  className={`task-tag${activeTagKeys.has(normalizeTagKey(tag.label)) ? " is-active" : ""}`}
+                  key={tag.label}
+                  style={getTaskTagStyle(tag.color)}
+                >
+                  {tag.label}
+                </span>
+              ))}
+            </div>
+            <time className="task-card__timestamp" dateTime={task.updatedAt}>
+              {formatIsoDate(task.updatedAt)}
+            </time>
+          </div>
+        </>
+      ) : (
+        <div className="task-card__headline">
+          <p className="task-card__title">{task.title}</p>
+          <time className="task-card__timestamp" dateTime={task.updatedAt}>
+            {formatIsoDate(task.updatedAt)}
+          </time>
         </div>
-      ) : null}
+      )}
     </article>
   );
 }
@@ -374,10 +383,7 @@ function TaskCard({
       }}
       tabIndex={0}
     >
-      <div className="task-card__meta">
-        <time className="task-card__timestamp" dateTime={task.updatedAt}>
-          {formatIsoDate(task.updatedAt)}
-        </time>
+      <div className="task-card__toolbar">
         <div className="task-card__delete-menu" ref={confirmRef}>
           <button
             aria-expanded={isConfirmOpen}
@@ -433,27 +439,41 @@ function TaskCard({
           ) : null}
         </div>
       </div>
-      <p className="task-card__title">{task.title}</p>
       {task.tags.length > 0 ? (
-        <div className="task-card__tags">
-          {task.tags.map((tag) => (
-            <button
-              className={`task-tag${activeTagKeys.has(normalizeTagKey(tag.label)) ? " is-active" : ""}`}
-              data-no-dnd="true"
-              key={tag.label}
-              onClick={(event) => {
-                event.stopPropagation();
-                onTagSelect(tag.label);
-              }}
-              onPointerDown={(event) => event.stopPropagation()}
-              style={getTaskTagStyle(tag.color)}
-              type="button"
-            >
-              {tag.label}
-            </button>
-          ))}
+        <>
+          <p className="task-card__title">{task.title}</p>
+          <div className="task-card__footer">
+            <div className="task-card__tags">
+              {task.tags.map((tag) => (
+                <button
+                  className={`task-tag${activeTagKeys.has(normalizeTagKey(tag.label)) ? " is-active" : ""}`}
+                  data-no-dnd="true"
+                  key={tag.label}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onTagSelect(tag.label);
+                  }}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  style={getTaskTagStyle(tag.color)}
+                  type="button"
+                >
+                  {tag.label}
+                </button>
+              ))}
+            </div>
+            <time className="task-card__timestamp" dateTime={task.updatedAt}>
+              {formatIsoDate(task.updatedAt)}
+            </time>
+          </div>
+        </>
+      ) : (
+        <div className="task-card__headline">
+          <p className="task-card__title">{task.title}</p>
+          <time className="task-card__timestamp" dateTime={task.updatedAt}>
+            {formatIsoDate(task.updatedAt)}
+          </time>
         </div>
-      ) : null}
+      )}
     </article>
   );
 }

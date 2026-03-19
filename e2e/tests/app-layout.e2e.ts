@@ -960,6 +960,19 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   const initialTaskTags = page.getByTestId("task-card-task-1").locator(".task-tag");
   await expect(initialTaskTags).toHaveText(["backend", "retry"]);
   await expect(initialTaskTags.nth(0)).toHaveCSS("background-color", "rgb(227, 241, 255)");
+  const taggedCardTimestampBox = await page.getByTestId("task-card-task-1").locator(".task-card__timestamp").boundingBox();
+  const taggedCardTagsBox = await page.getByTestId("task-card-task-1").locator(".task-card__tags").boundingBox();
+  expect(taggedCardTimestampBox).not.toBeNull();
+  expect(taggedCardTagsBox).not.toBeNull();
+  expect(
+    Math.abs(
+      ((taggedCardTimestampBox?.y ?? 0) + (taggedCardTimestampBox?.height ?? 0)) -
+        ((taggedCardTagsBox?.y ?? 0) + (taggedCardTagsBox?.height ?? 0))
+    )
+  ).toBeLessThan(12);
+  expect(taggedCardTimestampBox?.x ?? 0).toBeGreaterThan(
+    ((taggedCardTagsBox?.x ?? 0) + (taggedCardTagsBox?.width ?? 0)) - 8
+  );
   const taskDeleteButton = page.getByLabel("Delete task Review retry settings");
   await expect(taskDeleteButton.locator("svg")).toHaveCount(1);
   await expect(taskDeleteButton).toHaveCSS("border-top-width", "0px");
@@ -1090,6 +1103,20 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
 
   await expect(page.getByText("Ship progress note")).toBeVisible();
   const createdCard = page.getByTestId("task-card-task-5");
+  await expect(createdCard.locator(".task-tag")).toHaveCount(0);
+  const createdCardTitleBox = await createdCard.locator(".task-card__title").boundingBox();
+  const createdCardTimestampBox = await createdCard.locator(".task-card__timestamp").boundingBox();
+  expect(createdCardTitleBox).not.toBeNull();
+  expect(createdCardTimestampBox).not.toBeNull();
+  expect(
+    Math.abs(
+      ((createdCardTitleBox?.y ?? 0) + (createdCardTitleBox?.height ?? 0)) -
+        ((createdCardTimestampBox?.y ?? 0) + (createdCardTimestampBox?.height ?? 0))
+    )
+  ).toBeLessThan(12);
+  expect(createdCardTimestampBox?.x ?? 0).toBeGreaterThan(
+    ((createdCardTitleBox?.x ?? 0) + (createdCardTitleBox?.width ?? 0) * 0.65)
+  );
 
   const retryCardDragBox = await retryCard.boundingBox();
   expect(retryCardDragBox).not.toBeNull();
