@@ -4,7 +4,14 @@ import ReactMarkdown from "react-markdown";
 import { Navigate, useParams, useSearchParams } from "react-router-dom";
 
 import { api, type BoardLane, type Task } from "../api";
-import { formatIsoDate, getTaskInputLabel, itemStyle } from "../app/utils";
+import {
+  formatIsoDate,
+  formatTagInput,
+  getTaskInputLabel,
+  itemStyle,
+  normalizeTagKey,
+  parseTagInput
+} from "../app/utils";
 import { BoardSkeleton, EmptyState, ErrorBanner } from "../components/ui";
 import { useDismissableLayer } from "../hooks/useDismissableLayer";
 
@@ -16,9 +23,12 @@ function TaskCard({
   onDrop,
   onDragStart,
   onOpen,
+  onTagSelect,
+  activeTagKeys,
   task,
   taskIndex
 }: {
+  activeTagKeys: Set<string>;
   isDragDisabled: boolean;
   onDelete: (taskId: string) => void;
   onDragEnd: () => void;
@@ -26,6 +36,7 @@ function TaskCard({
   onDrop: (event: DragEvent<HTMLElement>) => void;
   onDragStart: (task: Task) => void;
   onOpen: (task: Task) => void;
+  onTagSelect: (tag: string) => void;
   task: Task;
   taskIndex: number;
 }) {
@@ -106,6 +117,23 @@ function TaskCard({
         </div>
       </div>
       <p className="task-card__title">{task.title}</p>
+      {task.tags.length > 0 ? (
+        <div className="task-card__tags">
+          {task.tags.map((tag) => (
+            <button
+              className={`task-tag${activeTagKeys.has(normalizeTagKey(tag)) ? " is-active" : ""}`}
+              key={tag}
+              onClick={(event) => {
+                event.stopPropagation();
+                onTagSelect(tag);
+              }}
+              type="button"
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -120,18 +148,20 @@ function TaskEditorDialog({
   error: Error | null;
   isPending: boolean;
   onClose: () => void;
-  onSave: (input: { body: string; title: string }) => void;
+  onSave: (input: { body: string; tags: string[]; title: string }) => void;
   task: Task;
 }) {
   const [title, setTitle] = useState(task.title);
   const [body, setBody] = useState(task.body);
+  const [tagsInput, setTagsInput] = useState(formatTagInput(task.tags));
   const [isPreviewVisible, setIsPreviewVisible] = useState(false);
 
   useEffect(() => {
     setTitle(task.title);
     setBody(task.body);
+    setTagsInput(formatTagInput(task.tags));
     setIsPreviewVisible(false);
-  }, [task.body, task.id, task.title]);
+  }, [task.body, task.id, task.tags, task.title]);
 
   return (
     <div className="dialog-scrim" onClick={onClose}>
@@ -159,6 +189,7 @@ function TaskEditorDialog({
             event.preventDefault();
             onSave({
               body,
+              tags: parseTagInput(tagsInput),
               title: title.trim()
             });
           }}
@@ -173,6 +204,16 @@ function TaskEditorDialog({
                 placeholder="Task title"
                 required
                 value={title}
+              />
+            </label>
+            <label className="field">
+              <span className="field__label">Tags</span>
+              <input
+                aria-label="Task tags"
+                maxLength={240}
+                onChange={(event) => setTagsInput(event.target.value)}
+                placeholder="bug, docs, release"
+                value={tagsInput}
               />
             </label>
             <div className="field field--editor">
@@ -258,28 +299,36 @@ export function BoardPage() {
 
   const isCreateLaneDialogOpen = searchParams.get("createLane") === "1";
   const boardSearch = searchParams.get("q")?.trim().toLowerCase() ?? "";
+  const activeTagFilters = parseTagInput(searchParams.get("tags") ?? "");
+  const activeTagKeys = new Set(activeTagFilters.map((tag) => normalizeTagKey(tag)));
   const project = projectsQuery.data?.find((candidate) => candidate.id === projectId);
   const lanes = lanesQuery.data ?? project?.laneSummaries ?? [];
   const tasks = tasksQuery.data ?? [];
   const draggedLane = draggedLaneId ? lanes.find((lane) => lane.id === draggedLaneId) ?? null : null;
   const draggedTask = draggedTaskId ? tasks.find((task) => task.id === draggedTaskId) ?? null : null;
   const editingTask = editingTaskId ? tasks.find((task) => task.id === editingTaskId) ?? null : null;
-  const isBoardFiltered = boardSearch.length > 0;
+  const isBoardFiltered = boardSearch.length > 0 || activeTagKeys.size > 0;
 
-  function taskMatchesBoardSearch(task: Task) {
-    if (!boardSearch) {
+  function taskMatchesBoardFilters(task: Task) {
+    const haystack = `${task.title}\n${task.body}\n${task.tags.join("\n")}`.toLowerCase();
+    const matchesSearch = !boardSearch || haystack.includes(boardSearch);
+    if (!matchesSearch) {
+      return false;
+    }
+
+    if (activeTagKeys.size === 0) {
       return true;
     }
 
-    const haystack = `${task.title}\n${task.body}`.toLowerCase();
-    return haystack.includes(boardSearch);
+    const taskTagKeys = new Set(task.tags.map((tag) => normalizeTagKey(tag)));
+    return Array.from(activeTagKeys).every((tag) => taskTagKeys.has(tag));
   }
 
   const groupedTasks = lanes.map((lane) => ({
     ...lane,
     displayTasks: tasks
       .filter((task) => task.laneId === lane.id)
-      .filter((task) => taskMatchesBoardSearch(task))
+      .filter((task) => taskMatchesBoardFilters(task))
       .filter((task) => task.id !== draggedTaskId),
     tasks: tasks.filter((task) => task.laneId === lane.id)
   }));
@@ -329,8 +378,17 @@ export function BoardPage() {
   });
 
   const saveTaskMutation = useMutation({
-    mutationFn: ({ body, taskId, title }: { body: string; taskId: string; title: string }) =>
-      api.updateTask(projectId ?? "", taskId, { body, title }),
+    mutationFn: ({
+      body,
+      tags,
+      taskId,
+      title
+    }: {
+      body: string;
+      tags: string[];
+      taskId: string;
+      title: string;
+    }) => api.updateTask(projectId ?? "", taskId, { body, tags, title }),
     onSuccess: async () => {
       closeTaskDialog();
       await invalidateBoardData();
@@ -378,6 +436,25 @@ export function BoardPage() {
   function closeTaskDialog() {
     setEditingTaskId(null);
     saveTaskMutation.reset();
+  }
+
+  function updateTagFilters(tags: string[]) {
+    updateBoardParams((params) => {
+      const nextValue = formatTagInput(tags);
+      if (nextValue) {
+        params.set("tags", nextValue);
+      } else {
+        params.delete("tags");
+      }
+    });
+  }
+
+  function handleTagSelect(tag: string) {
+    if (activeTagKeys.has(normalizeTagKey(tag))) {
+      return;
+    }
+
+    updateTagFilters([...activeTagFilters, tag]);
   }
 
   function clearLaneDrag() {
@@ -631,9 +708,10 @@ export function BoardPage() {
           error={saveTaskMutation.error}
           isPending={saveTaskMutation.isPending}
           onClose={closeTaskDialog}
-          onSave={({ body, title }) =>
+          onSave={({ body, tags, title }) =>
             saveTaskMutation.mutate({
               body,
+              tags,
               taskId: editingTask.id,
               title
             })
@@ -782,6 +860,7 @@ export function BoardPage() {
                   <div key={task.id}>
                     {taskIndex > 0 ? renderDropIndicator(lane.id, taskIndex) : null}
                     <TaskCard
+                      activeTagKeys={activeTagKeys}
                       isDragDisabled={isDragDisabled}
                       onDelete={(taskId) => deleteTaskMutation.mutate(taskId)}
                       onDragEnd={() => {
@@ -812,6 +891,7 @@ export function BoardPage() {
                         handleDrop(lane);
                       }}
                       onOpen={(taskToEdit) => setEditingTaskId(taskToEdit.id)}
+                      onTagSelect={handleTagSelect}
                       task={task}
                       taskIndex={taskIndex}
                     />

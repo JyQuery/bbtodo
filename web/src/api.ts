@@ -37,6 +37,7 @@ export interface Task {
   position: number;
   projectId: string;
   status: TaskStatus;
+  tags: string[];
   title: string;
   updatedAt: string;
 }
@@ -115,7 +116,7 @@ export const api = {
       method: "POST"
     });
   },
-  createTask(projectId: string, input: { body?: string; laneId?: string; title: string }) {
+  createTask(projectId: string, input: { body?: string; laneId?: string; tags?: string[]; title: string }) {
     return request<Task>(`/api/v1/projects/${projectId}/tasks`, {
       body: JSON.stringify(input),
       method: "POST"
@@ -165,7 +166,7 @@ export const api = {
   updateTask(
     projectId: string,
     taskId: string,
-    input: Partial<Pick<Task, "body" | "laneId" | "position" | "status" | "title">>
+    input: Partial<Pick<Task, "body" | "laneId" | "position" | "status" | "tags" | "title">>
   ) {
     return request<Task>(`/api/v1/projects/${projectId}/tasks/${taskId}`, {
       body: JSON.stringify(input),

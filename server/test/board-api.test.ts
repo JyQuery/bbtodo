@@ -76,7 +76,8 @@ describe("projects and tasks API", () => {
         bbtodo_session: session.sessionCookie
       },
       payload: {
-        title: "Write the first task"
+        title: "Write the first task",
+        tags: ["launch", "api"]
       }
     });
 
@@ -87,6 +88,7 @@ describe("projects and tasks API", () => {
       projectId: project.id,
       position: 0,
       status: "todo",
+      tags: ["launch", "api"],
       title: "Write the first task"
     });
 
@@ -99,14 +101,16 @@ describe("projects and tasks API", () => {
         bbtodo_session: session.sessionCookie
       },
       payload: {
-        status: "in_progress"
+        status: "in_progress",
+        tags: ["backend", "launch"]
       }
     });
 
     expect(updateTaskResponse.statusCode).toBe(200);
     expect(updateTaskResponse.json()).toMatchObject({
       id: task.id,
-      status: "in_progress"
+      status: "in_progress",
+      tags: ["backend", "launch"]
     });
 
     const updatedProjectsResponse = await app.inject({
@@ -141,7 +145,8 @@ describe("projects and tasks API", () => {
     expect(filteredTasksResponse.json()).toHaveLength(1);
     expect(filteredTasksResponse.json()[0]).toMatchObject({
       id: task.id,
-      status: "in_progress"
+      status: "in_progress",
+      tags: ["backend", "launch"]
     });
 
     const deleteTaskResponse = await app.inject({
@@ -302,7 +307,8 @@ describe("projects and tasks API", () => {
       payload: {
         title: "Draft release note",
         body: "## Summary\n\n- ship docs",
-        laneId: qaLane.id
+        laneId: qaLane.id,
+        tags: ["docs", "qa"]
       }
     });
     const createTaskTwoResponse = await app.inject({
@@ -322,6 +328,7 @@ describe("projects and tasks API", () => {
     expect(createTaskOneResponse.json()).toMatchObject({
       body: "## Summary\n\n- ship docs",
       laneId: qaLane.id,
+      tags: ["docs", "qa"],
       position: 0
     });
     expect(createTaskTwoResponse.json()).toMatchObject({
@@ -340,6 +347,7 @@ describe("projects and tasks API", () => {
       },
       payload: {
         body: "Updated body",
+        tags: ["copy", "qa"],
         position: 0
       }
     });
@@ -349,7 +357,8 @@ describe("projects and tasks API", () => {
       body: "Updated body",
       id: secondTask.id,
       laneId: qaLane.id,
-      position: 0
+      position: 0,
+      tags: ["copy", "qa"]
     });
 
     const reorderLaneResponse = await app.inject({
@@ -403,11 +412,13 @@ describe("projects and tasks API", () => {
     expect(qaTasksResponse.json().filter((task: { laneId: string }) => task.laneId === qaLane.id)).toEqual([
       expect.objectContaining({
         id: secondTask.id,
-        position: 0
+        position: 0,
+        tags: ["copy", "qa"]
       }),
       expect.objectContaining({
         id: firstTask.id,
-        position: 1
+        position: 1,
+        tags: ["docs", "qa"]
       })
     ]);
   });

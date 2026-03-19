@@ -682,7 +682,8 @@ export function buildApp(options: {
         projectId: request.params.projectId,
         title: request.body.title.trim(),
         body: request.body.body,
-        laneId: request.body.laneId
+        laneId: request.body.laneId,
+        tags: request.body.tags
       });
       if (!task) {
         return reply.status(404).send({
@@ -720,6 +721,7 @@ export function buildApp(options: {
         title: request.body.title?.trim(),
         body: request.body.body,
         laneId: request.body.laneId,
+        tags: request.body.tags,
         position: request.body.position,
         status: request.body.status
       });

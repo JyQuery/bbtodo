@@ -111,6 +111,22 @@ export const tasks = sqliteTable(
   ]
 );
 
+export const taskTags = sqliteTable(
+  "task_tags",
+  {
+    id: text("id").primaryKey(),
+    taskId: text("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    tag: text("tag").notNull(),
+    position: integer("position").notNull()
+  },
+  (table) => [
+    index("task_tags_task_position_idx").on(table.taskId, table.position),
+    uniqueIndex("task_tags_task_tag_idx").on(table.taskId, table.tag)
+  ]
+);
+
 export const apiTokens = sqliteTable(
   "api_tokens",
   {
@@ -133,6 +149,7 @@ export type DatabaseClient = BetterSQLite3Database<{
   lanes: typeof lanes;
   projects: typeof projects;
   sessions: typeof sessions;
+  taskTags: typeof taskTags;
   tasks: typeof tasks;
   users: typeof users;
 }>;
@@ -141,8 +158,13 @@ export type UserRecord = typeof users.$inferSelect;
 export type ProjectRecord = typeof projects.$inferSelect;
 export type LaneRecord = typeof lanes.$inferSelect;
 export type TaskRecord = typeof tasks.$inferSelect;
+export type TaskTagRecord = typeof taskTags.$inferSelect;
 export type ApiTokenRecord = typeof apiTokens.$inferSelect;
 export type ProjectTaskCounts = Record<TaskStatus, number>;
+
+export interface TaskRecordWithTags extends TaskRecord {
+  tags: string[];
+}
 
 export interface LaneWithTaskCount extends LaneRecord {
   taskCount: number;
@@ -172,6 +194,100 @@ function createEmptyTaskCounts(): ProjectTaskCounts {
     in_progress: 0,
     done: 0
   };
+}
+
+function normalizeTaskTag(tag: string) {
+  const normalized = tag.trim().replace(/\s+/g, " ");
+  return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeTaskTags(tags: string[] | undefined) {
+  if (!tags) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const normalizedTags: string[] = [];
+
+  tags.forEach((tag) => {
+    const normalized = normalizeTaskTag(tag);
+    if (!normalized) {
+      return;
+    }
+
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) {
+      return;
+    }
+
+    seen.add(key);
+    normalizedTags.push(normalized);
+  });
+
+  return normalizedTags;
+}
+
+function listTaskTagMap(db: DatabaseClient, taskIds: string[]) {
+  if (taskIds.length === 0) {
+    return new Map<string, string[]>();
+  }
+
+  const rows = db
+    .select({
+      tag: taskTags.tag,
+      taskId: taskTags.taskId
+    })
+    .from(taskTags)
+    .where(inArray(taskTags.taskId, taskIds))
+    .orderBy(asc(taskTags.taskId), asc(taskTags.position))
+    .all();
+
+  const tagMap = new Map<string, string[]>(
+    taskIds.map((taskId) => [taskId, []])
+  );
+
+  rows.forEach((row) => {
+    tagMap.get(row.taskId)?.push(row.tag);
+  });
+
+  return tagMap;
+}
+
+function attachTagsToTasks(db: DatabaseClient, taskRows: TaskRecord[]) {
+  const tagMap = listTaskTagMap(
+    db,
+    taskRows.map((task) => task.id)
+  );
+
+  return taskRows.map((task) => ({
+    ...task,
+    tags: tagMap.get(task.id) ?? []
+  })) satisfies TaskRecordWithTags[];
+}
+
+function getTaskWithTags(db: DatabaseClient, taskId: string) {
+  const task = db.select().from(tasks).where(eq(tasks.id, taskId)).get();
+  if (!task) {
+    return null;
+  }
+
+  return attachTagsToTasks(db, [task])[0] ?? null;
+}
+
+function replaceTaskTags(db: DatabaseClient, taskId: string, tags: string[]) {
+  db.delete(taskTags).where(eq(taskTags.taskId, taskId)).run();
+
+  normalizeTaskTags(tags).forEach((tag, index) => {
+    db
+      .insert(taskTags)
+      .values({
+        id: crypto.randomUUID(),
+        taskId,
+        tag,
+        position: index
+      })
+      .run();
+  });
 }
 
 function getLatestMigrationEntry() {
@@ -219,8 +335,8 @@ function getTableColumns(database: Database.Database, tableName: string) {
 }
 
 function hasAnyApplicationTables(database: Database.Database) {
-  return ["api_tokens", "lanes", "projects", "sessions", "tasks", "users"].some((tableName) =>
-    tableExists(database, tableName)
+  return ["api_tokens", "lanes", "projects", "sessions", "task_tags", "tasks", "users"].some(
+    (tableName) => tableExists(database, tableName)
   );
 }
 
@@ -377,6 +493,13 @@ function createLegacyCompatTables(database: Database.Database) {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS task_tags (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      tag TEXT NOT NULL,
+      position INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS api_tokens (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -432,6 +555,12 @@ function ensureLegacyCompatIndexes(database: Database.Database) {
 
     CREATE INDEX IF NOT EXISTS tasks_project_lane_position_idx
       ON tasks (project_id, lane_id, position);
+
+    CREATE INDEX IF NOT EXISTS task_tags_task_position_idx
+      ON task_tags (task_id, position);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS task_tags_task_tag_idx
+      ON task_tags (task_id, tag);
 
     CREATE INDEX IF NOT EXISTS api_tokens_user_updated_at_idx
       ON api_tokens (user_id, updated_at);
@@ -495,6 +624,7 @@ export function createDatabase(sqlitePath: string): DatabaseServices {
         lanes,
         projects,
         sessions,
+        taskTags,
         tasks,
         users
       }
@@ -991,12 +1121,14 @@ export function listTasksForProject(
     filters.push(eq(tasks.laneId, lane.id));
   }
 
-  return db
+  const taskRows = db
     .select()
     .from(tasks)
     .where(and(...filters))
     .orderBy(asc(tasks.position), desc(tasks.updatedAt))
     .all();
+
+  return attachTagsToTasks(db, taskRows);
 }
 
 function touchProject(db: DatabaseClient, projectId: string, updatedAt: string) {
@@ -1081,6 +1213,7 @@ export function createTask(
     title: string;
     body?: string;
     laneId?: string;
+    tags?: string[];
   }
 ) {
   const project = getOwnedProject(db, input.userId, input.projectId);
@@ -1118,9 +1251,10 @@ export function createTask(
   };
 
   db.insert(tasks).values(task).run();
+  replaceTaskTags(db, task.id, input.tags ?? []);
   touchProject(db, input.projectId, now);
 
-  return task;
+  return getTaskWithTags(db, task.id);
 }
 
 export function getOwnedTask(
@@ -1130,7 +1264,7 @@ export function getOwnedTask(
     projectId: string;
     taskId: string;
   }
-) {
+  ) {
   const result = db
     .select({ task: tasks })
     .from(tasks)
@@ -1144,7 +1278,7 @@ export function getOwnedTask(
     )
     .get();
 
-  return result?.task ?? null;
+  return result?.task ? attachTagsToTasks(db, [result.task])[0] ?? null : null;
 }
 
 export function updateOwnedTask(
@@ -1156,6 +1290,7 @@ export function updateOwnedTask(
     projectId: string;
     status?: TaskStatus;
     taskId: string;
+    tags?: string[];
     title?: string;
     userId: string;
   }
@@ -1215,9 +1350,13 @@ export function updateOwnedTask(
     .where(eq(tasks.id, task.id))
     .run();
 
+  if (input.tags !== undefined) {
+    replaceTaskTags(db, task.id, input.tags);
+  }
+
   touchProject(db, input.projectId, updatedAt);
 
-  return db.select().from(tasks).where(eq(tasks.id, task.id)).get() ?? null;
+  return getTaskWithTags(db, task.id);
 }
 
 export function deleteOwnedTask(

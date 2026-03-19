@@ -47,3 +47,37 @@ export function getAvatarLetter(user: User) {
 export function getTaskInputLabel(columnLabel: string) {
   return `New task title for ${columnLabel}`;
 }
+
+function normalizeTagValue(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+export function normalizeTagKey(value: string) {
+  return normalizeTagValue(value).toLowerCase();
+}
+
+export function parseTagInput(value: string) {
+  const seen = new Set<string>();
+  const tags: string[] = [];
+
+  value.split(",").forEach((part) => {
+    const normalized = normalizeTagValue(part);
+    if (!normalized) {
+      return;
+    }
+
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) {
+      return;
+    }
+
+    seen.add(key);
+    tags.push(normalized);
+  });
+
+  return tags;
+}
+
+export function formatTagInput(tags: string[]) {
+  return tags.join(", ");
+}

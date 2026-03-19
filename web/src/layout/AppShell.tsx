@@ -42,6 +42,7 @@ export function AppShell({ user }: { user: User }) {
   const avatarLetter = getAvatarLetter(user);
   const isProjectsRoute = location.pathname === "/";
   const navSearch = boardMatch || isProjectsRoute ? searchParams.get("q") ?? "" : "";
+  const navTagSearch = boardMatch ? searchParams.get("tags") ?? "" : "";
   const activeBoard = boardMatch
     ? projectsQuery.data?.find((project) => project.id === boardMatch.params.projectId)?.name ?? "Board"
     : null;
@@ -91,6 +92,27 @@ export function AppShell({ user }: { user: User }) {
                     placeholder={isProjectsRoute ? "Search projects" : "Search cards"}
                     type="search"
                     value={navSearch}
+                  />
+                </label>
+              ) : null}
+              {boardMatch ? (
+                <label className="subnav__search">
+                  <span className="subnav__search-label">Tags</span>
+                  <input
+                    aria-label="Filter by tags"
+                    onChange={(event) =>
+                      updateRouteParams((params) => {
+                        const value = event.target.value;
+                        if (value.trim()) {
+                          params.set("tags", value);
+                        } else {
+                          params.delete("tags");
+                        }
+                      })
+                    }
+                    placeholder="bug, docs"
+                    type="search"
+                    value={navTagSearch}
                   />
                 </label>
               ) : null}

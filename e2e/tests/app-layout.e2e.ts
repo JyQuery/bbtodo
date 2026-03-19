@@ -31,6 +31,7 @@ interface Task {
   position: number;
   projectId: string;
   status: TaskStatus;
+  tags: string[];
   title: string;
   updatedAt: string;
 }
@@ -196,6 +197,7 @@ const tasks: Task[] = [
     position: 0,
     projectId: "project-1",
     status: "todo",
+    tags: ["backend", "retry"],
     title: "Review retry settings",
     updatedAt: "2026-03-18T07:10:00.000Z"
   },
@@ -207,6 +209,7 @@ const tasks: Task[] = [
     position: 0,
     projectId: "project-1",
     status: "in_progress",
+    tags: ["observability", "oidc"],
     title: "Tighten callback logging",
     updatedAt: "2026-03-18T07:45:00.000Z"
   },
@@ -218,6 +221,7 @@ const tasks: Task[] = [
     position: 0,
     projectId: "project-1",
     status: "done",
+    tags: ["ops"],
     title: "Remove healthcheck loop",
     updatedAt: "2026-03-18T07:50:00.000Z"
   },
@@ -229,6 +233,7 @@ const tasks: Task[] = [
     position: 1,
     projectId: "project-1",
     status: "todo",
+    tags: ["copy"],
     title: "Queue copy pass",
     updatedAt: "2026-03-18T07:15:00.000Z"
   }
@@ -391,6 +396,7 @@ async function mockAuthenticated(
           name?: string;
           position?: number;
           status?: TaskStatus;
+          tags?: string[];
           theme?: UserTheme;
           title?: string;
         }
@@ -536,6 +542,7 @@ async function mockAuthenticated(
         position: sortTasksForProject(projectId, targetLane.id).length,
         projectId,
         status: targetLane.systemKey ?? "todo",
+        tags: body?.tags ?? [],
         title: body?.title ?? "Untitled task",
         updatedAt: "2026-03-18T08:00:00.000Z"
       };
@@ -608,6 +615,9 @@ async function mockAuthenticated(
       }
 
       task.body = body?.body ?? task.body;
+      if (body?.tags !== undefined) {
+        task.tags = body.tags;
+      }
       task.title = body?.title ?? task.title;
       task.status = body?.status ?? nextLane.systemKey ?? task.status;
       task.updatedAt = "2026-03-18T08:05:00.000Z";
@@ -869,7 +879,8 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   await expect(page.locator(".subnav__current-value")).toHaveText("Billing cleanup");
   await expect(page.getByRole("button", { name: "Create Lane" })).toBeVisible();
   await expect(page.getByLabel("Search cards")).toBeVisible();
-  await expect(page.locator(".subnav__search-label")).toHaveText("Search");
+  await expect(page.getByLabel("Filter by tags")).toBeVisible();
+  await expect(page.locator(".subnav__search-label")).toHaveText(["Search", "Tags"]);
 
   const maxWidth = await page.locator(".page-shell--board").evaluate((element) => getComputedStyle(element).maxWidth);
   expect(maxWidth).toBe("none");
@@ -885,6 +896,7 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   await expect(page.locator(".board-column__header > span")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Move to / })).toHaveCount(0);
   await expect(page.getByTestId("task-card-task-1").locator(".label-chip")).toHaveCount(0);
+  await expect(page.getByTestId("task-card-task-1").locator(".task-tag")).toHaveText(["backend", "retry"]);
   await expect(page.getByTestId("task-card-task-1").locator(".task-card__timestamp")).toHaveText("2026-03-18");
   await expect(page.getByTestId("task-card-task-1").locator(".task-card__timestamp")).toHaveAttribute(
     "datetime",
@@ -895,6 +907,7 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   const editDialog = page.getByRole("dialog", { name: "Edit Card" });
   await expect(editDialog).toBeVisible();
   await expect(editDialog.getByLabel("Title")).toHaveValue("Review retry settings");
+  await expect(editDialog.getByLabel("Task tags")).toHaveValue("backend, retry");
   await expect(editDialog.getByLabel("Task body")).toHaveValue("Callback logs mention **retry** scope.");
   await expect(editDialog.locator(".task-editor__preview-panel")).toHaveCount(0);
   await expect(editDialog.getByTestId("task-markdown-preview")).toHaveCount(0);
@@ -908,6 +921,7 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   await expect(editDialog.getByRole("button", { name: "Hide markdown" })).toBeVisible();
   await expect(editDialog.locator(".markdown-preview strong")).toHaveText("retry");
   await editDialog.getByLabel("Title").fill("Review retry scope");
+  await editDialog.getByLabel("Task tags").fill("backend, release");
   await editDialog
     .getByLabel("Task body")
     .fill("Callback logs mention **scope**.\n\n- Keep raw claims\n- Verify issuer");
@@ -916,12 +930,19 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   await editDialog.getByRole("button", { name: "Save card" }).click();
   await expect(editDialog).toHaveCount(0);
   await expect(page.getByTestId("task-card-task-1").getByText("Review retry scope")).toBeVisible();
+  await expect(page.getByTestId("task-card-task-1").locator(".task-tag")).toHaveText(["backend", "release"]);
 
   await page.getByLabel("Search cards").fill("callback");
   await expect(page.getByText("Review retry scope")).toBeVisible();
   await expect(page.getByText("Tighten callback logging")).toBeVisible();
   await expect(page.getByText("Remove healthcheck loop")).toHaveCount(0);
   await page.getByLabel("Search cards").fill("");
+  await page.getByLabel("Filter by tags").fill("release");
+  await expect(page.getByText("Review retry scope")).toBeVisible();
+  await expect(page.getByText("Tighten callback logging")).toHaveCount(0);
+  await expect(page.getByText("Queue copy pass")).toHaveCount(0);
+  await page.goto("/projects/project-1");
+  await expect(page.getByTestId("task-card-task-4")).toBeVisible();
 
   const todoColumn = page.getByTestId("board-column-todo");
   const todoColumnBox = await todoColumn.boundingBox();

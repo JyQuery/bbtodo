@@ -6,6 +6,7 @@ import type {
   ProjectRecord,
   ProjectTaskCounts,
   TaskRecord,
+  TaskRecordWithTags,
   UserTheme,
   UserRecord
 } from "./db.js";
@@ -13,6 +14,8 @@ import { taskStatusValues, userThemeValues } from "./db.js";
 
 export const taskStatusSchema = z.enum(taskStatusValues);
 export const userThemeSchema = z.enum(userThemeValues);
+export const taskTagSchema = z.string().trim().min(1).max(32);
+export const taskTagsSchema = z.array(taskTagSchema).max(12);
 
 export const errorResponseSchema = z.object({
   message: z.string()
@@ -61,6 +64,7 @@ export const taskResponseSchema = z.object({
   laneId: z.string().nullable(),
   title: z.string(),
   body: z.string(),
+  tags: z.array(z.string()),
   position: z.number().int().nonnegative(),
   status: taskStatusSchema,
   createdAt: z.string(),
@@ -111,7 +115,8 @@ export const apiTokenParamsSchema = z.object({
 export const createTaskBodySchema = z.object({
   title: z.string().trim().min(1).max(240),
   body: z.string().max(40_000).optional(),
-  laneId: z.string().uuid().optional()
+  laneId: z.string().uuid().optional(),
+  tags: taskTagsSchema.optional()
 });
 
 export const taskParamsSchema = z.object({
@@ -128,6 +133,7 @@ export const updateTaskBodySchema = z
     title: z.string().trim().min(1).max(240).optional(),
     body: z.string().max(40_000).optional(),
     laneId: z.string().uuid().optional(),
+    tags: taskTagsSchema.optional(),
     position: z.number().int().nonnegative().optional(),
     status: taskStatusSchema.optional()
   })
@@ -136,6 +142,7 @@ export const updateTaskBodySchema = z
       value.title !== undefined ||
       value.body !== undefined ||
       value.laneId !== undefined ||
+      value.tags !== undefined ||
       value.position !== undefined ||
       value.status !== undefined,
     {
@@ -195,13 +202,14 @@ export function toProjectResponse(
   });
 }
 
-export function toTaskResponse(task: TaskRecord) {
+export function toTaskResponse(task: TaskRecord | TaskRecordWithTags) {
   return taskResponseSchema.parse({
     id: task.id,
     projectId: task.projectId,
     laneId: task.laneId ?? null,
     title: task.title,
     body: task.body,
+    tags: "tags" in task ? task.tags : [],
     position: task.position,
     status: task.status,
     createdAt: task.createdAt,
