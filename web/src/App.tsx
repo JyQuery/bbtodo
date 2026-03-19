@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
@@ -16,6 +17,11 @@ function AuthenticatedApp() {
     queryKey: ["me"],
     queryFn: () => api.getMe()
   });
+  const resolvedTheme = meQuery.data?.theme ?? "sea";
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = resolvedTheme;
+  }, [resolvedTheme]);
 
   if (meQuery.isPending) {
     return <LoadingState />;

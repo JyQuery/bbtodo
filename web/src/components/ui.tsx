@@ -1,5 +1,102 @@
+import type { ReactNode } from "react";
+
 import { columns } from "../app/constants";
 import { getErrorMessage, itemStyle } from "../app/utils";
+
+function SvgIcon({
+  children,
+  className
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className ?? "ui-icon"}
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      {children}
+    </svg>
+  );
+}
+
+export function ChevronDownIcon({ className }: { className?: string }) {
+  return (
+    <SvgIcon className={className}>
+      <path
+        d="m6.75 9.75 5.25 5.25 5.25-5.25"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+    </SvgIcon>
+  );
+}
+
+export function CloseIcon({ className }: { className?: string }) {
+  return (
+    <SvgIcon className={className}>
+      <path
+        d="m7 7 10 10M17 7 7 17"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.8"
+      />
+    </SvgIcon>
+  );
+}
+
+export function PencilIcon({ className }: { className?: string }) {
+  return (
+    <SvgIcon className={className}>
+      <path
+        d="m15.5 5.5 3 3M6 18l2.5-.5L18 8l-3-3-9.5 9.5ZM6 18h12"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.6"
+      />
+    </SvgIcon>
+  );
+}
+
+export function TrashIcon({ className }: { className?: string }) {
+  return (
+    <SvgIcon className={className}>
+      <path
+        d="M9.25 5.25V4.5a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1v.75"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.6"
+      />
+      <path
+        d="M5.75 7h12.5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.6"
+      />
+      <path
+        d="m7.75 7 .55 9.7A1.5 1.5 0 0 0 9.8 18.1h4.4a1.5 1.5 0 0 0 1.5-1.4l.55-9.7"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.6"
+      />
+      <path
+        d="M10 10.25v4.5M14 10.25v4.5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.6"
+      />
+    </SvgIcon>
+  );
+}
 
 export function MetricRibbon({ items }: { items: Array<{ label: string; value: string }> }) {
   return (

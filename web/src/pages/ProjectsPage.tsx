@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { api, type Project } from "../api";
 import { formatIsoDate, itemStyle } from "../app/utils";
-import { EmptyState, ErrorBanner, ProjectGridSkeleton } from "../components/ui";
+import { CloseIcon, EmptyState, ErrorBanner, ProjectGridSkeleton, TrashIcon } from "../components/ui";
 import { useDismissableLayer } from "../hooks/useDismissableLayer";
 
 function ProjectCard({
@@ -20,8 +20,6 @@ function ProjectCard({
 }) {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const confirmRef = useRef<HTMLDivElement | null>(null);
-  const visibleLanes = project.laneSummaries.slice(0, 3);
-  const hiddenLaneCount = project.laneSummaries.length - visibleLanes.length;
 
   useDismissableLayer(isConfirmOpen, confirmRef, () => setIsConfirmOpen(false));
 
@@ -52,7 +50,7 @@ function ProjectCard({
             }}
             type="button"
           >
-            <span aria-hidden="true">x</span>
+            <TrashIcon />
           </button>
           {isConfirmOpen ? (
             <div className="task-delete-popover" onClick={(event) => event.stopPropagation()} role="alertdialog">
@@ -87,7 +85,7 @@ function ProjectCard({
       <div className="project-card__body">
         <h2>{project.name}</h2>
         <div aria-label={`Lane counts for ${project.name}`} className="project-card__lane-counts">
-          {visibleLanes.map((lane) => (
+          {project.laneSummaries.map((lane) => (
             <div
               aria-label={`${lane.name} ${lane.taskCount}`}
               className="project-card__lane-pill"
@@ -97,12 +95,6 @@ function ProjectCard({
               <strong>{lane.taskCount}</strong>
             </div>
           ))}
-          {hiddenLaneCount > 0 ? (
-            <div aria-label={`${hiddenLaneCount} more lanes`} className="project-card__lane-pill project-card__lane-pill--muted">
-              <span>More</span>
-              <strong>+{hiddenLaneCount}</strong>
-            </div>
-          ) : null}
         </div>
         <time className="project-card__timestamp" dateTime={project.updatedAt}>
           {formatIsoDate(project.updatedAt)}
@@ -118,10 +110,14 @@ export function ProjectsPage() {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const isCreateDialogOpen = searchParams.get("createProject") === "1";
+  const projectSearch = searchParams.get("q")?.trim().toLowerCase() ?? "";
   const projectsQuery = useQuery({
     queryKey: ["projects"],
     queryFn: () => api.listProjects()
   });
+  const visibleProjects = (projectsQuery.data ?? []).filter((project) =>
+    project.name.toLowerCase().includes(projectSearch)
+  );
 
   const createProjectMutation = useMutation({
     mutationFn: (projectName: string) => api.createProject(projectName),
@@ -187,7 +183,7 @@ export function ProjectsPage() {
                 onClick={() => closeCreateDialog()}
                 type="button"
               >
-                <span aria-hidden="true">x</span>
+                <CloseIcon />
               </button>
             </div>
             <form
@@ -239,9 +235,20 @@ export function ProjectsPage() {
         />
       ) : null}
 
-      {!projectsQuery.isPending && projectsQuery.data && projectsQuery.data.length > 0 ? (
+      {!projectsQuery.isPending &&
+      projectsQuery.data &&
+      projectsQuery.data.length > 0 &&
+      visibleProjects.length === 0 ? (
+        <EmptyState
+          copy="Try another project name or clear the search to bring the full list back."
+          eyebrow="No matches"
+          title="No boards match that search."
+        />
+      ) : null}
+
+      {!projectsQuery.isPending && projectsQuery.data && visibleProjects.length > 0 ? (
         <section className="project-grid">
-          {projectsQuery.data.map((project, index) => (
+          {visibleProjects.map((project, index) => (
             <ProjectCard
               key={project.id}
               index={index}

@@ -1,6 +1,13 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 type TaskStatus = "todo" | "in_progress" | "done";
+type UserTheme = "sea" | "ember" | "midnight";
+type TaskTagColor = "moss" | "sky" | "amber" | "coral" | "orchid" | "slate";
+
+interface TaskTag {
+  color: TaskTagColor;
+  label: string;
+}
 
 interface BoardLane {
   createdAt: string;
@@ -30,14 +37,21 @@ interface Task {
   position: number;
   projectId: string;
   status: TaskStatus;
+  tags: TaskTag[];
   title: string;
   updatedAt: string;
 }
 
+const tag = (label: string, color: TaskTagColor = "moss"): TaskTag => ({
+  color,
+  label
+});
+
 const user = {
   email: "operator@example.com",
   id: "user-1",
-  name: "Nadia Vale"
+  name: "Nadia Vale",
+  theme: "sea" as UserTheme
 };
 
 function laneId(projectId: string, suffix: TaskStatus) {
@@ -150,6 +164,38 @@ const projectsForGrid: Project[] = [
       done: 3
     },
     updatedAt: "2026-03-18T08:30:00.000Z"
+  },
+  {
+    createdAt: "2026-03-17T12:30:00.000Z",
+    id: "project-5",
+    laneSummaries: createDefaultLaneSummaries("project-5", {
+      todo: 3,
+      in_progress: 1,
+      done: 0
+    }),
+    name: "Support triage",
+    taskCounts: {
+      todo: 3,
+      in_progress: 1,
+      done: 0
+    },
+    updatedAt: "2026-03-18T08:40:00.000Z"
+  },
+  {
+    createdAt: "2026-03-17T13:00:00.000Z",
+    id: "project-6",
+    laneSummaries: createDefaultLaneSummaries("project-6", {
+      todo: 1,
+      in_progress: 2,
+      done: 2
+    }),
+    name: "Partner audit",
+    taskCounts: {
+      todo: 1,
+      in_progress: 2,
+      done: 2
+    },
+    updatedAt: "2026-03-18T08:50:00.000Z"
   }
 ];
 
@@ -162,6 +208,7 @@ const tasks: Task[] = [
     position: 0,
     projectId: "project-1",
     status: "todo",
+    tags: [tag("backend", "sky"), tag("retry", "coral")],
     title: "Review retry settings",
     updatedAt: "2026-03-18T07:10:00.000Z"
   },
@@ -173,6 +220,7 @@ const tasks: Task[] = [
     position: 0,
     projectId: "project-1",
     status: "in_progress",
+    tags: [tag("observability", "slate"), tag("oidc", "orchid")],
     title: "Tighten callback logging",
     updatedAt: "2026-03-18T07:45:00.000Z"
   },
@@ -184,6 +232,7 @@ const tasks: Task[] = [
     position: 0,
     projectId: "project-1",
     status: "done",
+    tags: [tag("ops", "amber")],
     title: "Remove healthcheck loop",
     updatedAt: "2026-03-18T07:50:00.000Z"
   },
@@ -195,6 +244,7 @@ const tasks: Task[] = [
     position: 1,
     projectId: "project-1",
     status: "todo",
+    tags: [tag("copy", "moss")],
     title: "Queue copy pass",
     updatedAt: "2026-03-18T07:15:00.000Z"
   }
@@ -226,6 +276,7 @@ async function mockAuthenticated(
   let nextLaneId = 1;
   let nextTaskId = 5;
   let isAuthenticated = true;
+  const currentUser = structuredClone(user);
   const projectState = (options?.projects ?? projects).map((project) => structuredClone(project));
   const taskState = (options?.tasks ?? tasks).map((task) => structuredClone(task));
 
@@ -278,6 +329,52 @@ async function mockAuthenticated(
     projectState.forEach((project) => syncProject(project.id));
   }
 
+  function listReusableTags() {
+    const tagsByKey = new Map<string, TaskTag>();
+
+    [...taskState]
+      .sort((left, right) => (left.updatedAt < right.updatedAt ? 1 : -1))
+      .forEach((task) => {
+        task.tags.forEach((taskTag) => {
+          const key = taskTag.label.trim().toLowerCase();
+          if (!key || tagsByKey.has(key)) {
+            return;
+          }
+
+          tagsByKey.set(key, taskTag);
+        });
+      });
+
+    return Array.from(tagsByKey.values()).sort((left, right) =>
+      left.label.localeCompare(right.label, undefined, { sensitivity: "base" })
+    );
+  }
+
+  function syncReusableTagColors(tags: TaskTag[]) {
+    const colorsByKey = new Map(
+      tags
+        .map((taskTag) => [taskTag.label.trim().toLowerCase(), taskTag.color] as const)
+        .filter(([key]) => key.length > 0)
+    );
+    if (colorsByKey.size === 0) {
+      return;
+    }
+
+    taskState.forEach((task) => {
+      task.tags = task.tags.map((taskTag) => {
+        const nextColor = colorsByKey.get(taskTag.label.trim().toLowerCase());
+        if (!nextColor || nextColor === taskTag.color) {
+          return taskTag;
+        }
+
+        return {
+          ...taskTag,
+          color: nextColor
+        };
+      });
+    });
+  }
+
   function reindexLane(projectId: string, laneIdValue: string) {
     sortTasksForProject(projectId, laneIdValue).forEach((task, index) => {
       task.position = index;
@@ -313,6 +410,31 @@ async function mockAuthenticated(
     });
   }
 
+  function moveLane(projectId: string, laneIdValue: string, targetPosition: number) {
+    const project = getProject(projectId);
+    if (!project) {
+      return null;
+    }
+
+    const lane = project.laneSummaries.find((candidate) => candidate.id === laneIdValue);
+    if (!lane) {
+      return null;
+    }
+
+    const orderedLanes = [...project.laneSummaries].sort((left, right) => left.position - right.position);
+    const reorderedLanes = orderedLanes.filter((candidate) => candidate.id !== laneIdValue);
+    const clampedPosition = Math.max(0, Math.min(targetPosition, reorderedLanes.length));
+    reorderedLanes.splice(clampedPosition, 0, lane);
+    reorderedLanes.forEach((candidate, index) => {
+      candidate.position = index;
+      candidate.updatedAt = "2026-03-18T08:12:00.000Z";
+    });
+
+    project.laneSummaries = reorderedLanes;
+    syncProject(projectId);
+    return project.laneSummaries.find((candidate) => candidate.id === laneIdValue) ?? null;
+  }
+
   syncAllProjects();
 
   await page.route("**/auth/logout", async (route) => {
@@ -331,6 +453,8 @@ async function mockAuthenticated(
           name?: string;
           position?: number;
           status?: TaskStatus;
+          tags?: TaskTag[];
+          theme?: UserTheme;
           title?: string;
         }
       | null;
@@ -342,11 +466,18 @@ async function mockAuthenticated(
           return;
         }
 
-        await fulfillJson(route, 200, user);
+        await fulfillJson(route, 200, currentUser);
+        return;
+      case "PATCH /api/v1/me/theme":
+        currentUser.theme = body?.theme ?? currentUser.theme;
+        await fulfillJson(route, 200, currentUser);
         return;
       case "GET /api/v1/projects":
         syncAllProjects();
         await fulfillJson(route, 200, projectState);
+        return;
+      case "GET /api/v1/task-tags":
+        await fulfillJson(route, 200, listReusableTags());
         return;
       case "POST /api/v1/projects": {
         const createdProjectId = `project-${nextProjectId++}`;
@@ -370,6 +501,9 @@ async function mockAuthenticated(
         await fulfillJson(route, 201, createdProject);
         return;
       }
+      case "PATCH /api/v1/projects":
+        await fulfillJson(route, 404, { message: "Project not found." });
+        return;
       case "GET /api/v1/api-tokens":
         await fulfillJson(route, 200, []);
         return;
@@ -411,6 +545,39 @@ async function mockAuthenticated(
       project.laneSummaries.push(createdLane);
       syncProject(projectId);
       await fulfillJson(route, 201, createdLane);
+      return;
+    }
+
+    if (request.method() === "PATCH" && url.pathname.startsWith("/api/v1/projects/") && url.pathname.includes("/lanes/")) {
+      const [projectId, laneIdValue] = [url.pathname.split("/")[4], url.pathname.split("/").pop() ?? ""];
+      const lane = moveLane(projectId, laneIdValue, body?.position ?? 0);
+
+      if (!lane) {
+        await fulfillJson(route, 404, { message: "Lane not found." });
+        return;
+      }
+
+      await fulfillJson(route, 200, lane);
+      return;
+    }
+
+    if (
+      request.method() === "PATCH" &&
+      url.pathname.startsWith("/api/v1/projects/") &&
+      !url.pathname.includes("/lanes/") &&
+      !url.pathname.includes("/tasks/")
+    ) {
+      const projectId = url.pathname.split("/").pop() ?? "";
+      const project = getProject(projectId);
+      if (!project) {
+        await fulfillJson(route, 404, { message: "Project not found." });
+        return;
+      }
+
+      project.name = body?.name ?? project.name;
+      project.updatedAt = "2026-03-18T08:12:00.000Z";
+      syncProject(projectId);
+      await fulfillJson(route, 200, project);
       return;
     }
 
@@ -458,10 +625,12 @@ async function mockAuthenticated(
         position: sortTasksForProject(projectId, targetLane.id).length,
         projectId,
         status: targetLane.systemKey ?? "todo",
+        tags: body?.tags ?? [],
         title: body?.title ?? "Untitled task",
         updatedAt: "2026-03-18T08:00:00.000Z"
       };
       taskState.push(createdTask);
+      syncReusableTagColors(createdTask.tags);
       syncProject(projectId);
       await fulfillJson(route, 201, createdTask);
       return;
@@ -530,6 +699,10 @@ async function mockAuthenticated(
       }
 
       task.body = body?.body ?? task.body;
+      if (body?.tags !== undefined) {
+        task.tags = body.tags;
+        syncReusableTagColors(task.tags);
+      }
       task.title = body?.title ?? task.title;
       task.status = body?.status ?? nextLane.systemKey ?? task.status;
       task.updatedAt = "2026-03-18T08:05:00.000Z";
@@ -547,6 +720,7 @@ test("login screen uses the updated cool accent palette", async ({ page }) => {
 
   await page.goto("/");
 
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "/favicon.svg");
   await expect(page.getByRole("heading", { name: "BBTodo" })).toBeVisible();
   await expect(page.locator(".hero-panel__brand .eyebrow")).toHaveCount(0);
   await expect(page.locator(".preview-panel")).toHaveCount(0);
@@ -568,11 +742,28 @@ test("login screen uses the updated cool accent palette", async ({ page }) => {
 });
 
 test("projects page uses a modal create flow and removes extra board chrome", async ({ page }) => {
-  await mockAuthenticated(page, {
-    nextProjectId: 5,
-    projects: projectsForGrid
+  const projectsForGridWithExtraLane = structuredClone(projectsForGrid);
+  const billingCleanupProject = projectsForGridWithExtraLane.find((project) => project.id === "project-1");
+  if (!billingCleanupProject) {
+    throw new Error("Expected project-1 test fixture to exist");
+  }
+  billingCleanupProject.laneSummaries.push({
+    createdAt: "2026-03-18T08:00:00.000Z",
+    id: "project-1-lane-custom-qa",
+    name: "Ready for QA",
+    position: 3,
+    projectId: "project-1",
+    systemKey: null,
+    taskCount: 0,
+    updatedAt: "2026-03-18T08:00:00.000Z"
   });
 
+  await mockAuthenticated(page, {
+    nextProjectId: 7,
+    projects: projectsForGridWithExtraLane
+  });
+
+  await page.setViewportSize({ width: 2048, height: 900 });
   await page.goto("/");
 
   await expect(page).toHaveTitle("Projects | BBTodo");
@@ -592,7 +783,12 @@ test("projects page uses a modal create flow and removes extra board chrome", as
   await expect(page.getByTestId("project-card-project-1").getByLabel("Todo 2")).toBeVisible();
   await expect(page.getByTestId("project-card-project-1").getByLabel("In Progress 1")).toBeVisible();
   await expect(page.getByTestId("project-card-project-1").getByLabel("Done 1")).toBeVisible();
+  await expect(page.getByTestId("project-card-project-1").getByLabel("Ready for QA 0")).toBeVisible();
+  await expect(page.getByTestId("project-card-project-1").locator(".project-card__lane-pill")).toHaveCount(4);
+  await expect(page.getByTestId("project-card-project-1").getByText("More")).toHaveCount(0);
   await expect(page.locator(".subnav__current")).toHaveCount(0);
+  await expect(page.getByLabel("Search projects")).toBeVisible();
+  await expect(page.locator(".subnav__search-label")).toHaveCount(0);
   await expect(page.locator(".topbar__identity")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "API tokens" })).toHaveCount(0);
   await expect(page.getByLabel("Open account menu")).toHaveText("N");
@@ -616,13 +812,20 @@ test("projects page uses a modal create flow and removes extra board chrome", as
   const createProjectLinkBox = await createProjectLink.boundingBox();
   const createProjectBackground = await createProjectLink.evaluate((element) => getComputedStyle(element).backgroundColor);
   const createProjectHeight = await createProjectLink.evaluate((element) => parseFloat(getComputedStyle(element).height));
+  const createProjectRadius = await createProjectLink.evaluate((element) => parseFloat(getComputedStyle(element).borderRadius));
   const projectGridBox = await page.locator(".project-grid").boundingBox();
   const firstCard = page.getByTestId("project-card-project-1");
   const secondCard = page.getByTestId("project-card-project-2");
   const thirdCard = page.getByTestId("project-card-project-3");
+  const fourthCard = page.getByTestId("project-card-project-4");
+  const fifthCard = page.getByTestId("project-card-project-5");
+  const sixthCard = page.getByTestId("project-card-project-6");
   const firstCardBox = await firstCard.boundingBox();
   const secondCardBox = await secondCard.boundingBox();
   const thirdCardBox = await thirdCard.boundingBox();
+  const fourthCardBox = await fourthCard.boundingBox();
+  const fifthCardBox = await fifthCard.boundingBox();
+  const sixthCardBox = await sixthCard.boundingBox();
   const viewportWidth = page.viewportSize()?.width ?? 0;
   expect(projectsPageBox).not.toBeNull();
   expect((projectsPageBox?.width ?? 0)).toBeGreaterThan(viewportWidth - 80);
@@ -630,31 +833,70 @@ test("projects page uses a modal create flow and removes extra board chrome", as
   expect(firstCardBox).not.toBeNull();
   expect(secondCardBox).not.toBeNull();
   expect(thirdCardBox).not.toBeNull();
+  expect(fourthCardBox).not.toBeNull();
+  expect(fifthCardBox).not.toBeNull();
+  expect(sixthCardBox).not.toBeNull();
   expect((firstCardBox?.x ?? 0) - (projectGridBox?.x ?? 0)).toBeLessThan(24);
   expect((firstCardBox?.y ?? 0) - (projectGridBox?.y ?? 0)).toBeLessThan(24);
   expect(Math.abs((firstCardBox?.width ?? 0) - (secondCardBox?.width ?? 0))).toBeLessThan(2);
   expect(Math.abs((firstCardBox?.width ?? 0) - (thirdCardBox?.width ?? 0))).toBeLessThan(2);
+  expect(Math.abs((firstCardBox?.width ?? 0) - (fourthCardBox?.width ?? 0))).toBeLessThan(2);
+  expect(Math.abs((firstCardBox?.width ?? 0) - (fifthCardBox?.width ?? 0))).toBeLessThan(2);
+  expect(Math.abs((firstCardBox?.width ?? 0) - (sixthCardBox?.width ?? 0))).toBeLessThan(2);
   expect(Math.abs((firstCardBox?.height ?? 0) - (secondCardBox?.height ?? 0))).toBeLessThan(2);
   expect(Math.abs((firstCardBox?.height ?? 0) - (thirdCardBox?.height ?? 0))).toBeLessThan(2);
+  expect(Math.abs((firstCardBox?.height ?? 0) - (fourthCardBox?.height ?? 0))).toBeLessThan(2);
+  expect(Math.abs((firstCardBox?.height ?? 0) - (fifthCardBox?.height ?? 0))).toBeLessThan(2);
+  expect(Math.abs((firstCardBox?.height ?? 0) - (sixthCardBox?.height ?? 0))).toBeLessThan(2);
   expect(Math.abs((firstCardBox?.y ?? 0) - (secondCardBox?.y ?? 0))).toBeLessThan(16);
+  expect(Math.abs((firstCardBox?.y ?? 0) - (thirdCardBox?.y ?? 0))).toBeLessThan(16);
+  expect(Math.abs((firstCardBox?.y ?? 0) - (fourthCardBox?.y ?? 0))).toBeLessThan(16);
+  expect(Math.abs((firstCardBox?.y ?? 0) - (fifthCardBox?.y ?? 0))).toBeLessThan(16);
+  expect(Math.abs((firstCardBox?.y ?? 0) - (sixthCardBox?.y ?? 0))).toBeLessThan(16);
   expect((secondCardBox?.x ?? 0) - ((firstCardBox?.x ?? 0) + (firstCardBox?.width ?? 0))).toBeLessThan(32);
+  expect((firstCardBox?.width ?? 0)).toBeLessThan(320);
   expect(createProjectLinkBox).not.toBeNull();
   expect((createProjectLinkBox?.x ?? 0)).toBeGreaterThan(120);
-  expect(createProjectBackground).toBe("rgba(0, 0, 0, 0)");
-  expect(createProjectHeight).toBeLessThan(36);
+  expect(createProjectBackground).not.toBe("rgba(0, 0, 0, 0)");
+  expect(createProjectHeight).toBeGreaterThan(40);
+  expect(createProjectRadius).toBeGreaterThan(20);
   await expect(page.locator(".subnav__action-mark")).toHaveText("+");
+
+  await page.getByLabel("Search projects").fill("partner");
+  await expect(page.locator(".project-grid .project-card")).toHaveCount(1);
+  await expect(page.getByTestId("project-card-project-6")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "No boards match that search." })).toHaveCount(0);
+  await page.getByLabel("Search projects").fill("zzzz");
+  await expect(page.locator(".project-grid .project-card")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "No boards match that search." })).toBeVisible();
+  await page.getByLabel("Search projects").fill("");
+  await expect(page.locator(".project-grid .project-card")).toHaveCount(6);
+
+  await page.getByLabel("Open account menu").click();
+  await expect(page.getByRole("button", { pressed: true, name: "Sea" })).toBeVisible();
+  await expect(page.locator(".theme-option__copy span")).toHaveCount(0);
+  await page.getByRole("button", { name: "Ember" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "ember");
+  const emberAccent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim());
+  expect(emberAccent).toBe("#b85e3f");
+  await page.getByRole("button", { name: "Midnight" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "midnight");
+  const midnightAccent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim());
+  expect(midnightAccent).toBe("#58c6c0");
+  await page.getByLabel("Open account menu").click();
 
   await createProjectLink.click();
 
   const dialog = page.getByRole("dialog", { name: "Create Project" });
   await expect(dialog).toBeVisible();
-  await dialog.getByLabel("Project name").fill("Roadmap review");
+  await dialog.getByLabel("Project name").fill("API polish");
   await dialog.getByRole("button", { exact: true, name: "Create Project" }).click();
 
-  await expect(page).toHaveURL(/\/projects\/project-5$/);
-  await expect(page).toHaveTitle("Roadmap review | BBTodo");
+  await expect(page).toHaveURL(/\/projects\/project-7$/);
+  await expect(page).toHaveTitle("API polish | BBTodo");
   await expect(page.getByTestId("board-grid")).toBeVisible();
-  await expect(page.locator(".subnav__current")).toHaveText("Roadmap review");
+  await expect(page.locator(".subnav__current-label")).toHaveCount(0);
+  await expect(page.locator(".subnav__current-value")).toHaveText("API polish");
 
   await page.getByLabel("Open account menu").click();
 
@@ -730,7 +972,24 @@ test("project cards open on click and delete through a confirmation popover", as
 });
 
 test("board workspace adds lanes and filters cards front-end only", async ({ page }) => {
-  await mockAuthenticated(page);
+  const tasksWithReusableGlobalTag = structuredClone(tasks);
+  tasksWithReusableGlobalTag.push({
+    body: "Homepage refresh backlog.",
+    createdAt: "2026-03-18T08:18:00.000Z",
+    id: "task-project-2-1",
+    laneId: laneId("project-2", "todo"),
+    position: 0,
+    projectId: "project-2",
+    status: "todo",
+    tags: [tag("global-brand", "amber")],
+    title: "Refresh homepage copy",
+    updatedAt: "2026-03-18T08:22:00.000Z"
+  });
+
+  await mockAuthenticated(page, {
+    projects: projectsForGrid,
+    tasks: tasksWithReusableGlobalTag
+  });
 
   await page.goto("/projects/project-1");
 
@@ -740,9 +999,18 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   await expect(page.locator(".workspace-form")).toHaveCount(0);
   await expect(page.locator(".workspace-summary")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Back to projects" })).toHaveCount(0);
-  await expect(page.locator(".subnav__current")).toHaveText("Billing cleanup");
+  await expect(page.locator(".subnav__current-label")).toHaveCount(0);
+  await expect(page.locator(".subnav__current-value")).toHaveText("Billing cleanup");
   await expect(page.getByRole("button", { name: "Create Lane" })).toBeVisible();
   await expect(page.getByLabel("Search cards")).toBeVisible();
+  await expect(page.getByLabel("Filter by tags")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Show tag filter suggestions" })).toBeVisible();
+  await expect(page.locator(".subnav__search-label")).toHaveCount(0);
+  await expect(page.getByLabel("Filter by tags")).toHaveAttribute("placeholder", "tags");
+  const currentProjectBackground = await page
+    .locator(".subnav__current")
+    .evaluate((element) => getComputedStyle(element).backgroundColor);
+  expect(currentProjectBackground).not.toBe("rgba(0, 0, 0, 0)");
 
   const maxWidth = await page.locator(".page-shell--board").evaluate((element) => getComputedStyle(element).maxWidth);
   expect(maxWidth).toBe("none");
@@ -758,6 +1026,40 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   await expect(page.locator(".board-column__header > span")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Move to / })).toHaveCount(0);
   await expect(page.getByTestId("task-card-task-1").locator(".label-chip")).toHaveCount(0);
+  const initialTaskTags = page.getByTestId("task-card-task-1").locator(".task-tag");
+  await expect(initialTaskTags).toHaveText(["backend", "retry"]);
+  await expect(initialTaskTags.nth(0)).toHaveCSS("background-color", "rgb(227, 241, 255)");
+  const taggedCardTimestampBox = await page.getByTestId("task-card-task-1").locator(".task-card__timestamp").boundingBox();
+  const taggedCardTagsBox = await page.getByTestId("task-card-task-1").locator(".task-card__tags").boundingBox();
+  expect(taggedCardTimestampBox).not.toBeNull();
+  expect(taggedCardTagsBox).not.toBeNull();
+  expect(
+    Math.abs(
+      ((taggedCardTimestampBox?.y ?? 0) + (taggedCardTimestampBox?.height ?? 0)) -
+        ((taggedCardTagsBox?.y ?? 0) + (taggedCardTagsBox?.height ?? 0))
+    )
+  ).toBeLessThan(12);
+  expect(taggedCardTimestampBox?.x ?? 0).toBeGreaterThan(
+    ((taggedCardTagsBox?.x ?? 0) + (taggedCardTagsBox?.width ?? 0)) - 8
+  );
+  const taskDeleteButton = page.getByLabel("Delete task Review retry settings");
+  await expect(taskDeleteButton.locator("svg")).toHaveCount(1);
+  await expect(taskDeleteButton.locator("svg path")).toHaveCount(4);
+  await expect(taskDeleteButton.locator("svg path").nth(0)).toHaveAttribute(
+    "d",
+    "M9.25 5.25V4.5a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1v.75"
+  );
+  await expect(taskDeleteButton).toHaveCSS("border-top-width", "0px");
+  const taggedCardTitleBox = await page.getByTestId("task-card-task-1").locator(".task-card__title").boundingBox();
+  const taskDeleteButtonBox = await taskDeleteButton.boundingBox();
+  expect(taggedCardTitleBox).not.toBeNull();
+  expect(taskDeleteButtonBox).not.toBeNull();
+  expect(
+    Math.abs(
+      ((taggedCardTitleBox?.y ?? 0) + (taggedCardTitleBox?.height ?? 0) / 2) -
+        ((taskDeleteButtonBox?.y ?? 0) + (taskDeleteButtonBox?.height ?? 0) / 2)
+    )
+  ).toBeLessThan(10);
   await expect(page.getByTestId("task-card-task-1").locator(".task-card__timestamp")).toHaveText("2026-03-18");
   await expect(page.getByTestId("task-card-task-1").locator(".task-card__timestamp")).toHaveAttribute(
     "datetime",
@@ -767,24 +1069,96 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   await page.getByTestId("task-card-task-1").click();
   const editDialog = page.getByRole("dialog", { name: "Edit Card" });
   await expect(editDialog).toBeVisible();
+  const sourceTab = editDialog.getByRole("tab", { name: "Markdown source" });
+  const previewTab = editDialog.getByRole("tab", { name: "Rendered preview" });
+  const tagInput = editDialog.getByLabel("Task tags");
   await expect(editDialog.getByLabel("Title")).toHaveValue("Review retry settings");
+  await expect(tagInput).toHaveValue("");
+  await expect(editDialog.getByText("New tag color")).toHaveCount(0);
+  await expect(editDialog.getByRole("button", { name: "Remove tag backend" })).toBeVisible();
+  await expect(editDialog.getByRole("button", { name: "Remove tag retry" })).toBeVisible();
+  await expect(editDialog.getByRole("button", { name: "Add tag ops" })).toBeVisible();
+  await expect(editDialog.getByRole("button", { name: "Add tag global-brand" })).toBeVisible();
   await expect(editDialog.getByLabel("Task body")).toHaveValue("Callback logs mention **retry** scope.");
+  await expect(editDialog.getByTestId("task-markdown-preview")).toHaveCount(0);
+  await expect(sourceTab).toHaveAttribute("aria-selected", "true");
+  await expect(previewTab).toHaveAttribute("aria-selected", "false");
+  await editDialog.getByRole("button", { name: "Edit color for tag backend" }).click();
+  await expect(editDialog.getByText("Color for backend")).toBeVisible();
+  await editDialog.getByRole("button", { name: "Set backend color to Amber" }).click();
+  const dialogBox = await editDialog.boundingBox();
+  const bodyFieldBox = await editDialog.getByLabel("Task body").boundingBox();
+  expect(dialogBox).not.toBeNull();
+  expect(bodyFieldBox).not.toBeNull();
+  expect((bodyFieldBox?.width ?? 0) / (dialogBox?.width ?? 1)).toBeGreaterThan(0.75);
+  await previewTab.click();
+  await expect(previewTab).toHaveAttribute("aria-selected", "true");
   await expect(editDialog.locator(".markdown-preview strong")).toHaveText("retry");
+  await sourceTab.click();
+  await editDialog.getByRole("button", { name: "Add tag ops" }).click();
+  await expect(editDialog.getByRole("button", { name: "Remove tag ops" })).toBeVisible();
+  await editDialog.getByRole("button", { name: "Remove tag retry" }).click();
+  await editDialog.getByRole("button", { name: "Remove tag ops" }).click();
   await editDialog.getByLabel("Title").fill("Review retry scope");
+  await tagInput.fill("release");
+  await expect(editDialog.getByText("Color for release")).toBeVisible();
+  await expect(editDialog.locator(".task-tag-editor__swatch[aria-pressed='true']")).toHaveCount(1);
+  await editDialog.getByRole("button", { name: "Set release color to Orchid" }).click();
+  await tagInput.press("Enter");
+  await expect(tagInput).toHaveValue("");
+  await expect(editDialog.getByText("Color for release")).toHaveCount(0);
+  await expect(editDialog.getByRole("button", { name: "Remove tag release" })).toBeVisible();
   await editDialog
     .getByLabel("Task body")
     .fill("Callback logs mention **scope**.\n\n- Keep raw claims\n- Verify issuer");
+  await previewTab.click();
   await expect(editDialog.locator(".markdown-preview strong")).toHaveText("scope");
   await expect(editDialog.locator(".markdown-preview li")).toHaveCount(2);
   await editDialog.getByRole("button", { name: "Save card" }).click();
   await expect(editDialog).toHaveCount(0);
   await expect(page.getByTestId("task-card-task-1").getByText("Review retry scope")).toBeVisible();
+  const updatedTaskTags = page.getByTestId("task-card-task-1").locator(".task-tag");
+  await expect(updatedTaskTags).toHaveText(["backend", "release"]);
+  await expect(updatedTaskTags.nth(0)).toHaveCSS("background-color", "rgb(255, 241, 217)");
+  await expect(updatedTaskTags.nth(1)).toHaveCSS("background-color", "rgb(242, 229, 255)");
+  await page.getByTestId("task-card-task-2").click();
+  await expect(editDialog).toBeVisible();
+  const recoloredBackendSuggestion = editDialog.getByRole("button", { name: "Add tag backend" });
+  await expect(recoloredBackendSuggestion).toBeVisible();
+  await expect(recoloredBackendSuggestion).toHaveCSS("background-color", "rgb(255, 241, 217)");
+  await editDialog.getByLabel("Close edit task dialog").click();
+  await expect(editDialog).toHaveCount(0);
 
   await page.getByLabel("Search cards").fill("callback");
   await expect(page.getByText("Review retry scope")).toBeVisible();
   await expect(page.getByText("Tighten callback logging")).toBeVisible();
   await expect(page.getByText("Remove healthcheck loop")).toHaveCount(0);
   await page.getByLabel("Search cards").fill("");
+  const tagFilterInput = page.getByLabel("Filter by tags");
+  const tagFilterField = page.locator(".subnav__search--tag-filter");
+  await page.getByRole("button", { name: "Show tag filter suggestions" }).click();
+  const tagFilterDropdown = page.getByRole("list", { name: "Available tag filters" });
+  await expect(tagFilterDropdown).toBeVisible();
+  await expect(tagFilterDropdown.getByRole("button", { name: "Add tag filter release" })).toBeVisible();
+  await expect(tagFilterDropdown.getByRole("button", { name: "Add tag filter global-brand" })).toBeVisible();
+  await tagFilterDropdown.getByRole("button", { name: "Add tag filter release" }).click();
+  const releaseTagFilterChip = tagFilterField.locator(".subnav__tag-filter-chip", { hasText: "release" });
+  await expect(releaseTagFilterChip).toBeVisible();
+  await expect(releaseTagFilterChip).toHaveCSS("background-color", "rgb(242, 229, 255)");
+  await expect(tagFilterInput).toHaveValue("");
+  await expect(page.getByText("Review retry scope")).toBeVisible();
+  await expect(page.getByText("Tighten callback logging")).toHaveCount(0);
+  await expect(page.getByText("Queue copy pass")).toHaveCount(0);
+  await tagFilterInput.fill("backend");
+  const backendTagFilterChip = tagFilterField.locator(".subnav__tag-filter-chip", { hasText: "backend" });
+  await expect(backendTagFilterChip).toBeVisible();
+  await expect(backendTagFilterChip).toHaveCSS("background-color", "rgb(255, 241, 217)");
+  await expect(tagFilterInput).toHaveValue("");
+  await expect(page.getByText("Review retry scope")).toBeVisible();
+  await expect(page.getByText("Tighten callback logging")).toHaveCount(0);
+  await expect(page.getByText("Queue copy pass")).toHaveCount(0);
+  await page.goto("/projects/project-1");
+  await expect(page.getByTestId("task-card-task-4")).toBeVisible();
 
   const todoColumn = page.getByTestId("board-column-todo");
   const todoColumnBox = await todoColumn.boundingBox();
@@ -793,18 +1167,29 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   expect(todoCardBox).not.toBeNull();
   expect(((todoCardBox?.y ?? 0) - (todoColumnBox?.y ?? 0)) / (todoColumnBox?.height ?? 1)).toBeLessThan(0.3);
 
-  const reorderTransfer = await page.evaluateHandle(() => new DataTransfer());
   const queueCopyCard = page.getByTestId("task-card-task-4");
   const retryCard = page.getByTestId("task-card-task-1");
   const retryCardBox = await retryCard.boundingBox();
   expect(retryCardBox).not.toBeNull();
-  await queueCopyCard.dispatchEvent("dragstart", { dataTransfer: reorderTransfer });
-  await retryCard.dispatchEvent("dragover", {
-    clientY: (retryCardBox?.y ?? 0) + (retryCardBox?.height ?? 0) * 0.25,
-    dataTransfer: reorderTransfer
-  });
-  await expect(page.getByTestId(`task-drop-indicator-${laneId("project-1", "todo")}-0`)).toBeVisible();
-  await todoColumn.dispatchEvent("drop", { dataTransfer: reorderTransfer });
+  await page.mouse.move(
+    (retryCardBox?.x ?? 0) + (retryCardBox?.width ?? 0) / 2,
+    (retryCardBox?.y ?? 0) + (retryCardBox?.height ?? 0) / 2
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    (retryCardBox?.x ?? 0) + (retryCardBox?.width ?? 0) / 2,
+    (retryCardBox?.y ?? 0) + (retryCardBox?.height ?? 0) / 2 + 18,
+    { steps: 6 }
+  );
+  await expect(page.getByText("Drop here")).toHaveCount(0);
+  const queueCopyCardTargetBox = await queueCopyCard.boundingBox();
+  expect(queueCopyCardTargetBox).not.toBeNull();
+  await page.mouse.move(
+    (queueCopyCardTargetBox?.x ?? 0) + (queueCopyCardTargetBox?.width ?? 0) / 2,
+    (queueCopyCardTargetBox?.y ?? 0) + (queueCopyCardTargetBox?.height ?? 0) * 0.82,
+    { steps: 18 }
+  );
+  await page.mouse.up();
   const todoTitles = todoColumn.locator(".task-card__title");
   await expect(todoTitles.nth(0)).toHaveText("Queue copy pass");
   await expect(todoTitles.nth(1)).toHaveText("Review retry scope");
@@ -816,6 +1201,13 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   await laneDialog.getByRole("button", { exact: true, name: "Create Lane" }).click();
 
   await expect(page.getByRole("heading", { name: "Ready for QA" })).toBeVisible();
+  const laneHeadings = page.locator(".board-column__header h2");
+  await expect(laneHeadings).toHaveText(["Todo", "In Progress", "Done", "Ready for QA"]);
+
+  await page.getByLabel("Reorder lane Ready for QA").dragTo(page.getByTestId("board-column-in_progress"), {
+    targetPosition: { x: 16, y: 40 }
+  });
+  await expect(laneHeadings).toHaveText(["Todo", "Ready for QA", "In Progress", "Done"]);
 
   const qaColumn = page.getByTestId("board-column-project-1-lane-custom-1");
   await qaColumn.dblclick();
@@ -826,21 +1218,99 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   await laneInput.press("Enter");
 
   await expect(page.getByText("Ship progress note")).toBeVisible();
+  const createdCard = page.getByTestId("task-card-task-5");
+  await expect(createdCard.locator(".task-tag")).toHaveCount(0);
+  const createdCardTitleBox = await createdCard.locator(".task-card__title").boundingBox();
+  const createdCardTimestampBox = await createdCard.locator(".task-card__timestamp").boundingBox();
+  const createdCardDeleteButtonBox = await createdCard.getByLabel("Delete task Ship progress note").boundingBox();
+  expect(createdCardTitleBox).not.toBeNull();
+  expect(createdCardTimestampBox).not.toBeNull();
+  expect(createdCardDeleteButtonBox).not.toBeNull();
+  expect(
+    Math.abs(
+      ((createdCardTitleBox?.y ?? 0) + (createdCardTitleBox?.height ?? 0) / 2) -
+        ((createdCardTimestampBox?.y ?? 0) + (createdCardTimestampBox?.height ?? 0) / 2)
+    )
+  ).toBeLessThan(6);
+  expect(createdCardTimestampBox?.x ?? 0).toBeGreaterThan(
+    ((createdCardTitleBox?.x ?? 0) + (createdCardTitleBox?.width ?? 0) * 0.65)
+  );
+  expect(
+    Math.abs(
+      ((createdCardTitleBox?.y ?? 0) + (createdCardTitleBox?.height ?? 0) / 2) -
+        ((createdCardDeleteButtonBox?.y ?? 0) + (createdCardDeleteButtonBox?.height ?? 0) / 2)
+    )
+  ).toBeLessThan(6);
+  expect(
+    Math.abs(
+      ((createdCardTimestampBox?.y ?? 0) + (createdCardTimestampBox?.height ?? 0) / 2) -
+        ((createdCardDeleteButtonBox?.y ?? 0) + (createdCardDeleteButtonBox?.height ?? 0) / 2)
+    )
+  ).toBeLessThan(6);
 
-  const moveTransfer = await page.evaluateHandle(() => new DataTransfer());
-  await retryCard.dispatchEvent("dragstart", { dataTransfer: moveTransfer });
-  await qaColumn.locator(".board-column__content").dispatchEvent("dragover", { dataTransfer: moveTransfer });
-  await expect(page.getByTestId(`task-drop-indicator-project-1-lane-custom-1-1`)).toBeVisible();
+  const retryCardDragBox = await retryCard.boundingBox();
+  expect(retryCardDragBox).not.toBeNull();
+  await page.mouse.move(
+    (retryCardDragBox?.x ?? 0) + (retryCardDragBox?.width ?? 0) / 2,
+    (retryCardDragBox?.y ?? 0) + (retryCardDragBox?.height ?? 0) / 2
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    (retryCardDragBox?.x ?? 0) + (retryCardDragBox?.width ?? 0) / 2 + 18,
+    (retryCardDragBox?.y ?? 0) + (retryCardDragBox?.height ?? 0) / 2,
+    { steps: 6 }
+  );
+  await expect(page.getByText("Drop here")).toHaveCount(0);
+  const createdCardBox = await createdCard.boundingBox();
+  expect(createdCardBox).not.toBeNull();
+  await page.mouse.move(
+    (createdCardBox?.x ?? 0) + (createdCardBox?.width ?? 0) / 2,
+    (createdCardBox?.y ?? 0) + (createdCardBox?.height ?? 0) * 0.8,
+    { steps: 24 }
+  );
   await expect(qaColumn).toHaveClass(/is-drop-target/);
-  await qaColumn.dispatchEvent("drop", { dataTransfer: moveTransfer });
+  await page.mouse.up();
   await expect(qaColumn.getByText("Review retry scope")).toBeVisible();
   await expect(todoColumn.getByText("Review retry scope")).toHaveCount(0);
 
   await expect(page.locator(".column-empty")).toHaveCount(0);
-
-  const createdCard = page.getByTestId("task-card-task-5");
   await createdCard.getByLabel("Delete task Ship progress note").click();
   await expect(createdCard.getByRole("button", { exact: true, name: "Delete" })).toBeVisible();
   await createdCard.getByRole("button", { exact: true, name: "Delete" }).click();
   await expect(page.getByText("Ship progress note")).toHaveCount(0);
+});
+
+test("board nav switcher changes, renames, and creates projects", async ({ page }) => {
+  await mockAuthenticated(page, {
+    nextProjectId: 7,
+    projects: projectsForGrid
+  });
+
+  await page.goto("/projects/project-1");
+
+  const switcherButton = page.getByRole("button", { name: "Open project switcher" });
+  await switcherButton.click();
+
+  const switcherInput = page.getByLabel("Project switcher input");
+  await switcherInput.fill("road");
+  await expect(page.getByRole("button", { name: "Open project Roadmap review" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open project Billing cleanup" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Open project Roadmap review" }).click();
+
+  await expect(page).toHaveURL(/\/projects\/project-2$/);
+  await expect(page.locator(".subnav__current-value")).toHaveText("Roadmap review");
+
+  await page.goto("/projects/project-1");
+  await switcherButton.click();
+  await page.getByLabel("Project switcher input").fill("Billing relaunch");
+  await page.getByRole("button", { name: "Rename Project" }).click();
+
+  await expect(page.locator(".subnav__current-value")).toHaveText("Billing relaunch");
+
+  await switcherButton.click();
+  await page.getByLabel("Project switcher input").fill("Program rollout");
+  await page.getByRole("button", { name: "Create Project" }).click();
+
+  await expect(page).toHaveURL(/\/projects\/project-7$/);
+  await expect(page.locator(".subnav__current-value")).toHaveText("Program rollout");
 });

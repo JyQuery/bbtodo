@@ -1,13 +1,17 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import Database from "better-sqlite3";
 import { and, asc, desc, eq, inArray, isNull, max, ne } from "drizzle-orm";
 import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const SQLITE_DATABASE_PATH = "/data/bbtodo.sqlite";
+const DRIZZLE_MIGRATIONS_TABLE = "__drizzle_migrations";
+const DRIZZLE_MIGRATIONS_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "../drizzle");
 
 const timestamps = {
   createdAt: text("created_at").notNull(),
@@ -16,6 +20,11 @@ const timestamps = {
 
 export const taskStatusValues = ["todo", "in_progress", "done"] as const;
 export type TaskStatus = (typeof taskStatusValues)[number];
+export const userThemeValues = ["sea", "ember", "midnight"] as const;
+export type UserTheme = (typeof userThemeValues)[number];
+export const taskTagColorValues = ["moss", "sky", "amber", "coral", "orchid", "slate"] as const;
+export type TaskTagColor = (typeof taskTagColorValues)[number];
+export const defaultTaskTagColor: TaskTagColor = "moss";
 
 export const defaultLaneTemplates = [
   { name: "Todo", systemKey: "todo" },
@@ -31,6 +40,7 @@ export const users = sqliteTable(
     subject: text("subject").notNull(),
     email: text("email"),
     displayName: text("display_name"),
+    theme: text("theme", { enum: userThemeValues }).notNull().default("sea"),
     ...timestamps
   },
   (table) => [uniqueIndex("users_issuer_subject_idx").on(table.issuer, table.subject)]
@@ -104,6 +114,23 @@ export const tasks = sqliteTable(
   ]
 );
 
+export const taskTags = sqliteTable(
+  "task_tags",
+  {
+    id: text("id").primaryKey(),
+    taskId: text("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    tag: text("tag").notNull(),
+    color: text("color", { enum: taskTagColorValues }).notNull().default(defaultTaskTagColor),
+    position: integer("position").notNull()
+  },
+  (table) => [
+    index("task_tags_task_position_idx").on(table.taskId, table.position),
+    uniqueIndex("task_tags_task_tag_idx").on(table.taskId, table.tag)
+  ]
+);
+
 export const apiTokens = sqliteTable(
   "api_tokens",
   {
@@ -126,6 +153,7 @@ export type DatabaseClient = BetterSQLite3Database<{
   lanes: typeof lanes;
   projects: typeof projects;
   sessions: typeof sessions;
+  taskTags: typeof taskTags;
   tasks: typeof tasks;
   users: typeof users;
 }>;
@@ -134,8 +162,20 @@ export type UserRecord = typeof users.$inferSelect;
 export type ProjectRecord = typeof projects.$inferSelect;
 export type LaneRecord = typeof lanes.$inferSelect;
 export type TaskRecord = typeof tasks.$inferSelect;
+export type TaskTagRecord = typeof taskTags.$inferSelect;
 export type ApiTokenRecord = typeof apiTokens.$inferSelect;
 export type ProjectTaskCounts = Record<TaskStatus, number>;
+
+export interface TaskTagData {
+  color: TaskTagColor;
+  label: string;
+}
+
+export type TaskTagInput = string | TaskTagData;
+
+export interface TaskRecordWithTags extends TaskRecord {
+  tags: TaskTagData[];
+}
 
 export interface LaneWithTaskCount extends LaneRecord {
   taskCount: number;
@@ -151,6 +191,14 @@ export interface DatabaseServices {
   db: DatabaseClient;
 }
 
+interface MigrationJournalEntry {
+  breakpoints: boolean;
+  idx: number;
+  tag: string;
+  version: string;
+  when: number;
+}
+
 function createEmptyTaskCounts(): ProjectTaskCounts {
   return {
     todo: 0,
@@ -159,12 +207,200 @@ function createEmptyTaskCounts(): ProjectTaskCounts {
   };
 }
 
+function normalizeTaskTagLabel(tag: string) {
+  const normalized = tag.trim().replace(/\s+/g, " ");
+  return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeTaskTagColor(color: string | undefined): TaskTagColor {
+  return taskTagColorValues.includes(color as TaskTagColor)
+    ? (color as TaskTagColor)
+    : defaultTaskTagColor;
+}
+
+function normalizeTaskTags(tags: TaskTagInput[] | undefined) {
+  if (!tags) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const normalizedTags: TaskTagData[] = [];
+
+  tags.forEach((tag) => {
+    const normalizedLabel = normalizeTaskTagLabel(typeof tag === "string" ? tag : tag.label);
+    if (!normalizedLabel) {
+      return;
+    }
+
+    const key = normalizedLabel.toLowerCase();
+    if (seen.has(key)) {
+      return;
+    }
+
+    seen.add(key);
+    normalizedTags.push({
+      color: typeof tag === "string" ? defaultTaskTagColor : normalizeTaskTagColor(tag.color),
+      label: normalizedLabel
+    });
+  });
+
+  return normalizedTags;
+}
+
+function listTaskTagMap(db: DatabaseClient, taskIds: string[]) {
+  if (taskIds.length === 0) {
+    return new Map<string, TaskTagData[]>();
+  }
+
+  const rows = db
+    .select({
+      color: taskTags.color,
+      tag: taskTags.tag,
+      taskId: taskTags.taskId
+    })
+    .from(taskTags)
+    .where(inArray(taskTags.taskId, taskIds))
+    .orderBy(asc(taskTags.taskId), asc(taskTags.position))
+    .all();
+
+  const tagMap = new Map<string, TaskTagData[]>(
+    taskIds.map((taskId) => [taskId, []])
+  );
+
+  rows.forEach((row) => {
+    tagMap.get(row.taskId)?.push({
+      color: normalizeTaskTagColor(row.color),
+      label: row.tag
+    });
+  });
+
+  return tagMap;
+}
+
+function attachTagsToTasks(db: DatabaseClient, taskRows: TaskRecord[]) {
+  const tagMap = listTaskTagMap(
+    db,
+    taskRows.map((task) => task.id)
+  );
+
+  return taskRows.map((task) => ({
+    ...task,
+    tags: tagMap.get(task.id) ?? []
+  })) satisfies TaskRecordWithTags[];
+}
+
+function getTaskWithTags(db: DatabaseClient, taskId: string) {
+  const task = db.select().from(tasks).where(eq(tasks.id, taskId)).get();
+  if (!task) {
+    return null;
+  }
+
+  return attachTagsToTasks(db, [task])[0] ?? null;
+}
+
+function replaceTaskTags(db: DatabaseClient, taskId: string, tags: TaskTagInput[]) {
+  db.delete(taskTags).where(eq(taskTags.taskId, taskId)).run();
+
+  normalizeTaskTags(tags).forEach((tag, index) => {
+    db
+      .insert(taskTags)
+      .values({
+        color: tag.color,
+        id: crypto.randomUUID(),
+        taskId,
+        tag: tag.label,
+        position: index
+      })
+      .run();
+  });
+}
+
+function syncTaskTagColorsForUser(db: DatabaseClient, userId: string, tags: TaskTagInput[] | undefined) {
+  const desiredColorsByKey = new Map(
+    normalizeTaskTags(tags).map((tag) => [tag.label.toLowerCase(), tag.color] as const)
+  );
+  if (desiredColorsByKey.size === 0) {
+    return;
+  }
+
+  const rows = db
+    .select({
+      color: taskTags.color,
+      id: taskTags.id,
+      label: taskTags.tag
+    })
+    .from(taskTags)
+    .innerJoin(tasks, eq(taskTags.taskId, tasks.id))
+    .innerJoin(projects, eq(tasks.projectId, projects.id))
+    .where(eq(projects.userId, userId))
+    .all();
+
+  rows.forEach((row) => {
+    const normalizedLabel = normalizeTaskTagLabel(row.label);
+    if (!normalizedLabel) {
+      return;
+    }
+
+    const desiredColor = desiredColorsByKey.get(normalizedLabel.toLowerCase());
+    if (!desiredColor || normalizeTaskTagColor(row.color) === desiredColor) {
+      return;
+    }
+
+    db
+      .update(taskTags)
+      .set({ color: desiredColor })
+      .where(eq(taskTags.id, row.id))
+      .run();
+  });
+}
+
+function getLatestMigrationEntry() {
+  const journalPath = resolve(DRIZZLE_MIGRATIONS_PATH, "meta", "_journal.json");
+  if (!existsSync(journalPath)) {
+    throw new Error(`Missing Drizzle migration journal at ${journalPath}.`);
+  }
+
+  const journal = JSON.parse(readFileSync(journalPath, "utf8")) as {
+    entries?: MigrationJournalEntry[];
+  };
+  const latestEntry = journal.entries?.at(-1);
+  if (!latestEntry) {
+    throw new Error("Drizzle migration journal is empty.");
+  }
+
+  const sqlPath = resolve(DRIZZLE_MIGRATIONS_PATH, `${latestEntry.tag}.sql`);
+  const sql = readFileSync(sqlPath, "utf8");
+
+  return {
+    createdAt: latestEntry.when,
+    hash: createHash("sha256").update(sql).digest("hex")
+  };
+}
+
+function tableExists(database: Database.Database, tableName: string) {
+  const result = database
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1")
+    .get(tableName);
+
+  return result !== undefined;
+}
+
 function getTableColumns(database: Database.Database, tableName: string) {
+  if (!tableExists(database, tableName)) {
+    return new Set<string>();
+  }
+
   return new Set(
     database
       .prepare(`PRAGMA table_info(${tableName})`)
       .all()
       .map((column) => String((column as { name: string }).name))
+  );
+}
+
+function hasAnyApplicationTables(database: Database.Database) {
+  return ["api_tokens", "lanes", "projects", "sessions", "task_tags", "tasks", "users"].some(
+    (tableName) => tableExists(database, tableName)
   );
 }
 
@@ -271,13 +507,7 @@ function migrateLegacyBoardData(db: DatabaseClient) {
   }
 }
 
-export function createDatabase(sqlitePath: string): DatabaseServices {
-  if (sqlitePath !== ":memory:") {
-    mkdirSync(dirname(sqlitePath), { recursive: true });
-  }
-
-  const database = new Database(sqlitePath);
-  database.pragma("foreign_keys = ON");
+function createLegacyCompatTables(database: Database.Database) {
   database.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -285,12 +515,10 @@ export function createDatabase(sqlitePath: string): DatabaseServices {
       subject TEXT NOT NULL,
       email TEXT,
       display_name TEXT,
+      theme TEXT NOT NULL DEFAULT 'sea',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
-
-    CREATE UNIQUE INDEX IF NOT EXISTS users_issuer_subject_idx
-      ON users (issuer, subject);
 
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
@@ -299,9 +527,6 @@ export function createDatabase(sqlitePath: string): DatabaseServices {
       created_at TEXT NOT NULL
     );
 
-    CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON sessions (user_id);
-    CREATE INDEX IF NOT EXISTS sessions_expires_at_idx ON sessions (expires_at);
-
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -309,9 +534,6 @@ export function createDatabase(sqlitePath: string): DatabaseServices {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
-
-    CREATE INDEX IF NOT EXISTS projects_user_updated_at_idx
-      ON projects (user_id, updated_at);
 
     CREATE TABLE IF NOT EXISTS lanes (
       id TEXT PRIMARY KEY,
@@ -322,12 +544,6 @@ export function createDatabase(sqlitePath: string): DatabaseServices {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
-
-    CREATE INDEX IF NOT EXISTS lanes_project_position_idx
-      ON lanes (project_id, position);
-
-    CREATE UNIQUE INDEX IF NOT EXISTS lanes_project_system_key_idx
-      ON lanes (project_id, system_key);
 
     CREATE TABLE IF NOT EXISTS tasks (
       id TEXT PRIMARY KEY,
@@ -341,11 +557,13 @@ export function createDatabase(sqlitePath: string): DatabaseServices {
       updated_at TEXT NOT NULL
     );
 
-    CREATE INDEX IF NOT EXISTS tasks_project_status_updated_at_idx
-      ON tasks (project_id, status, updated_at);
-
-    CREATE INDEX IF NOT EXISTS tasks_project_lane_position_idx
-      ON tasks (project_id, lane_id, position);
+    CREATE TABLE IF NOT EXISTS task_tags (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      tag TEXT NOT NULL,
+      color TEXT NOT NULL DEFAULT 'moss',
+      position INTEGER NOT NULL
+    );
 
     CREATE TABLE IF NOT EXISTS api_tokens (
       id TEXT PRIMARY KEY,
@@ -357,21 +575,116 @@ export function createDatabase(sqlitePath: string): DatabaseServices {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
-
-    CREATE INDEX IF NOT EXISTS api_tokens_user_updated_at_idx
-      ON api_tokens (user_id, updated_at);
   `);
+}
+
+function ensureLegacyCompatColumns(database: Database.Database) {
+  const userColumns = getTableColumns(database, "users");
+  if (!userColumns.has("theme")) {
+    database.exec("ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'sea';");
+  }
 
   const taskColumns = getTableColumns(database, "tasks");
   if (!taskColumns.has("body")) {
     database.exec("ALTER TABLE tasks ADD COLUMN body TEXT NOT NULL DEFAULT '';");
   }
   if (!taskColumns.has("lane_id")) {
-    database.exec("ALTER TABLE tasks ADD COLUMN lane_id TEXT REFERENCES lanes(id) ON DELETE CASCADE;");
+    database.exec(
+      "ALTER TABLE tasks ADD COLUMN lane_id TEXT REFERENCES lanes(id) ON DELETE CASCADE;"
+    );
   }
   if (!taskColumns.has("position")) {
     database.exec("ALTER TABLE tasks ADD COLUMN position INTEGER NOT NULL DEFAULT 0;");
   }
+
+  const taskTagColumns = getTableColumns(database, "task_tags");
+  if (!taskTagColumns.has("color")) {
+    database.exec("ALTER TABLE task_tags ADD COLUMN color TEXT NOT NULL DEFAULT 'moss';");
+  }
+}
+
+function ensureLegacyCompatIndexes(database: Database.Database) {
+  database.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS users_issuer_subject_idx
+      ON users (issuer, subject);
+
+    CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON sessions (user_id);
+    CREATE INDEX IF NOT EXISTS sessions_expires_at_idx ON sessions (expires_at);
+
+    CREATE INDEX IF NOT EXISTS projects_user_updated_at_idx
+      ON projects (user_id, updated_at);
+
+    CREATE INDEX IF NOT EXISTS lanes_project_position_idx
+      ON lanes (project_id, position);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS lanes_project_system_key_idx
+      ON lanes (project_id, system_key);
+
+    CREATE INDEX IF NOT EXISTS tasks_project_status_updated_at_idx
+      ON tasks (project_id, status, updated_at);
+
+    CREATE INDEX IF NOT EXISTS tasks_project_lane_position_idx
+      ON tasks (project_id, lane_id, position);
+
+    CREATE INDEX IF NOT EXISTS task_tags_task_position_idx
+      ON task_tags (task_id, position);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS task_tags_task_tag_idx
+      ON task_tags (task_id, tag);
+
+    CREATE INDEX IF NOT EXISTS api_tokens_user_updated_at_idx
+      ON api_tokens (user_id, updated_at);
+  `);
+}
+
+function markLatestDrizzleMigrationApplied(database: Database.Database) {
+  const latestMigration = getLatestMigrationEntry();
+
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS ${DRIZZLE_MIGRATIONS_TABLE} (
+      id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+      hash TEXT NOT NULL,
+      created_at NUMERIC
+    );
+  `);
+
+  const existing = database
+    .prepare(`SELECT 1 FROM ${DRIZZLE_MIGRATIONS_TABLE} WHERE created_at = ? LIMIT 1`)
+    .get(latestMigration.createdAt);
+  if (existing) {
+    return;
+  }
+
+  database
+    .prepare(
+      `INSERT INTO ${DRIZZLE_MIGRATIONS_TABLE} ("hash", "created_at") VALUES (?, ?)`
+    )
+    .run(latestMigration.hash, latestMigration.createdAt);
+}
+
+function bootstrapLegacyDatabase(database: Database.Database) {
+  if (tableExists(database, DRIZZLE_MIGRATIONS_TABLE) || !hasAnyApplicationTables(database)) {
+    return;
+  }
+
+  const bootstrap = database.transaction(() => {
+    createLegacyCompatTables(database);
+    ensureLegacyCompatColumns(database);
+    ensureLegacyCompatIndexes(database);
+    markLatestDrizzleMigrationApplied(database);
+  });
+
+  bootstrap();
+}
+
+export function createDatabase(sqlitePath: string): DatabaseServices {
+  if (sqlitePath !== ":memory:") {
+    mkdirSync(dirname(sqlitePath), { recursive: true });
+  }
+
+  const database = new Database(sqlitePath);
+  database.pragma("foreign_keys = ON");
+  bootstrapLegacyDatabase(database);
 
   const services = {
     database,
@@ -381,12 +694,16 @@ export function createDatabase(sqlitePath: string): DatabaseServices {
         lanes,
         projects,
         sessions,
+        taskTags,
         tasks,
         users
       }
     })
   };
 
+  migrate(services.db, {
+    migrationsFolder: DRIZZLE_MIGRATIONS_PATH
+  });
   migrateLegacyBoardData(services.db);
 
   return services;
@@ -410,6 +727,7 @@ export async function upsertUser(
       subject: input.subject,
       email: input.email,
       displayName: input.displayName,
+      theme: "sea",
       createdAt: now,
       updatedAt: now
     })
@@ -434,6 +752,27 @@ export async function upsertUser(
   }
 
   return existing;
+}
+
+export function updateUserTheme(
+  db: DatabaseClient,
+  input: {
+    theme: UserTheme;
+    userId: string;
+  }
+) {
+  const updatedAt = new Date().toISOString();
+
+  db
+    .update(users)
+    .set({
+      theme: input.theme,
+      updatedAt
+    })
+    .where(eq(users.id, input.userId))
+    .run();
+
+  return db.select().from(users).where(eq(users.id, input.userId)).get() ?? null;
 }
 
 export function createSession(
@@ -484,6 +823,43 @@ export function listApiTokensForUser(db: DatabaseClient, userId: string) {
     .where(eq(apiTokens.userId, userId))
     .orderBy(desc(apiTokens.updatedAt))
     .all();
+}
+
+export function listTaskTagsForUser(db: DatabaseClient, userId: string) {
+  const rows = db
+    .select({
+      color: taskTags.color,
+      label: taskTags.tag
+    })
+    .from(taskTags)
+    .innerJoin(tasks, eq(taskTags.taskId, tasks.id))
+    .innerJoin(projects, eq(tasks.projectId, projects.id))
+    .where(eq(projects.userId, userId))
+    .orderBy(desc(tasks.updatedAt), asc(taskTags.position), asc(taskTags.tag))
+    .all();
+
+  const tagsByKey = new Map<string, TaskTagData>();
+
+  rows.forEach((row) => {
+    const normalizedLabel = normalizeTaskTagLabel(row.label);
+    if (!normalizedLabel) {
+      return;
+    }
+
+    const key = normalizedLabel.toLowerCase();
+    if (tagsByKey.has(key)) {
+      return;
+    }
+
+    tagsByKey.set(key, {
+      color: normalizeTaskTagColor(row.color),
+      label: normalizedLabel
+    });
+  });
+
+  return Array.from(tagsByKey.values()).sort((left, right) =>
+    left.label.localeCompare(right.label, undefined, { sensitivity: "base" })
+  );
 }
 
 export function createApiToken(db: DatabaseClient, userId: string, name: string) {
@@ -639,6 +1015,33 @@ export function createProject(db: DatabaseClient, userId: string, name: string) 
   return project;
 }
 
+export function updateOwnedProjectName(
+  db: DatabaseClient,
+  input: {
+    name: string;
+    projectId: string;
+    userId: string;
+  }
+) {
+  const project = getOwnedProject(db, input.userId, input.projectId);
+  if (!project) {
+    return null;
+  }
+
+  const updatedAt = new Date().toISOString();
+
+  db
+    .update(projects)
+    .set({
+      name: input.name,
+      updatedAt
+    })
+    .where(eq(projects.id, input.projectId))
+    .run();
+
+  return db.select().from(projects).where(eq(projects.id, input.projectId)).get() ?? null;
+}
+
 export function getOwnedProject(db: DatabaseClient, userId: string, projectId: string) {
   return db
     .select()
@@ -776,6 +1179,59 @@ export function createLane(
   };
 }
 
+export function updateOwnedLane(
+  db: DatabaseClient,
+  input: {
+    laneId: string;
+    position: number;
+    projectId: string;
+    userId: string;
+  }
+) {
+  const project = getOwnedProject(db, input.userId, input.projectId);
+  if (!project) {
+    return null;
+  }
+
+  const lane = getProjectLaneById(db, input.projectId, input.laneId);
+  if (!lane) {
+    return null;
+  }
+
+  const orderedLanes = listProjectLanesByProjectId(db, input.projectId);
+  if (!orderedLanes.some((candidate) => candidate.id === input.laneId)) {
+    return null;
+  }
+
+  const reorderedLanes = orderedLanes.filter((candidate) => candidate.id !== input.laneId);
+  const nextIndex = Math.max(0, Math.min(input.position, reorderedLanes.length));
+  reorderedLanes.splice(nextIndex, 0, lane);
+  if (reorderedLanes.every((candidate, index) => candidate.id === orderedLanes[index]?.id)) {
+    return lane;
+  }
+
+  const updatedAt = new Date().toISOString();
+
+  reorderedLanes.forEach((candidate, index) => {
+    if (candidate.position === index && candidate.id !== lane.id) {
+      return;
+    }
+
+    db
+      .update(lanes)
+      .set({
+        position: index,
+        updatedAt
+      })
+      .where(eq(lanes.id, candidate.id))
+      .run();
+  });
+
+  touchProject(db, input.projectId, updatedAt);
+
+  return db.select().from(lanes).where(eq(lanes.id, input.laneId)).get() ?? null;
+}
+
 export function listTasksForProject(
   db: DatabaseClient,
   input: {
@@ -799,12 +1255,14 @@ export function listTasksForProject(
     filters.push(eq(tasks.laneId, lane.id));
   }
 
-  return db
+  const taskRows = db
     .select()
     .from(tasks)
     .where(and(...filters))
     .orderBy(asc(tasks.position), desc(tasks.updatedAt))
     .all();
+
+  return attachTagsToTasks(db, taskRows);
 }
 
 function touchProject(db: DatabaseClient, projectId: string, updatedAt: string) {
@@ -889,6 +1347,7 @@ export function createTask(
     title: string;
     body?: string;
     laneId?: string;
+    tags?: TaskTagInput[];
   }
 ) {
   const project = getOwnedProject(db, input.userId, input.projectId);
@@ -926,9 +1385,11 @@ export function createTask(
   };
 
   db.insert(tasks).values(task).run();
+  replaceTaskTags(db, task.id, input.tags ?? []);
+  syncTaskTagColorsForUser(db, input.userId, input.tags);
   touchProject(db, input.projectId, now);
 
-  return task;
+  return getTaskWithTags(db, task.id);
 }
 
 export function getOwnedTask(
@@ -938,7 +1399,7 @@ export function getOwnedTask(
     projectId: string;
     taskId: string;
   }
-) {
+  ) {
   const result = db
     .select({ task: tasks })
     .from(tasks)
@@ -952,7 +1413,7 @@ export function getOwnedTask(
     )
     .get();
 
-  return result?.task ?? null;
+  return result?.task ? attachTagsToTasks(db, [result.task])[0] ?? null : null;
 }
 
 export function updateOwnedTask(
@@ -964,6 +1425,7 @@ export function updateOwnedTask(
     projectId: string;
     status?: TaskStatus;
     taskId: string;
+    tags?: TaskTagInput[];
     title?: string;
     userId: string;
   }
@@ -1023,9 +1485,14 @@ export function updateOwnedTask(
     .where(eq(tasks.id, task.id))
     .run();
 
+  if (input.tags !== undefined) {
+    replaceTaskTags(db, task.id, input.tags);
+    syncTaskTagColorsForUser(db, input.userId, input.tags);
+  }
+
   touchProject(db, input.projectId, updatedAt);
 
-  return db.select().from(tasks).where(eq(tasks.id, task.id)).get() ?? null;
+  return getTaskWithTags(db, task.id);
 }
 
 export function deleteOwnedTask(

@@ -19,18 +19,23 @@ import {
   createProjectBodySchema,
   createTaskBodySchema,
   errorResponseSchema,
+  laneParamsSchema,
   laneResponseSchema,
   listTasksQuerySchema,
   meResponseSchema,
   projectParamsSchema,
   projectResponseSchema,
   taskParamsSchema,
+  taskTagsResponseSchema,
   taskResponseSchema,
   toApiTokenSummary,
   toLaneResponse,
   toMeResponse,
   toProjectResponse,
   toTaskResponse,
+  updateLaneBodySchema,
+  updateProjectBodySchema,
+  updateThemeBodySchema,
   updateTaskBodySchema
 } from "./api-schemas.js";
 import type { AppConfig } from "./config.js";
@@ -52,7 +57,11 @@ import {
   listLanesForProject,
   listApiTokensForUser,
   listProjectsForUser,
+  listTaskTagsForUser,
   listTasksForProject,
+  updateOwnedLane,
+  updateOwnedProjectName,
+  updateUserTheme,
   updateOwnedTask,
   upsertUser,
   type UserRecord
@@ -333,6 +342,32 @@ export function buildApp(options: {
   });
 
   typedApp.route({
+    method: "PATCH",
+    url: "/api/v1/me/theme",
+    schema: {
+      body: updateThemeBodySchema,
+      response: {
+        200: meResponseSchema,
+        401: errorResponseSchema
+      },
+      tags: ["auth"]
+    },
+    handler: async (request, reply) => {
+      const user = await requireApiUser(app, database.db, request, reply);
+      if (!user) {
+        return;
+      }
+
+      const updatedUser = updateUserTheme(database.db, {
+        userId: user.id,
+        theme: request.body.theme
+      });
+
+      return toMeResponse(updatedUser ?? user);
+    }
+  });
+
+  typedApp.route({
     method: "GET",
     url: "/api/v1/api-tokens",
     schema: {
@@ -408,6 +443,26 @@ export function buildApp(options: {
 
   typedApp.route({
     method: "GET",
+    url: "/api/v1/task-tags",
+    schema: {
+      response: {
+        200: taskTagsResponseSchema,
+        401: errorResponseSchema
+      },
+      tags: ["tags"]
+    },
+    handler: async (request, reply) => {
+      const user = await requireApiUser(app, database.db, request, reply);
+      if (!user) {
+        return;
+      }
+
+      return taskTagsResponseSchema.parse(listTaskTagsForUser(database.db, user.id));
+    }
+  });
+
+  typedApp.route({
+    method: "GET",
     url: "/api/v1/projects",
     schema: {
       response: {
@@ -454,6 +509,45 @@ export function buildApp(options: {
       return reply
         .status(201)
         .send(toProjectResponse(project, undefined, laneSummaries ?? []));
+    }
+  });
+
+  typedApp.route({
+    method: "PATCH",
+    url: "/api/v1/projects/:projectId",
+    schema: {
+      body: updateProjectBodySchema,
+      params: projectParamsSchema,
+      response: {
+        200: projectResponseSchema,
+        401: errorResponseSchema,
+        404: errorResponseSchema
+      },
+      tags: ["projects"]
+    },
+    handler: async (request, reply) => {
+      const user = await requireApiUser(app, database.db, request, reply);
+      if (!user) {
+        return;
+      }
+
+      const project = updateOwnedProjectName(database.db, {
+        name: request.body.name.trim(),
+        projectId: request.params.projectId,
+        userId: user.id
+      });
+      if (!project) {
+        return reply.status(404).send({
+          message: "Project not found."
+        });
+      }
+
+      const laneSummaries = listLanesForProject(database.db, {
+        userId: user.id,
+        projectId: project.id
+      });
+
+      return toProjectResponse(project, undefined, laneSummaries ?? []);
     }
   });
 
@@ -553,6 +647,47 @@ export function buildApp(options: {
   });
 
   typedApp.route({
+    method: "PATCH",
+    url: "/api/v1/projects/:projectId/lanes/:laneId",
+    schema: {
+      body: updateLaneBodySchema,
+      params: laneParamsSchema,
+      response: {
+        200: laneResponseSchema,
+        401: errorResponseSchema,
+        404: errorResponseSchema
+      },
+      tags: ["lanes"]
+    },
+    handler: async (request, reply) => {
+      const user = await requireApiUser(app, database.db, request, reply);
+      if (!user) {
+        return;
+      }
+
+      const lane = updateOwnedLane(database.db, {
+        userId: user.id,
+        projectId: request.params.projectId,
+        laneId: request.params.laneId,
+        position: request.body.position
+      });
+      if (!lane) {
+        return reply.status(404).send({
+          message: "Lane not found."
+        });
+      }
+
+      const projectLanes = listLanesForProject(database.db, {
+        userId: user.id,
+        projectId: request.params.projectId
+      });
+      const updatedLane = projectLanes?.find((candidate) => candidate.id === lane.id);
+
+      return toLaneResponse(updatedLane ?? lane);
+    }
+  });
+
+  typedApp.route({
     method: "GET",
     url: "/api/v1/projects/:projectId/tasks",
     schema: {
@@ -610,7 +745,8 @@ export function buildApp(options: {
         projectId: request.params.projectId,
         title: request.body.title.trim(),
         body: request.body.body,
-        laneId: request.body.laneId
+        laneId: request.body.laneId,
+        tags: request.body.tags
       });
       if (!task) {
         return reply.status(404).send({
@@ -648,6 +784,7 @@ export function buildApp(options: {
         title: request.body.title?.trim(),
         body: request.body.body,
         laneId: request.body.laneId,
+        tags: request.body.tags,
         position: request.body.position,
         status: request.body.status
       });

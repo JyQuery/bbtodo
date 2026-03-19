@@ -1,10 +1,18 @@
 export type TaskStatus = "todo" | "in_progress" | "done";
+export type UserTheme = "sea" | "ember" | "midnight";
+export type TaskTagColor = "moss" | "sky" | "amber" | "coral" | "orchid" | "slate";
 export type TaskCounts = Record<TaskStatus, number>;
+
+export interface TaskTag {
+  color: TaskTagColor;
+  label: string;
+}
 
 export interface User {
   email: string | null;
   id: string;
   name: string | null;
+  theme: UserTheme;
 }
 
 export interface BoardLane {
@@ -35,6 +43,7 @@ export interface Task {
   position: number;
   projectId: string;
   status: TaskStatus;
+  tags: TaskTag[];
   title: string;
   updatedAt: string;
 }
@@ -113,7 +122,7 @@ export const api = {
       method: "POST"
     });
   },
-  createTask(projectId: string, input: { body?: string; laneId?: string; title: string }) {
+  createTask(projectId: string, input: { body?: string; laneId?: string; tags?: TaskTag[]; title: string }) {
     return request<Task>(`/api/v1/projects/${projectId}/tasks`, {
       body: JSON.stringify(input),
       method: "POST"
@@ -140,6 +149,9 @@ export const api = {
   listProjects() {
     return request<Project[]>("/api/v1/projects");
   },
+  listTaskTags() {
+    return request<TaskTag[]>("/api/v1/task-tags");
+  },
   listLanes(projectId: string) {
     return request<BoardLane[]>(`/api/v1/projects/${projectId}/lanes`);
   },
@@ -154,12 +166,30 @@ export const api = {
       method: "POST"
     });
   },
+  updateTheme(theme: UserTheme) {
+    return request<User>("/api/v1/me/theme", {
+      body: JSON.stringify({ theme }),
+      method: "PATCH"
+    });
+  },
+  updateProject(projectId: string, input: Pick<Project, "name">) {
+    return request<Project>(`/api/v1/projects/${projectId}`, {
+      body: JSON.stringify(input),
+      method: "PATCH"
+    });
+  },
   updateTask(
     projectId: string,
     taskId: string,
-    input: Partial<Pick<Task, "body" | "laneId" | "position" | "status" | "title">>
+    input: Partial<Pick<Task, "body" | "laneId" | "position" | "status" | "tags" | "title">>
   ) {
     return request<Task>(`/api/v1/projects/${projectId}/tasks/${taskId}`, {
+      body: JSON.stringify(input),
+      method: "PATCH"
+    });
+  },
+  updateLane(projectId: string, laneId: string, input: Pick<BoardLane, "position">) {
+    return request<BoardLane>(`/api/v1/projects/${projectId}/lanes/${laneId}`, {
       body: JSON.stringify(input),
       method: "PATCH"
     });
