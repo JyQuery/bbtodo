@@ -739,7 +739,8 @@ test("projects page uses a modal create flow and removes extra board chrome", as
   await expect(page).toHaveURL(/\/projects\/project-7$/);
   await expect(page).toHaveTitle("API polish | BBTodo");
   await expect(page.getByTestId("board-grid")).toBeVisible();
-  await expect(page.locator(".subnav__current")).toHaveText("API polish");
+  await expect(page.locator(".subnav__current-label")).toHaveText("Project");
+  await expect(page.locator(".subnav__current-value")).toHaveText("API polish");
 
   await page.getByLabel("Open account menu").click();
 
@@ -825,7 +826,8 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   await expect(page.locator(".workspace-form")).toHaveCount(0);
   await expect(page.locator(".workspace-summary")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Back to projects" })).toHaveCount(0);
-  await expect(page.locator(".subnav__current")).toHaveText("Billing cleanup");
+  await expect(page.locator(".subnav__current-label")).toHaveText("Project");
+  await expect(page.locator(".subnav__current-value")).toHaveText("Billing cleanup");
   await expect(page.getByRole("button", { name: "Create Lane" })).toBeVisible();
   await expect(page.getByLabel("Search cards")).toBeVisible();
   await expect(page.locator(".subnav__search-label")).toHaveText("Search");

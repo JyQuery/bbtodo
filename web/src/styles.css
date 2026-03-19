@@ -450,6 +450,9 @@ h3 {
 }
 
 .subnav__current {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
   max-width: min(24rem, 32vw);
   overflow: hidden;
   color: var(--ink);
@@ -465,6 +468,21 @@ h3 {
   height: 2px;
   border-radius: 999px;
   background: var(--line-strong);
+}
+
+.subnav__current-label {
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  flex: 0 0 auto;
+}
+
+.subnav__current-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .subnav__link:hover,

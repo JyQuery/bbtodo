@@ -69,7 +69,8 @@ export function AppShell({ user }: { user: User }) {
               </NavLink>
               {activeBoard ? (
                 <span className="subnav__current" title={activeBoard}>
-                  {activeBoard}
+                  <span className="subnav__current-label">Project</span>
+                  <span className="subnav__current-value">{activeBoard}</span>
                 </span>
               ) : null}
               {boardMatch || isProjectsRoute ? (
