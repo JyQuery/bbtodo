@@ -1282,6 +1282,14 @@ textarea:focus {
   transform: scale(0.985);
 }
 
+.board-drag-preview {
+  opacity: 0.98;
+  overflow: hidden;
+  box-shadow:
+    inset 0 1px 0 var(--surface-highlight),
+    0 28px 56px -28px rgba(18, 34, 36, 0.44);
+}
+
 .board-column.is-lane-drop-target {
   border-color: rgba(47, 119, 116, 0.3);
 }
@@ -1449,11 +1457,24 @@ textarea:focus {
 }
 
 .task-card.is-dragging {
-  opacity: 0.45;
-  transform: rotate(1.3deg) scale(0.98);
+  opacity: 0.14;
+  transform: scale(0.98);
   box-shadow:
     inset 0 1px 0 var(--surface-highlight-strong),
     0 24px 44px -30px rgba(18, 34, 36, 0.4);
+}
+
+.task-drag-overlay {
+  pointer-events: none;
+}
+
+.task-card--drag-overlay {
+  cursor: grabbing;
+  transform: rotate(1.2deg) scale(1.01);
+  box-shadow:
+    inset 0 1px 0 var(--surface-highlight-strong),
+    0 26px 50px -28px rgba(18, 34, 36, 0.44);
+  will-change: transform;
 }
 
 .task-card.is-confirm-open {

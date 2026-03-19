@@ -2,6 +2,7 @@ import { type DragEvent, type ReactNode, useEffect, useMemo, useRef, useState } 
 import {
   closestCorners,
   DndContext,
+  DragOverlay,
   PointerSensor,
   useDroppable,
   useSensor,
@@ -95,6 +96,30 @@ function moveTaskId(
   return nextTaskIdsByLane;
 }
 
+function createNativeDragPreview(node: HTMLElement) {
+  const preview = node.cloneNode(true);
+  if (!(preview instanceof HTMLElement)) {
+    return null;
+  }
+
+  const bounds = node.getBoundingClientRect();
+  preview.classList.add("board-drag-preview");
+  preview.style.width = `${bounds.width}px`;
+  preview.style.height = `${bounds.height}px`;
+  preview.style.position = "fixed";
+  preview.style.top = "-10000px";
+  preview.style.left = "-10000px";
+  preview.style.margin = "0";
+  preview.style.pointerEvents = "none";
+  preview.style.zIndex = "9999";
+  preview.style.transform = "none";
+  preview.style.animation = "none";
+  preview.style.transition = "none";
+  document.body.append(preview);
+
+  return preview;
+}
+
 function LaneDropArea({
   children,
   laneId
@@ -147,6 +172,37 @@ function TaskDropSlot({
     >
       <span>Drop here</span>
     </div>
+  );
+}
+
+function TaskCardPreview({
+  activeTagKeys,
+  task
+}: {
+  activeTagKeys: Set<string>;
+  task: Task;
+}) {
+  return (
+    <article className="task-card task-card--drag-overlay">
+      <div className="task-card__meta">
+        <time className="task-card__timestamp" dateTime={task.updatedAt}>
+          {formatIsoDate(task.updatedAt)}
+        </time>
+      </div>
+      <p className="task-card__title">{task.title}</p>
+      {task.tags.length > 0 ? (
+        <div className="task-card__tags">
+          {task.tags.map((tag) => (
+            <span
+              className={`task-tag${activeTagKeys.has(normalizeTagKey(tag)) ? " is-active" : ""}`}
+              key={tag}
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </article>
   );
 }
 
@@ -454,6 +510,8 @@ export function BoardPage() {
   const [dropTarget, setDropTarget] = useState<{ laneId: string; position: number } | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [laneName, setLaneName] = useState("");
+  const [taskDragPreviewWidth, setTaskDragPreviewWidth] = useState<number | null>(null);
+  const laneDragPreviewRef = useRef<HTMLElement | null>(null);
   const taskDragOrderRef = useRef<TaskIdsByLane | null>(null);
 
   const projectsQuery = useQuery({
@@ -482,6 +540,7 @@ export function BoardPage() {
   const editingTask = editingTaskId ? tasks.find((task) => task.id === editingTaskId) ?? null : null;
   const isBoardFiltered = boardSearch.length > 0 || activeTagKeys.size > 0;
   const taskMap = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
+  const draggedTask = draggedTaskId ? taskMap.get(draggedTaskId) ?? null : null;
   const orderedTaskIdsByLane = useMemo(() => buildTaskIdsByLane(lanes, tasks), [lanes, tasks]);
   const previewTaskIdsByLane = taskDragOrder ?? orderedTaskIdsByLane;
   const taskSensors = useSensors(
@@ -643,6 +702,8 @@ export function BoardPage() {
   }
 
   function clearLaneDrag() {
+    laneDragPreviewRef.current?.remove();
+    laneDragPreviewRef.current = null;
     setDraggedLaneId(null);
     setLaneDropTarget(null);
   }
@@ -651,6 +712,7 @@ export function BoardPage() {
     setDraggedTaskId(null);
     setDropTarget(null);
     setTaskDragOrder(null);
+    setTaskDragPreviewWidth(null);
     taskDragOrderRef.current = null;
   }
 
@@ -721,6 +783,7 @@ export function BoardPage() {
     const source = findTaskLocation(nextTaskOrder, activeTaskId);
 
     setDraggedTaskId(activeTaskId);
+    setTaskDragPreviewWidth(event.active.rect.current.initial?.width ?? null);
     setTaskDragOrder(nextTaskOrder);
     taskDragOrderRef.current = nextTaskOrder;
     setDropTarget(source ? { laneId: source.laneId, position: source.index } : null);
@@ -827,6 +890,13 @@ export function BoardPage() {
       document.removeEventListener("keydown", handleEscape);
     };
   }, [editingTask, isCreateLaneDialogOpen]);
+
+  useEffect(() => {
+    return () => {
+      laneDragPreviewRef.current?.remove();
+      laneDragPreviewRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (!editingTaskId || editingTask || tasksQuery.isPending) {
@@ -988,6 +1058,18 @@ export function BoardPage() {
                       event.stopPropagation();
                       event.dataTransfer.effectAllowed = "move";
                       event.dataTransfer.setData("text/plain", lane.id);
+                      const column = event.currentTarget.closest(".board-column");
+                      if (column instanceof HTMLElement) {
+                        const preview = createNativeDragPreview(column);
+                        if (preview) {
+                          laneDragPreviewRef.current?.remove();
+                          laneDragPreviewRef.current = preview;
+                          const bounds = column.getBoundingClientRect();
+                          const offsetX = Math.max(0, Math.min(event.clientX - bounds.left, bounds.width));
+                          const offsetY = Math.max(0, Math.min(event.clientY - bounds.top, bounds.height));
+                          event.dataTransfer.setDragImage(preview, offsetX, offsetY);
+                        }
+                      }
                       setDraggedLaneId(lane.id);
                       setLaneDropTarget(null);
                     }}
@@ -1067,6 +1149,16 @@ export function BoardPage() {
               </div>
             ))}
           </section>
+          <DragOverlay>
+            {draggedTask ? (
+              <div
+                className="task-drag-overlay"
+                style={taskDragPreviewWidth ? { width: `${taskDragPreviewWidth}px` } : undefined}
+              >
+                <TaskCardPreview activeTagKeys={activeTagKeys} task={draggedTask} />
+              </div>
+            ) : null}
+          </DragOverlay>
         </DndContext>
       ) : null}
     </main>
