@@ -1228,10 +1228,10 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   expect(createdCardDeleteButtonBox).not.toBeNull();
   expect(
     Math.abs(
-      ((createdCardTitleBox?.y ?? 0) + (createdCardTitleBox?.height ?? 0)) -
-        ((createdCardTimestampBox?.y ?? 0) + (createdCardTimestampBox?.height ?? 0))
+      ((createdCardTitleBox?.y ?? 0) + (createdCardTitleBox?.height ?? 0) / 2) -
+        ((createdCardTimestampBox?.y ?? 0) + (createdCardTimestampBox?.height ?? 0) / 2)
     )
-  ).toBeLessThan(12);
+  ).toBeLessThan(6);
   expect(createdCardTimestampBox?.x ?? 0).toBeGreaterThan(
     ((createdCardTitleBox?.x ?? 0) + (createdCardTitleBox?.width ?? 0) * 0.65)
   );
@@ -1240,13 +1240,13 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
       ((createdCardTitleBox?.y ?? 0) + (createdCardTitleBox?.height ?? 0) / 2) -
         ((createdCardDeleteButtonBox?.y ?? 0) + (createdCardDeleteButtonBox?.height ?? 0) / 2)
     )
-  ).toBeLessThan(10);
+  ).toBeLessThan(6);
   expect(
     Math.abs(
       ((createdCardTimestampBox?.y ?? 0) + (createdCardTimestampBox?.height ?? 0) / 2) -
         ((createdCardDeleteButtonBox?.y ?? 0) + (createdCardDeleteButtonBox?.height ?? 0) / 2)
     )
-  ).toBeLessThan(10);
+  ).toBeLessThan(6);
 
   const retryCardDragBox = await retryCard.boundingBox();
   expect(retryCardDragBox).not.toBeNull();

@@ -1821,17 +1821,18 @@ textarea:focus {
   align-items: flex-start;
 }
 
-.task-card__headline,
+.task-card__headline {
+  align-items: center;
+}
+
 .task-card__footer {
   align-items: flex-end;
-  justify-content: space-between;
-  gap: 0.85rem;
 }
 
 .task-card__headline-actions {
   display: flex;
   flex: 0 0 auto;
-  align-items: flex-end;
+  align-items: center;
   gap: 0.65rem;
   margin-left: auto;
 }
@@ -1939,7 +1940,7 @@ textarea:focus {
 }
 
 .task-card__headline-actions .task-card__delete-menu {
-  align-self: flex-end;
+  align-self: center;
 }
 
 .lane-composer {
