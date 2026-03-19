@@ -152,6 +152,38 @@ const projectsForGrid: Project[] = [
       done: 3
     },
     updatedAt: "2026-03-18T08:30:00.000Z"
+  },
+  {
+    createdAt: "2026-03-17T12:30:00.000Z",
+    id: "project-5",
+    laneSummaries: createDefaultLaneSummaries("project-5", {
+      todo: 3,
+      in_progress: 1,
+      done: 0
+    }),
+    name: "Support triage",
+    taskCounts: {
+      todo: 3,
+      in_progress: 1,
+      done: 0
+    },
+    updatedAt: "2026-03-18T08:40:00.000Z"
+  },
+  {
+    createdAt: "2026-03-17T13:00:00.000Z",
+    id: "project-6",
+    laneSummaries: createDefaultLaneSummaries("project-6", {
+      todo: 1,
+      in_progress: 2,
+      done: 2
+    }),
+    name: "Partner audit",
+    taskCounts: {
+      todo: 1,
+      in_progress: 2,
+      done: 2
+    },
+    updatedAt: "2026-03-18T08:50:00.000Z"
   }
 ];
 
@@ -577,10 +609,11 @@ test("login screen uses the updated cool accent palette", async ({ page }) => {
 
 test("projects page uses a modal create flow and removes extra board chrome", async ({ page }) => {
   await mockAuthenticated(page, {
-    nextProjectId: 5,
+    nextProjectId: 7,
     projects: projectsForGrid
   });
 
+  await page.setViewportSize({ width: 2048, height: 900 });
   await page.goto("/");
 
   await expect(page).toHaveTitle("Projects | BBTodo");
@@ -628,9 +661,15 @@ test("projects page uses a modal create flow and removes extra board chrome", as
   const firstCard = page.getByTestId("project-card-project-1");
   const secondCard = page.getByTestId("project-card-project-2");
   const thirdCard = page.getByTestId("project-card-project-3");
+  const fourthCard = page.getByTestId("project-card-project-4");
+  const fifthCard = page.getByTestId("project-card-project-5");
+  const sixthCard = page.getByTestId("project-card-project-6");
   const firstCardBox = await firstCard.boundingBox();
   const secondCardBox = await secondCard.boundingBox();
   const thirdCardBox = await thirdCard.boundingBox();
+  const fourthCardBox = await fourthCard.boundingBox();
+  const fifthCardBox = await fifthCard.boundingBox();
+  const sixthCardBox = await sixthCard.boundingBox();
   const viewportWidth = page.viewportSize()?.width ?? 0;
   expect(projectsPageBox).not.toBeNull();
   expect((projectsPageBox?.width ?? 0)).toBeGreaterThan(viewportWidth - 80);
@@ -638,14 +677,28 @@ test("projects page uses a modal create flow and removes extra board chrome", as
   expect(firstCardBox).not.toBeNull();
   expect(secondCardBox).not.toBeNull();
   expect(thirdCardBox).not.toBeNull();
+  expect(fourthCardBox).not.toBeNull();
+  expect(fifthCardBox).not.toBeNull();
+  expect(sixthCardBox).not.toBeNull();
   expect((firstCardBox?.x ?? 0) - (projectGridBox?.x ?? 0)).toBeLessThan(24);
   expect((firstCardBox?.y ?? 0) - (projectGridBox?.y ?? 0)).toBeLessThan(24);
   expect(Math.abs((firstCardBox?.width ?? 0) - (secondCardBox?.width ?? 0))).toBeLessThan(2);
   expect(Math.abs((firstCardBox?.width ?? 0) - (thirdCardBox?.width ?? 0))).toBeLessThan(2);
+  expect(Math.abs((firstCardBox?.width ?? 0) - (fourthCardBox?.width ?? 0))).toBeLessThan(2);
+  expect(Math.abs((firstCardBox?.width ?? 0) - (fifthCardBox?.width ?? 0))).toBeLessThan(2);
+  expect(Math.abs((firstCardBox?.width ?? 0) - (sixthCardBox?.width ?? 0))).toBeLessThan(2);
   expect(Math.abs((firstCardBox?.height ?? 0) - (secondCardBox?.height ?? 0))).toBeLessThan(2);
   expect(Math.abs((firstCardBox?.height ?? 0) - (thirdCardBox?.height ?? 0))).toBeLessThan(2);
+  expect(Math.abs((firstCardBox?.height ?? 0) - (fourthCardBox?.height ?? 0))).toBeLessThan(2);
+  expect(Math.abs((firstCardBox?.height ?? 0) - (fifthCardBox?.height ?? 0))).toBeLessThan(2);
+  expect(Math.abs((firstCardBox?.height ?? 0) - (sixthCardBox?.height ?? 0))).toBeLessThan(2);
   expect(Math.abs((firstCardBox?.y ?? 0) - (secondCardBox?.y ?? 0))).toBeLessThan(16);
+  expect(Math.abs((firstCardBox?.y ?? 0) - (thirdCardBox?.y ?? 0))).toBeLessThan(16);
+  expect(Math.abs((firstCardBox?.y ?? 0) - (fourthCardBox?.y ?? 0))).toBeLessThan(16);
+  expect(Math.abs((firstCardBox?.y ?? 0) - (fifthCardBox?.y ?? 0))).toBeLessThan(16);
+  expect(Math.abs((firstCardBox?.y ?? 0) - (sixthCardBox?.y ?? 0))).toBeLessThan(16);
   expect((secondCardBox?.x ?? 0) - ((firstCardBox?.x ?? 0) + (firstCardBox?.width ?? 0))).toBeLessThan(32);
+  expect((firstCardBox?.width ?? 0)).toBeLessThan(320);
   expect(createProjectLinkBox).not.toBeNull();
   expect((createProjectLinkBox?.x ?? 0)).toBeGreaterThan(120);
   expect(createProjectBackground).toBe("rgba(0, 0, 0, 0)");
@@ -667,13 +720,13 @@ test("projects page uses a modal create flow and removes extra board chrome", as
 
   const dialog = page.getByRole("dialog", { name: "Create Project" });
   await expect(dialog).toBeVisible();
-  await dialog.getByLabel("Project name").fill("Roadmap review");
+  await dialog.getByLabel("Project name").fill("API polish");
   await dialog.getByRole("button", { exact: true, name: "Create Project" }).click();
 
-  await expect(page).toHaveURL(/\/projects\/project-5$/);
-  await expect(page).toHaveTitle("Roadmap review | BBTodo");
+  await expect(page).toHaveURL(/\/projects\/project-7$/);
+  await expect(page).toHaveTitle("API polish | BBTodo");
   await expect(page.getByTestId("board-grid")).toBeVisible();
-  await expect(page.locator(".subnav__current")).toHaveText("Roadmap review");
+  await expect(page.locator(".subnav__current")).toHaveText("API polish");
 
   await page.getByLabel("Open account menu").click();
 

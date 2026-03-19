@@ -1024,7 +1024,7 @@ textarea:focus {
 
 .project-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(22rem, 22rem));
+  grid-template-columns: repeat(auto-fit, minmax(19rem, 19rem));
   grid-auto-rows: 15.75rem;
   gap: 1rem;
   justify-content: start;
