@@ -1046,6 +1046,7 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   const tagInput = editDialog.getByLabel("Task tags");
   await expect(editDialog.getByLabel("Title")).toHaveValue("Review retry settings");
   await expect(tagInput).toHaveValue("");
+  await expect(editDialog.getByText("New tag color")).toHaveCount(0);
   await expect(editDialog.getByRole("button", { name: "Remove tag backend" })).toBeVisible();
   await expect(editDialog.getByRole("button", { name: "Remove tag retry" })).toBeVisible();
   await expect(editDialog.getByRole("button", { name: "Add tag ops" })).toBeVisible();
@@ -1055,6 +1056,7 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   await expect(sourceTab).toHaveAttribute("aria-selected", "true");
   await expect(previewTab).toHaveAttribute("aria-selected", "false");
   await editDialog.getByRole("button", { name: "Edit color for tag backend" }).click();
+  await expect(editDialog.getByText("Color for backend")).toBeVisible();
   await editDialog.getByRole("button", { name: "Set backend color to Amber" }).click();
   const dialogBox = await editDialog.boundingBox();
   const bodyFieldBox = await editDialog.getByLabel("Task body").boundingBox();
@@ -1070,10 +1072,12 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   await editDialog.getByRole("button", { name: "Remove tag retry" }).click();
   await editDialog.getByRole("button", { name: "Remove tag ops" }).click();
   await editDialog.getByLabel("Title").fill("Review retry scope");
-  await editDialog.getByRole("button", { name: "Set new tag color to Orchid" }).click();
   await tagInput.fill("release");
+  await expect(editDialog.getByText("New tag color")).toBeVisible();
+  await editDialog.getByRole("button", { name: "Set new tag color to Orchid" }).click();
   await tagInput.press("Enter");
   await expect(tagInput).toHaveValue("");
+  await expect(editDialog.getByText("New tag color")).toHaveCount(0);
   await expect(editDialog.getByRole("button", { name: "Remove tag release" })).toBeVisible();
   await editDialog
     .getByLabel("Task body")

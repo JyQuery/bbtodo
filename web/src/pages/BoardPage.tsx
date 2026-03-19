@@ -542,6 +542,7 @@ function TaskTagEditor({
       ? null
       : selectedTags.find((tag) => normalizeTagKey(tag.label) === selectedColorTargetKey) ?? null;
   const activePaletteColor = selectedColorTarget?.color ?? inputColor;
+  const shouldShowPalette = selectedColorTarget !== null || inputValue.trim().length > 0;
   const visibleSuggestions = useMemo(
     () =>
       availableTags.filter((tag) => {
@@ -694,32 +695,34 @@ function TaskTagEditor({
             value={inputValue}
           />
         </div>
-        <div className="task-tag-editor__palette-panel">
-          <span className="task-tag-editor__palette-label">
-            {selectedColorTarget ? `Color for ${selectedColorTarget.label}` : "New tag color"}
-          </span>
-          <div className="task-tag-editor__palette" role="list">
-            {taskTagColorOptions.map((option) => (
-              <button
-                aria-label={
-                  selectedColorTarget
-                    ? `Set ${selectedColorTarget.label} color to ${option.label}`
-                    : `Set new tag color to ${option.label}`
-                }
-                aria-pressed={activePaletteColor === option.value}
-                className={`task-tag-editor__swatch${activePaletteColor === option.value ? " is-active" : ""}`}
-                key={option.value}
-                onClick={() => updateTagColor(option.value)}
-                onMouseDown={(event) => event.preventDefault()}
-                style={getTaskTagStyle(option.value)}
-                type="button"
-              >
-                <span aria-hidden="true" className="task-tag-editor__swatch-dot" />
-                <span className="task-tag-editor__swatch-name">{option.label}</span>
-              </button>
-            ))}
+        {shouldShowPalette ? (
+          <div className="task-tag-editor__palette-panel">
+            <span className="task-tag-editor__palette-label">
+              {selectedColorTarget ? `Color for ${selectedColorTarget.label}` : "New tag color"}
+            </span>
+            <div className="task-tag-editor__palette" role="list">
+              {taskTagColorOptions.map((option) => (
+                <button
+                  aria-label={
+                    selectedColorTarget
+                      ? `Set ${selectedColorTarget.label} color to ${option.label}`
+                      : `Set new tag color to ${option.label}`
+                  }
+                  aria-pressed={activePaletteColor === option.value}
+                  className={`task-tag-editor__swatch${activePaletteColor === option.value ? " is-active" : ""}`}
+                  key={option.value}
+                  onClick={() => updateTagColor(option.value)}
+                  onMouseDown={(event) => event.preventDefault()}
+                  style={getTaskTagStyle(option.value)}
+                  type="button"
+                >
+                  <span aria-hidden="true" className="task-tag-editor__swatch-dot" />
+                  <span className="task-tag-editor__swatch-name">{option.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        ) : null}
         {visibleSuggestions.length > 0 ? (
           <div aria-label="Suggested tags" className="task-tag-editor__suggestions" role="list">
             {visibleSuggestions.map((tag) => (
