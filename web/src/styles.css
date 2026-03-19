@@ -1828,6 +1828,14 @@ textarea:focus {
   gap: 0.85rem;
 }
 
+.task-card__headline-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-end;
+  gap: 0.65rem;
+  margin-left: auto;
+}
+
 .task-card__title {
   margin: 0;
   flex: 1 1 auto;
@@ -1926,8 +1934,12 @@ textarea:focus {
   margin-left: auto;
 }
 
-.task-card__headline .task-card__delete-menu {
-  align-self: flex-start;
+.task-card__headline-actions .task-card__timestamp {
+  margin-left: 0;
+}
+
+.task-card__headline-actions .task-card__delete-menu {
+  align-self: flex-end;
 }
 
 .lane-composer {

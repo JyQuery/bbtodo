@@ -473,10 +473,12 @@ function TaskCard({
       ) : (
         <div className="task-card__headline">
           <p className="task-card__title">{task.title}</p>
-          <time className="task-card__timestamp" dateTime={task.updatedAt}>
-            {formatIsoDate(task.updatedAt)}
-          </time>
-          {deleteMenu}
+          <div className="task-card__headline-actions">
+            <time className="task-card__timestamp" dateTime={task.updatedAt}>
+              {formatIsoDate(task.updatedAt)}
+            </time>
+            {deleteMenu}
+          </div>
         </div>
       )}
     </article>
