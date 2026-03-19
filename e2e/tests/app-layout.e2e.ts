@@ -975,6 +975,11 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   );
   const taskDeleteButton = page.getByLabel("Delete task Review retry settings");
   await expect(taskDeleteButton.locator("svg")).toHaveCount(1);
+  await expect(taskDeleteButton.locator("svg path")).toHaveCount(4);
+  await expect(taskDeleteButton.locator("svg path").nth(0)).toHaveAttribute(
+    "d",
+    "M9.25 5.25V4.5a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1v.75"
+  );
   await expect(taskDeleteButton).toHaveCSS("border-top-width", "0px");
   await expect(page.getByTestId("task-card-task-1").locator(".task-card__timestamp")).toHaveText("2026-03-18");
   await expect(page.getByTestId("task-card-task-1").locator(".task-card__timestamp")).toHaveAttribute(

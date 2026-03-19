@@ -67,7 +67,28 @@ export function TrashIcon({ className }: { className?: string }) {
   return (
     <SvgIcon className={className}>
       <path
-        d="M8 6.75h8m-7 0V5.5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1.25m-8 0-.6 10.1a1.75 1.75 0 0 0 1.75 1.85h5.7a1.75 1.75 0 0 0 1.75-1.85L16 6.75m-5 3v5m3-5v5"
+        d="M9.25 5.25V4.5a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1v.75"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.6"
+      />
+      <path
+        d="M5.75 7h12.5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.6"
+      />
+      <path
+        d="m7.75 7 .55 9.7A1.5 1.5 0 0 0 9.8 18.1h4.4a1.5 1.5 0 0 0 1.5-1.4l.55-9.7"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.6"
+      />
+      <path
+        d="M10 10.25v4.5M14 10.25v4.5"
         stroke="currentColor"
         strokeLinecap="round"
         strokeLinejoin="round"
