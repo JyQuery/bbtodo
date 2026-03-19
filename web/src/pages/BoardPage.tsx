@@ -355,6 +355,63 @@ function TaskCard({
     };
   }, [isDragging]);
 
+  const deleteMenu = (
+    <div className="task-card__delete-menu" ref={confirmRef}>
+      <button
+        aria-expanded={isConfirmOpen}
+        aria-label={`Delete task ${task.title}`}
+        className="icon-button danger-button"
+        data-no-dnd="true"
+        onClick={(event) => {
+          event.stopPropagation();
+          setIsConfirmOpen((current) => !current);
+        }}
+        onPointerDown={(event) => event.stopPropagation()}
+        type="button"
+      >
+        <TrashIcon />
+      </button>
+      {isConfirmOpen ? (
+        <div
+          className="task-delete-popover"
+          data-no-dnd="true"
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+          role="alertdialog"
+        >
+          <p>Delete this task?</p>
+          <div className="task-delete-popover__actions">
+            <button
+              className="text-button"
+              data-no-dnd="true"
+              onClick={(event) => {
+                event.stopPropagation();
+                setIsConfirmOpen(false);
+              }}
+              onPointerDown={(event) => event.stopPropagation()}
+              type="button"
+            >
+              Cancel
+            </button>
+            <button
+              className="ghost-button danger-button"
+              data-no-dnd="true"
+              onClick={(event) => {
+                event.stopPropagation();
+                setIsConfirmOpen(false);
+                onDelete(task.id);
+              }}
+              onPointerDown={(event) => event.stopPropagation()}
+              type="button"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+
   return (
     <article
       {...attributes}
@@ -383,65 +440,12 @@ function TaskCard({
       }}
       tabIndex={0}
     >
-      <div className="task-card__toolbar">
-        <div className="task-card__delete-menu" ref={confirmRef}>
-          <button
-            aria-expanded={isConfirmOpen}
-            aria-label={`Delete task ${task.title}`}
-            className="icon-button danger-button"
-            data-no-dnd="true"
-            onClick={(event) => {
-              event.stopPropagation();
-              setIsConfirmOpen((current) => !current);
-            }}
-            onPointerDown={(event) => event.stopPropagation()}
-            type="button"
-          >
-            <TrashIcon />
-          </button>
-          {isConfirmOpen ? (
-            <div
-              className="task-delete-popover"
-              data-no-dnd="true"
-              onClick={(event) => event.stopPropagation()}
-              onPointerDown={(event) => event.stopPropagation()}
-              role="alertdialog"
-            >
-              <p>Delete this task?</p>
-              <div className="task-delete-popover__actions">
-                <button
-                  className="text-button"
-                  data-no-dnd="true"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setIsConfirmOpen(false);
-                  }}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  type="button"
-                >
-                  Cancel
-                </button>
-                <button
-                  className="ghost-button danger-button"
-                  data-no-dnd="true"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setIsConfirmOpen(false);
-                    onDelete(task.id);
-                  }}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  type="button"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          ) : null}
-        </div>
-      </div>
       {task.tags.length > 0 ? (
         <>
-          <p className="task-card__title">{task.title}</p>
+          <div className="task-card__title-row">
+            <p className="task-card__title">{task.title}</p>
+            {deleteMenu}
+          </div>
           <div className="task-card__footer">
             <div className="task-card__tags">
               {task.tags.map((tag) => (
@@ -472,6 +476,7 @@ function TaskCard({
           <time className="task-card__timestamp" dateTime={task.updatedAt}>
             {formatIsoDate(task.updatedAt)}
           </time>
+          {deleteMenu}
         </div>
       )}
     </article>

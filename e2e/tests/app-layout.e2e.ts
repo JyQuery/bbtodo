@@ -1022,6 +1022,16 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
     "M9.25 5.25V4.5a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1v.75"
   );
   await expect(taskDeleteButton).toHaveCSS("border-top-width", "0px");
+  const taggedCardTitleBox = await page.getByTestId("task-card-task-1").locator(".task-card__title").boundingBox();
+  const taskDeleteButtonBox = await taskDeleteButton.boundingBox();
+  expect(taggedCardTitleBox).not.toBeNull();
+  expect(taskDeleteButtonBox).not.toBeNull();
+  expect(
+    Math.abs(
+      ((taggedCardTitleBox?.y ?? 0) + (taggedCardTitleBox?.height ?? 0) / 2) -
+        ((taskDeleteButtonBox?.y ?? 0) + (taskDeleteButtonBox?.height ?? 0) / 2)
+    )
+  ).toBeLessThan(10);
   await expect(page.getByTestId("task-card-task-1").locator(".task-card__timestamp")).toHaveText("2026-03-18");
   await expect(page.getByTestId("task-card-task-1").locator(".task-card__timestamp")).toHaveAttribute(
     "datetime",
@@ -1101,9 +1111,7 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   const queueCopyCard = page.getByTestId("task-card-task-4");
   const retryCard = page.getByTestId("task-card-task-1");
   const retryCardBox = await retryCard.boundingBox();
-  const queueCopyCardBox = await queueCopyCard.boundingBox();
   expect(retryCardBox).not.toBeNull();
-  expect(queueCopyCardBox).not.toBeNull();
   await page.mouse.move(
     (retryCardBox?.x ?? 0) + (retryCardBox?.width ?? 0) / 2,
     (retryCardBox?.y ?? 0) + (retryCardBox?.height ?? 0) / 2
@@ -1115,9 +1123,11 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
     { steps: 6 }
   );
   await expect(page.getByText("Drop here")).toHaveCount(0);
+  const queueCopyCardTargetBox = await queueCopyCard.boundingBox();
+  expect(queueCopyCardTargetBox).not.toBeNull();
   await page.mouse.move(
-    (queueCopyCardBox?.x ?? 0) + (queueCopyCardBox?.width ?? 0) / 2,
-    (queueCopyCardBox?.y ?? 0) + (queueCopyCardBox?.height ?? 0) * 0.82,
+    (queueCopyCardTargetBox?.x ?? 0) + (queueCopyCardTargetBox?.width ?? 0) / 2,
+    (queueCopyCardTargetBox?.y ?? 0) + (queueCopyCardTargetBox?.height ?? 0) * 0.82,
     { steps: 18 }
   );
   await page.mouse.up();
@@ -1153,8 +1163,10 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   await expect(createdCard.locator(".task-tag")).toHaveCount(0);
   const createdCardTitleBox = await createdCard.locator(".task-card__title").boundingBox();
   const createdCardTimestampBox = await createdCard.locator(".task-card__timestamp").boundingBox();
+  const createdCardDeleteButtonBox = await createdCard.getByLabel("Delete task Ship progress note").boundingBox();
   expect(createdCardTitleBox).not.toBeNull();
   expect(createdCardTimestampBox).not.toBeNull();
+  expect(createdCardDeleteButtonBox).not.toBeNull();
   expect(
     Math.abs(
       ((createdCardTitleBox?.y ?? 0) + (createdCardTitleBox?.height ?? 0)) -
@@ -1164,6 +1176,12 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   expect(createdCardTimestampBox?.x ?? 0).toBeGreaterThan(
     ((createdCardTitleBox?.x ?? 0) + (createdCardTitleBox?.width ?? 0) * 0.65)
   );
+  expect(
+    Math.abs(
+      ((createdCardTitleBox?.y ?? 0) + (createdCardTitleBox?.height ?? 0) / 2) -
+        ((createdCardDeleteButtonBox?.y ?? 0) + (createdCardDeleteButtonBox?.height ?? 0) / 2)
+    )
+  ).toBeLessThan(10);
 
   const retryCardDragBox = await retryCard.boundingBox();
   expect(retryCardDragBox).not.toBeNull();
