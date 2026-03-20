@@ -481,11 +481,34 @@ describe("projects and tasks API", () => {
     expect(openApiResponse.statusCode).toBe(200);
     const openApi = openApiResponse.json();
     expect(openApi.openapi).toBe("3.1.0");
+    expect(openApi.components?.schemas).toEqual(
+      expect.objectContaining({
+        ErrorResponse: expect.any(Object),
+        Task: expect.any(Object),
+        TaskTagInput: expect.any(Object)
+      })
+    );
     expect(openApi.paths["/api/v1/task-tags"]).toBeDefined();
     expect(openApi.paths["/api/v1/projects"]).toBeDefined();
     expect(openApi.paths["/api/v1/projects/{projectId}/lanes"]).toBeDefined();
     expect(openApi.paths["/api/v1/projects/{projectId}/lanes/{laneId}"]).toBeDefined();
     expect(openApi.paths["/api/v1/projects/{projectId}/tasks"]).toBeDefined();
+    expect(
+      openApi.paths["/api/v1/projects/{projectId}/tasks"].post.requestBody.content["application/json"].schema.properties
+        .tags.items.anyOf[1]
+    ).toEqual({
+      $ref: "#/components/schemas/TaskTagInput"
+    });
+    expect(openApi.paths["/api/v1/projects/{projectId}/tasks"].post.responses["201"]).toEqual({
+      content: {
+        "application/json": {
+          schema: {
+            $ref: "#/components/schemas/Task"
+          }
+        }
+      },
+      description: "Default Response"
+    });
   });
 
   it("supports custom lanes plus task body and ordering updates", async () => {

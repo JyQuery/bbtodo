@@ -8,6 +8,7 @@ import swaggerUi from "@fastify/swagger-ui";
 import Fastify from "fastify";
 import {
   jsonSchemaTransform,
+  jsonSchemaTransformObject,
   serializerCompiler,
   type ZodTypeProvider,
   validatorCompiler
@@ -292,7 +293,8 @@ export function buildApp(options: {
         }
       ]
     },
-    transform: jsonSchemaTransform
+    transform: jsonSchemaTransform,
+    transformObject: jsonSchemaTransformObject
   });
   app.register(swaggerUi, {
     routePrefix: "/docs"
