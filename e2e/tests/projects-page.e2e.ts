@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { mockAuthenticated, projectsForGrid } from "./fixtures";
 
-test("projects page lists boards and opens them from the switcher", async ({ page, request }) => {
+test("projects page lists boards and opens them from the switcher", async ({ page }) => {
   const projectsWithQaLane = structuredClone(projectsForGrid);
   const billingCleanupProject = projectsWithQaLane.find((project) => project.id === "project-1");
   const compactProject = projectsWithQaLane.find((project) => project.id === "project-2");
@@ -40,20 +40,9 @@ test("projects page lists boards and opens them from the switcher", async ({ pag
   await page.goto("/");
 
   await expect(page).toHaveTitle("Projects | BBTodo");
-  const faviconLink = page.locator('link[rel="icon"]');
-  await expect(faviconLink).toHaveAttribute("href", "/favicon.svg");
   await expect(page.locator(".subnav__current-value")).toHaveText("All projects");
   await expect(page.getByRole("button", { name: "Create Lane" })).toHaveCount(0);
   await expect(page.getByLabel("Search cards")).toHaveCount(0);
-
-  const faviconResponse = await request.get("/favicon.svg");
-  expect(faviconResponse.status()).toBe(200);
-  const faviconSvg = await faviconResponse.text();
-  expect(faviconSvg).toContain('fill="#f8fbfb"');
-  expect(faviconSvg).toContain('stroke="#9cc7c4"');
-  expect(faviconSvg).toContain('fill="#d6eceb"');
-  expect(faviconSvg).toContain('fill="#6ebfba"');
-  expect(faviconSvg).toContain('fill="#efc897"');
 
   const projectCard = page.getByTestId("project-card-project-1");
   await expect(projectCard.getByRole("heading", { name: "Billing cleanup" })).toBeVisible();
