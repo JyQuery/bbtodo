@@ -23,4 +23,5 @@ mkdir data
 docker compose -f docker-compose.all-in-one.yml up -d
 ```
 
-`docker-compose.all-in-one.yml` runs the published `ghcr.io/jyquery/bbtodo-all-in-one` image and starts both the Fastify server and nginx in one container.
+`docker-compose.all-in-one.yml` runs the published `ghcr.io/jyquery/bbtodo-all-in-one` image.
+The Fastify server serves both the API and the compiled frontend on the same port, so the app is available at `http://localhost:8080` by default.
