@@ -245,6 +245,7 @@ h3 {
   grid-template-columns: minmax(0, 1fr);
   place-items: center;
   max-width: none;
+  padding: clamp(0.8rem, 3vw, 2.5rem);
 }
 
 .centered-state {
@@ -687,19 +688,44 @@ h3 {
   height: 0.72rem;
 }
 
-.subnav__search--tag-filter input {
+.subnav__tag-filter-input {
+  appearance: none;
+  -webkit-appearance: none;
   min-height: 2.18rem;
   flex: 1 1 6rem;
   width: 0;
   min-width: 5rem;
   padding: 0.34rem 0.68rem 0.34rem 0.24rem;
   border: none;
+  border-radius: 0;
   background: transparent;
   box-shadow: none;
 }
 
-.subnav__search--tag-filter input:focus {
+.subnav__tag-filter-input:focus {
   outline: none;
+}
+
+.subnav__tag-filter-input::-webkit-search-decoration,
+.subnav__tag-filter-input::-webkit-search-cancel-button,
+.subnav__tag-filter-input::-webkit-search-results-button,
+.subnav__tag-filter-input::-webkit-search-results-decoration {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.subnav__tag-filter-input.is-collapsed {
+  flex-basis: 0;
+  width: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.subnav__tag-filter-input.is-collapsed:focus {
+  flex-basis: 3.2rem;
+  width: 3.2rem;
+  min-width: 3.2rem;
+  padding: 0.34rem 0.24rem;
 }
 
 .subnav__search-toggle {
@@ -977,9 +1003,11 @@ h3 {
 .hero-panel--simple {
   justify-items: center;
   align-content: center;
-  min-height: min(60dvh, 34rem);
-  width: min(50vw, 44rem);
+  gap: clamp(1.35rem, 3vw, 2.4rem);
+  min-height: min(68dvh, 40rem);
+  width: min(62vw, 52rem);
   margin: auto;
+  padding: clamp(2.2rem, 5vw, 4.2rem) clamp(2rem, 6vw, 5rem);
   text-align: center;
 }
 
@@ -1078,6 +1106,8 @@ h3 {
 
 .hero-panel--simple .cta-row {
   width: 100%;
+  margin-top: 0.65rem;
+  gap: 1rem;
   justify-content: center;
 }
 
@@ -1116,7 +1146,8 @@ h3 {
   font-size: 0.84rem;
 }
 
-input {
+input,
+select {
   width: 100%;
   min-height: 3.25rem;
   padding: 0.95rem 1rem;
@@ -1135,7 +1166,8 @@ input::placeholder {
   color: rgba(94, 110, 112, 0.78);
 }
 
-input:focus {
+input:focus,
+select:focus {
   border-color: rgba(47, 119, 116, 0.42);
   box-shadow: 0 0 0 4px rgba(47, 119, 116, 0.08);
   transform: translateY(-1px);
@@ -1675,48 +1707,49 @@ textarea:focus {
   align-items: flex-start;
 }
 
-.lane-drag-handle {
-  display: inline-grid;
-  place-items: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 0.9rem;
-  background: var(--surface-input);
-  color: var(--ink-soft);
-  box-shadow: inset 0 1px 0 var(--surface-highlight);
+.board-column__header.is-draggable {
   cursor: grab;
-  flex: 0 0 auto;
   user-select: none;
-  transition:
-    transform 220ms var(--ease),
-    background-color 220ms var(--ease),
-    border-color 220ms var(--ease),
-    color 220ms var(--ease),
-    box-shadow 220ms var(--ease);
 }
 
-.lane-drag-handle:hover {
-  transform: translateY(-1px);
-  border-color: var(--line-strong);
-  color: var(--ink);
-  box-shadow:
-    inset 0 1px 0 var(--surface-highlight-strong),
-    0 14px 24px -22px rgba(18, 34, 36, 0.44);
-}
-
-.lane-drag-handle:active {
-  transform: translateY(1px) scale(0.98);
+.board-column__header.is-draggable:active {
   cursor: grabbing;
 }
 
-.lane-drag-handle span {
-  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
-  font-size: 1rem;
-  font-weight: 700;
-  letter-spacing: -0.18em;
-  transform: translateX(-0.08rem);
+.board-column__header-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.lane-header__actions {
+  position: relative;
+  z-index: 5;
+  flex: 0 0 auto;
+}
+
+.lane-delete-button,
+.lane-header__action-spacer {
+  width: 2rem;
+  height: 2rem;
+}
+
+.lane-header__action-spacer {
+  flex: 0 0 auto;
+}
+
+.lane-delete-popover {
+  min-width: 15rem;
+}
+
+.lane-delete-popover__field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.lane-delete-popover__field span {
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
 .board-column__content {
@@ -2811,6 +2844,7 @@ textarea:focus {
 
   .hero-panel--simple {
     width: 100%;
+    min-height: min(72dvh, 40rem);
   }
 
   .project-grid {

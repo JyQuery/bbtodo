@@ -435,6 +435,63 @@ async function mockAuthenticated(
     return project.laneSummaries.find((candidate) => candidate.id === laneIdValue) ?? null;
   }
 
+  function deleteLane(projectId: string, laneIdValue: string, destinationLaneId?: string) {
+    const project = getProject(projectId);
+    if (!project) {
+      return { status: "project_not_found" as const };
+    }
+
+    const lane = project.laneSummaries.find((candidate) => candidate.id === laneIdValue);
+    if (!lane) {
+      return { status: "lane_not_found" as const };
+    }
+
+    if (lane.systemKey) {
+      return { status: "system_lane" as const };
+    }
+
+    const remainingLanes = project.laneSummaries
+      .filter((candidate) => candidate.id !== laneIdValue)
+      .sort((left, right) => left.position - right.position);
+    const destinationLane =
+      destinationLaneId === undefined
+        ? null
+        : remainingLanes.find((candidate) => candidate.id === destinationLaneId) ?? null;
+
+    if (destinationLaneId !== undefined && !destinationLane) {
+      return { status: "destination_not_found" as const };
+    }
+
+    const laneTasks = sortTasksForProject(projectId, laneIdValue);
+    if (laneTasks.length > 0 && !destinationLane) {
+      return { status: "destination_required" as const };
+    }
+
+    if (destinationLane) {
+      const destinationTasks = sortTasksForProject(projectId, destinationLane.id);
+      const movedTaskIds = new Set(laneTasks.map((task) => task.id));
+      const orderedTasks = [...destinationTasks, ...laneTasks];
+
+      orderedTasks.forEach((task, index) => {
+        task.laneId = destinationLane.id;
+        task.position = index;
+        if (movedTaskIds.has(task.id)) {
+          task.status = destinationLane.systemKey ?? task.status;
+          task.updatedAt = "2026-03-18T08:16:00.000Z";
+        }
+      });
+    }
+
+    project.laneSummaries = remainingLanes.map((candidate, index) => ({
+      ...candidate,
+      position: index,
+      updatedAt: "2026-03-18T08:16:00.000Z"
+    }));
+    syncProject(projectId);
+
+    return { status: "deleted" as const };
+  }
+
   syncAllProjects();
 
   await page.route("**/auth/logout", async (route) => {
@@ -449,6 +506,7 @@ async function mockAuthenticated(
     const body = request.postDataJSON() as
       | {
           body?: string;
+          destinationLaneId?: string;
           laneId?: string;
           name?: string;
           position?: number;
@@ -558,6 +616,36 @@ async function mockAuthenticated(
       }
 
       await fulfillJson(route, 200, lane);
+      return;
+    }
+
+    if (request.method() === "DELETE" && url.pathname.startsWith("/api/v1/projects/") && url.pathname.includes("/lanes/")) {
+      const [projectId, laneIdValue] = [url.pathname.split("/")[4], url.pathname.split("/").pop() ?? ""];
+      const deleted = deleteLane(projectId, laneIdValue, body?.destinationLaneId);
+
+      if (deleted.status === "project_not_found" || deleted.status === "lane_not_found") {
+        await fulfillJson(route, 404, {
+          message: deleted.status === "project_not_found" ? "Project not found." : "Lane not found."
+        });
+        return;
+      }
+
+      if (deleted.status === "system_lane") {
+        await fulfillJson(route, 400, { message: "System lanes cannot be deleted." });
+        return;
+      }
+
+      if (deleted.status === "destination_required") {
+        await fulfillJson(route, 400, { message: "Select a destination lane before deleting this lane." });
+        return;
+      }
+
+      if (deleted.status === "destination_not_found") {
+        await fulfillJson(route, 400, { message: "Destination lane not found." });
+        return;
+      }
+
+      await fulfillJson(route, 204, null);
       return;
     }
 
@@ -727,21 +815,34 @@ test("login screen uses the updated cool accent palette", async ({ page }) => {
   await expect(page.locator(".metric-ribbon")).toHaveCount(0);
   await expect(page.getByText("Live shape")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Sign in with OIDC" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Read API docs" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Read API docs" })).toHaveAttribute("href", "/docs/");
   const loginPanelBox = await page.locator(".hero-panel--simple").boundingBox();
+  const loginHeadingBox = await page.getByRole("heading", { name: "BBTodo" }).boundingBox();
+  const ctaRowBox = await page.locator(".hero-panel--simple .cta-row").boundingBox();
   const viewport = page.viewportSize();
   expect(loginPanelBox).not.toBeNull();
+  expect(loginHeadingBox).not.toBeNull();
+  expect(ctaRowBox).not.toBeNull();
   expect(viewport).not.toBeNull();
   const panelCenterX = (loginPanelBox?.x ?? 0) + (loginPanelBox?.width ?? 0) / 2;
   const viewportCenterX = (viewport?.width ?? 0) / 2;
   expect(Math.abs(panelCenterX - viewportCenterX)).toBeLessThan(20);
-  expect((loginPanelBox?.width ?? 0) / (viewport?.width ?? 1)).toBeGreaterThan(0.45);
+  expect((loginPanelBox?.width ?? 0) / (viewport?.width ?? 1)).toBeGreaterThan(0.55);
+  expect((ctaRowBox?.y ?? 0) - ((loginHeadingBox?.y ?? 0) + (loginHeadingBox?.height ?? 0))).toBeGreaterThan(20);
+  const loginPanelPadding = await page
+    .locator(".hero-panel--simple")
+    .evaluate((element) => Number.parseFloat(getComputedStyle(element).paddingLeft));
+  const loginCtaGap = await page
+    .locator(".hero-panel--simple .cta-row")
+    .evaluate((element) => Number.parseFloat(getComputedStyle(element).columnGap));
+  expect(loginPanelPadding).toBeGreaterThanOrEqual(32);
+  expect(loginCtaGap).toBeGreaterThanOrEqual(16);
 
   const accent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim());
   expect(accent).toBe("#2f7774");
 });
 
-test("projects page uses a modal create flow and removes extra board chrome", async ({ page }) => {
+test("projects page uses the project switcher and removes extra board chrome", async ({ page }) => {
   const projectsForGridWithExtraLane = structuredClone(projectsForGrid);
   const billingCleanupProject = projectsForGridWithExtraLane.find((project) => project.id === "project-1");
   if (!billingCleanupProject) {
@@ -786,8 +887,11 @@ test("projects page uses a modal create flow and removes extra board chrome", as
   await expect(page.getByTestId("project-card-project-1").getByLabel("Ready for QA 0")).toBeVisible();
   await expect(page.getByTestId("project-card-project-1").locator(".project-card__lane-pill")).toHaveCount(4);
   await expect(page.getByTestId("project-card-project-1").getByText("More")).toHaveCount(0);
-  await expect(page.locator(".subnav__current")).toHaveCount(0);
-  await expect(page.getByLabel("Search projects")).toBeVisible();
+  const rootSwitcherButton = page.getByRole("button", { name: "Open project switcher" });
+  await expect(page.locator(".subnav__current")).toHaveCount(1);
+  await expect(rootSwitcherButton).toBeVisible();
+  await expect(page.locator(".subnav__current-value")).toHaveText("All projects");
+  await expect(page.getByLabel("Search projects")).toHaveCount(0);
   await expect(page.locator(".subnav__search-label")).toHaveCount(0);
   await expect(page.locator(".topbar__identity")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "API tokens" })).toHaveCount(0);
@@ -808,11 +912,10 @@ test("projects page uses a modal create flow and removes extra board chrome", as
   expect(projectsMaxWidth).toBe("none");
 
   const projectsPageBox = await page.locator(".page-shell--projects").boundingBox();
-  const createProjectLink = page.getByRole("link", { name: "Create Project" });
-  const createProjectLinkBox = await createProjectLink.boundingBox();
-  const createProjectBackground = await createProjectLink.evaluate((element) => getComputedStyle(element).backgroundColor);
-  const createProjectHeight = await createProjectLink.evaluate((element) => parseFloat(getComputedStyle(element).height));
-  const createProjectRadius = await createProjectLink.evaluate((element) => parseFloat(getComputedStyle(element).borderRadius));
+  const rootSwitcherButtonBox = await rootSwitcherButton.boundingBox();
+  const rootSwitcherBackground = await rootSwitcherButton.evaluate((element) => getComputedStyle(element).backgroundColor);
+  const rootSwitcherHeight = await rootSwitcherButton.evaluate((element) => parseFloat(getComputedStyle(element).height));
+  const rootSwitcherRadius = await rootSwitcherButton.evaluate((element) => parseFloat(getComputedStyle(element).borderRadius));
   const projectGridBox = await page.locator(".project-grid").boundingBox();
   const firstCard = page.getByTestId("project-card-project-1");
   const secondCard = page.getByTestId("project-card-project-2");
@@ -848,29 +951,39 @@ test("projects page uses a modal create flow and removes extra board chrome", as
   expect(Math.abs((firstCardBox?.height ?? 0) - (fourthCardBox?.height ?? 0))).toBeLessThan(2);
   expect(Math.abs((firstCardBox?.height ?? 0) - (fifthCardBox?.height ?? 0))).toBeLessThan(2);
   expect(Math.abs((firstCardBox?.height ?? 0) - (sixthCardBox?.height ?? 0))).toBeLessThan(2);
-  expect(Math.abs((firstCardBox?.y ?? 0) - (secondCardBox?.y ?? 0))).toBeLessThan(16);
-  expect(Math.abs((firstCardBox?.y ?? 0) - (thirdCardBox?.y ?? 0))).toBeLessThan(16);
-  expect(Math.abs((firstCardBox?.y ?? 0) - (fourthCardBox?.y ?? 0))).toBeLessThan(16);
-  expect(Math.abs((firstCardBox?.y ?? 0) - (fifthCardBox?.y ?? 0))).toBeLessThan(16);
-  expect(Math.abs((firstCardBox?.y ?? 0) - (sixthCardBox?.y ?? 0))).toBeLessThan(16);
+  expect(Math.abs((firstCardBox?.y ?? 0) - (secondCardBox?.y ?? 0))).toBeLessThan(20);
+  expect(Math.abs((firstCardBox?.y ?? 0) - (thirdCardBox?.y ?? 0))).toBeLessThan(20);
+  expect(Math.abs((firstCardBox?.y ?? 0) - (fourthCardBox?.y ?? 0))).toBeLessThan(20);
+  expect(Math.abs((firstCardBox?.y ?? 0) - (fifthCardBox?.y ?? 0))).toBeLessThan(20);
+  expect(Math.abs((firstCardBox?.y ?? 0) - (sixthCardBox?.y ?? 0))).toBeLessThan(20);
   expect((secondCardBox?.x ?? 0) - ((firstCardBox?.x ?? 0) + (firstCardBox?.width ?? 0))).toBeLessThan(32);
   expect((firstCardBox?.width ?? 0)).toBeLessThan(320);
-  expect(createProjectLinkBox).not.toBeNull();
-  expect((createProjectLinkBox?.x ?? 0)).toBeGreaterThan(120);
-  expect(createProjectBackground).not.toBe("rgba(0, 0, 0, 0)");
-  expect(createProjectHeight).toBeGreaterThan(40);
-  expect(createProjectRadius).toBeGreaterThan(20);
-  await expect(page.locator(".subnav__action-mark")).toHaveText("+");
+  expect(rootSwitcherButtonBox).not.toBeNull();
+  expect((rootSwitcherButtonBox?.x ?? 0)).toBeGreaterThan(120);
+  expect(rootSwitcherBackground).not.toBe("rgba(0, 0, 0, 0)");
+  expect(rootSwitcherHeight).toBeGreaterThan(36);
+  expect(rootSwitcherRadius).toBeGreaterThan(15);
+  await expect(page.getByRole("link", { name: "Create Project" })).toHaveCount(0);
+  await expect(page.locator(".subnav__action-mark")).toHaveCount(0);
 
-  await page.getByLabel("Search projects").fill("partner");
-  await expect(page.locator(".project-grid .project-card")).toHaveCount(1);
-  await expect(page.getByTestId("project-card-project-6")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "No boards match that search." })).toHaveCount(0);
-  await page.getByLabel("Search projects").fill("zzzz");
-  await expect(page.locator(".project-grid .project-card")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "No boards match that search." })).toBeVisible();
-  await page.getByLabel("Search projects").fill("");
+  await rootSwitcherButton.click();
+  const rootSwitcherInput = page.getByLabel("Project switcher input");
+  await expect(page.getByRole("button", { name: "Rename Project" })).toHaveCount(0);
+  await rootSwitcherInput.fill("partner");
+  await expect(page.getByRole("button", { name: "Open project Partner audit" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open project Billing cleanup" })).toHaveCount(0);
   await expect(page.locator(".project-grid .project-card")).toHaveCount(6);
+  await page.getByRole("button", { name: "Open project Partner audit" }).click();
+
+  await expect(page).toHaveURL(/\/projects\/project-6$/);
+  await expect(page.locator(".subnav__current-value")).toHaveText("Partner audit");
+  await page.goto("/");
+  await expect(page.locator(".subnav__current-value")).toHaveText("All projects");
+  await rootSwitcherButton.click();
+  await rootSwitcherInput.fill("zzzz");
+  await expect(page.getByText("No projects match that input yet.")).toBeVisible();
+  await expect(page.locator(".project-grid .project-card")).toHaveCount(6);
+  await expect(page.getByRole("heading", { name: "No boards match that search." })).toHaveCount(0);
 
   await page.getByLabel("Open account menu").click();
   await expect(page.getByRole("button", { pressed: true, name: "Sea" })).toBeVisible();
@@ -885,12 +998,9 @@ test("projects page uses a modal create flow and removes extra board chrome", as
   expect(midnightAccent).toBe("#58c6c0");
   await page.getByLabel("Open account menu").click();
 
-  await createProjectLink.click();
-
-  const dialog = page.getByRole("dialog", { name: "Create Project" });
-  await expect(dialog).toBeVisible();
-  await dialog.getByLabel("Project name").fill("API polish");
-  await dialog.getByRole("button", { exact: true, name: "Create Project" }).click();
+  await rootSwitcherButton.click();
+  await rootSwitcherInput.fill("API polish");
+  await page.getByRole("button", { name: "Create Project" }).click();
 
   await expect(page).toHaveURL(/\/projects\/project-7$/);
   await expect(page).toHaveTitle("API polish | BBTodo");
@@ -1006,7 +1116,7 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   await expect(page.getByLabel("Filter by tags")).toBeVisible();
   await expect(page.getByRole("button", { name: "Show tag filter suggestions" })).toBeVisible();
   await expect(page.locator(".subnav__search-label")).toHaveCount(0);
-  await expect(page.getByLabel("Filter by tags")).toHaveAttribute("placeholder", "tags");
+  await expect(page.getByLabel("Filter by tags")).toHaveAttribute("placeholder", "tag");
   const currentProjectBackground = await page
     .locator(".subnav__current")
     .evaluate((element) => getComputedStyle(element).backgroundColor);
@@ -1023,7 +1133,7 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
 
   await expect(page.locator(".board-column")).toHaveCount(3);
   await expect(page.locator(".board-column__note")).toHaveCount(0);
-  await expect(page.locator(".board-column__header > span")).toHaveCount(0);
+  await expect(page.locator(".lane-drag-handle")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Move to / })).toHaveCount(0);
   await expect(page.getByTestId("task-card-task-1").locator(".label-chip")).toHaveCount(0);
   const initialTaskTags = page.getByTestId("task-card-task-1").locator(".task-tag");
@@ -1144,19 +1254,53 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   await tagFilterDropdown.getByRole("button", { name: "Add tag filter release" }).click();
   const releaseTagFilterChip = tagFilterField.locator(".subnav__tag-filter-chip", { hasText: "release" });
   await expect(releaseTagFilterChip).toBeVisible();
+  await expect(tagFilterField.locator(".subnav__tag-filter-chip")).toHaveCount(1);
   await expect(releaseTagFilterChip).toHaveCSS("background-color", "rgb(242, 229, 255)");
+  await expect(tagFilterInput).toHaveClass(/is-collapsed/);
+  await expect
+    .poll(async () => tagFilterInput.evaluate((node) => getComputedStyle(node).appearance))
+    .toBe("none");
+  await expect(tagFilterInput).toHaveAttribute("placeholder", "");
   await expect(tagFilterInput).toHaveValue("");
   await expect(page.getByText("Review retry scope")).toBeVisible();
   await expect(page.getByText("Tighten callback logging")).toHaveCount(0);
   await expect(page.getByText("Queue copy pass")).toHaveCount(0);
-  await tagFilterInput.fill("backend");
+  await page
+    .getByTestId("task-card-task-1")
+    .getByRole("button", { name: "backend" })
+    .click({ force: true });
   const backendTagFilterChip = tagFilterField.locator(".subnav__tag-filter-chip", { hasText: "backend" });
+  await expect(releaseTagFilterChip).toHaveCount(0);
   await expect(backendTagFilterChip).toBeVisible();
+  await expect(tagFilterField.locator(".subnav__tag-filter-chip")).toHaveCount(1);
   await expect(backendTagFilterChip).toHaveCSS("background-color", "rgb(255, 241, 217)");
+  await expect(tagFilterInput).toHaveClass(/is-collapsed/);
+  await expect(tagFilterInput).toHaveAttribute("placeholder", "");
   await expect(tagFilterInput).toHaveValue("");
   await expect(page.getByText("Review retry scope")).toBeVisible();
   await expect(page.getByText("Tighten callback logging")).toHaveCount(0);
   await expect(page.getByText("Queue copy pass")).toHaveCount(0);
+  await page.getByRole("button", { name: "Show tag filter suggestions" }).click();
+  await tagFilterDropdown.getByRole("button", { name: "Add tag filter ops" }).click();
+  const opsTagFilterChip = tagFilterField.locator(".subnav__tag-filter-chip", { hasText: "ops" });
+  await expect(backendTagFilterChip).toHaveCount(0);
+  await expect(opsTagFilterChip).toBeVisible();
+  await expect(tagFilterField.locator(".subnav__tag-filter-chip")).toHaveCount(1);
+  await expect(tagFilterInput).toHaveClass(/is-collapsed/);
+  await expect(page.getByText("Remove healthcheck loop")).toBeVisible();
+  await expect(page.getByText("Review retry scope")).toHaveCount(0);
+  await opsTagFilterChip.getByRole("button", { name: "Remove tag filter ops" }).click();
+  await expect(tagFilterField.locator(".subnav__tag-filter-chip")).toHaveCount(0);
+  await expect(tagFilterInput).toHaveValue("");
+  await expect(page.getByText("Review retry scope")).toBeVisible();
+  await expect(page.getByText("Queue copy pass")).toBeVisible();
+  await page.goto("/projects/project-1?tags=ops,backend");
+  const routedOpsTagFilterChip = tagFilterField.locator(".subnav__tag-filter-chip", { hasText: "ops" });
+  await expect(routedOpsTagFilterChip).toBeVisible();
+  await expect(tagFilterField.locator(".subnav__tag-filter-chip", { hasText: "backend" })).toHaveCount(0);
+  await expect(page.getByText("Remove healthcheck loop")).toBeVisible();
+  await expect(page.getByText("Review retry scope")).toHaveCount(0);
+  await routedOpsTagFilterChip.getByRole("button", { name: "Remove tag filter ops" }).click();
   await page.goto("/projects/project-1");
   await expect(page.getByTestId("task-card-task-4")).toBeVisible();
 
@@ -1204,7 +1348,12 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   const laneHeadings = page.locator(".board-column__header h2");
   await expect(laneHeadings).toHaveText(["Todo", "In Progress", "Done", "Ready for QA"]);
 
-  await page.getByLabel("Reorder lane Ready for QA").dragTo(page.getByTestId("board-column-in_progress"), {
+  const qaLaneHeader = page.getByTestId("lane-header-project-1-lane-custom-1");
+  const qaLaneDeleteButton = page.getByLabel("Delete lane Ready for QA");
+  await expect(qaLaneDeleteButton).toBeVisible();
+  await expect(qaLaneDeleteButton).toHaveCSS("border-top-width", "0px");
+
+  await qaLaneHeader.dragTo(page.getByTestId("board-column-in_progress"), {
     targetPosition: { x: 16, y: 40 }
   });
   await expect(laneHeadings).toHaveText(["Todo", "Ready for QA", "In Progress", "Done"]);
@@ -1214,15 +1363,16 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
 
   const laneInput = page.getByLabel("New task title for Ready for QA");
   await expect(laneInput).toBeVisible();
-  await laneInput.fill("Ship progress note");
+  // Keep this title comfortably on one line so the timestamp-alignment check is stable in CI.
+  await laneInput.fill("Ship note");
   await laneInput.press("Enter");
 
-  await expect(page.getByText("Ship progress note")).toBeVisible();
+  await expect(page.getByText("Ship note")).toBeVisible();
   const createdCard = page.getByTestId("task-card-task-5");
   await expect(createdCard.locator(".task-tag")).toHaveCount(0);
   const createdCardTitleBox = await createdCard.locator(".task-card__title").boundingBox();
   const createdCardTimestampBox = await createdCard.locator(".task-card__timestamp").boundingBox();
-  const createdCardDeleteButtonBox = await createdCard.getByLabel("Delete task Ship progress note").boundingBox();
+  const createdCardDeleteButtonBox = await createdCard.getByLabel("Delete task Ship note").boundingBox();
   expect(createdCardTitleBox).not.toBeNull();
   expect(createdCardTimestampBox).not.toBeNull();
   expect(createdCardDeleteButtonBox).not.toBeNull();
@@ -1274,10 +1424,24 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   await expect(todoColumn.getByText("Review retry scope")).toHaveCount(0);
 
   await expect(page.locator(".column-empty")).toHaveCount(0);
-  await createdCard.getByLabel("Delete task Ship progress note").click();
+  await createdCard.getByLabel("Delete task Ship note").click();
   await expect(createdCard.getByRole("button", { exact: true, name: "Delete" })).toBeVisible();
   await createdCard.getByRole("button", { exact: true, name: "Delete" }).click();
-  await expect(page.getByText("Ship progress note")).toHaveCount(0);
+  await expect(page.getByText("Ship note")).toHaveCount(0);
+
+  await qaLaneDeleteButton.click();
+  const laneDeleteDialog = page.getByRole("alertdialog", { name: "Delete lane Ready for QA" });
+  await expect(laneDeleteDialog).toBeVisible();
+  await expect(laneDeleteDialog.getByLabel("Move tasks from Ready for QA to")).toBeVisible();
+  await laneDeleteDialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("heading", { name: "Ready for QA" })).toBeVisible();
+
+  await qaLaneDeleteButton.click();
+  await laneDeleteDialog.getByLabel("Move tasks from Ready for QA to").selectOption(laneId("project-1", "done"));
+  await laneDeleteDialog.getByRole("button", { exact: true, name: "Delete" }).click();
+  await expect(page.getByRole("heading", { name: "Ready for QA" })).toHaveCount(0);
+  await expect(page.getByTestId("board-column-done").getByText("Review retry scope")).toBeVisible();
+  await expect(qaColumn).toHaveCount(0);
 });
 
 test("board nav switcher changes, renames, and creates projects", async ({ page }) => {

@@ -81,3 +81,11 @@ export function parseTagInput(value: string) {
 export function formatTagInput(tags: string[]) {
   return tags.join(", ");
 }
+
+export function parseSingleTagInput(value: string) {
+  return parseTagInput(value)[0] ?? "";
+}
+
+export function formatSingleTagInput(value: string | null | undefined) {
+  return parseSingleTagInput(value ?? "");
+}

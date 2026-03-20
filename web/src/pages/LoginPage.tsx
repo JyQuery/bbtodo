@@ -14,7 +14,7 @@ export function LoginPage() {
             <button className="primary-button" onClick={() => (window.location.href = "/auth/login")} type="button">
               Sign in with OIDC
             </button>
-            <a className="ghost-button" href="/docs">
+            <a className="ghost-button" href="/docs/">
               Read API docs
             </a>
           </div>

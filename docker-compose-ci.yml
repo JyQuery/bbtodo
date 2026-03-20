@@ -1,0 +1,38 @@
+name: bbtodo-ci
+
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    environment:
+      CLIENT_URL: http://127.0.0.1:38080
+      SESSION_SECRET: ci-session-secret-12345678901234567890
+      OIDC_ISSUER: https://accounts.google.com
+      OIDC_CLIENT_ID: bbtodo-ci
+      OIDC_CLIENT_SECRET: ci-secret
+      OIDC_SCOPES: openid profile email
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    ports:
+      - "33000:3000"
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    depends_on:
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    ports:
+      - "38080:80"
