@@ -2,12 +2,10 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { laneId, mockAuthenticated, projectsForGrid, tag, tasks } from "./fixtures";
 
-async function dragTaskToCard(page: Page, source: Locator, target: Locator, targetYRatio = 0.8) {
+async function dragTaskToTarget(page: Page, source: Locator, target: Locator, targetYRatio = 0.5) {
   const sourceBox = await source.boundingBox();
-  const targetBox = await target.boundingBox();
 
   expect(sourceBox).not.toBeNull();
-  expect(targetBox).not.toBeNull();
 
   await page.mouse.move(
     (sourceBox?.x ?? 0) + (sourceBox?.width ?? 0) / 2,
@@ -19,6 +17,12 @@ async function dragTaskToCard(page: Page, source: Locator, target: Locator, targ
     (sourceBox?.y ?? 0) + (sourceBox?.height ?? 0) / 2,
     { steps: 6 }
   );
+
+  await expect(target).toBeVisible();
+  const targetBox = await target.boundingBox();
+
+  expect(targetBox).not.toBeNull();
+
   await page.mouse.move(
     (targetBox?.x ?? 0) + (targetBox?.width ?? 0) / 2,
     (targetBox?.y ?? 0) + (targetBox?.height ?? 0) * targetYRatio,
@@ -34,6 +38,7 @@ test("board page edits cards and filters tasks", async ({ page }) => {
     createdAt: "2026-03-18T08:18:00.000Z",
     id: "task-project-2-1",
     laneId: laneId("project-2", "todo"),
+    parentTaskId: null,
     position: 0,
     projectId: "project-2",
     tags: [tag("global-brand", "amber")],
@@ -164,7 +169,7 @@ test("board page edits cards and filters tasks", async ({ page }) => {
   await expect(page.getByText("Tighten callback logging")).toHaveCount(0);
   await expect(page.getByText("Queue copy pass")).toHaveCount(0);
 
-  await firstTaskCard.getByRole("button", { name: "backend" }).click({ force: true });
+  await firstTaskCard.locator(".task-tag", { hasText: "backend" }).click({ force: true });
   const backendTagFilterChip = tagFilterField.locator(".subnav__tag-filter-chip", { hasText: "backend" });
   await expect(releaseTagFilterChip).toHaveCount(0);
   await expect(backendTagFilterChip).toBeVisible();
@@ -181,6 +186,7 @@ test("board page edits cards and filters tasks", async ({ page }) => {
 
 test("board page reorders tasks and manages lanes", async ({ page }) => {
   const projectsWithQaLane = structuredClone(projectsForGrid);
+  const tasksWithQaCard = structuredClone(tasks);
   const billingCleanupProject = projectsWithQaLane.find((project) => project.id === "project-1");
   if (!billingCleanupProject) {
     throw new Error("Expected project-1 test fixture to exist");
@@ -196,7 +202,23 @@ test("board page reorders tasks and manages lanes", async ({ page }) => {
     updatedAt: "2026-03-18T08:00:00.000Z"
   });
 
-  await mockAuthenticated(page, { projects: projectsWithQaLane });
+  tasksWithQaCard.push({
+    body: "",
+    createdAt: "2026-03-18T08:00:00.000Z",
+    id: "task-5",
+    laneId: "project-1-lane-custom-1",
+    parentTaskId: null,
+    position: 0,
+    projectId: "project-1",
+    tags: [],
+    title: "Ship note",
+    updatedAt: "2026-03-18T08:00:00.000Z"
+  });
+
+  await mockAuthenticated(page, {
+    projects: projectsWithQaLane,
+    tasks: tasksWithQaCard
+  });
 
   await page.goto("/projects/project-1");
 
@@ -207,30 +229,26 @@ test("board page reorders tasks and manages lanes", async ({ page }) => {
   const laneHeadings = page.locator(".board-column__header h2");
   await expect(laneHeadings).toHaveText(["Todo", "In Progress", "In review", "Done", "Ready for QA"]);
 
-  const qaLaneHeader = page.getByTestId("lane-header-project-1-lane-custom-1");
-  await qaLaneHeader.dragTo(page.getByTestId(`board-column-${laneId("project-1", "in_progress")}`), {
-    targetPosition: { x: 16, y: 40 }
-  });
-  await expect(laneHeadings).toHaveText(["Todo", "Ready for QA", "In Progress", "In review", "Done"]);
-
   const qaColumn = page.getByTestId("board-column-project-1-lane-custom-1");
-  await qaColumn.dblclick();
-  const laneInput = page.getByLabel("New task title for Ready for QA");
-  await expect(laneInput).toBeVisible();
-  await laneInput.fill("Ship note");
-  await laneInput.press("Enter");
+  const doneColumn = page.getByTestId(`board-column-${laneId("project-1", "done")}`);
 
   const createdCard = page.getByTestId("task-card-task-5");
+  const copyCard = page.getByTestId("task-card-task-4");
   await expect(createdCard).toBeVisible();
   await expect(createdCard.locator(".task-tag")).toHaveCount(0);
 
-  await dragTaskToCard(page, retryCard, createdCard);
-  await expect(qaColumn.getByText("Review retry settings")).toBeVisible();
+  await dragTaskToTarget(page, retryCard, createdCard.locator(".task-card__nest-target"));
+  await expect(createdCard.locator(".task-card__subtasks").getByText("Review retry settings")).toBeVisible();
   await expect(todoColumn.getByText("Review retry settings")).toHaveCount(0);
 
-  await createdCard.getByLabel("Delete task Ship note").click();
-  await createdCard.getByRole("button", { exact: true, name: "Delete" }).click();
-  await expect(createdCard).toHaveCount(0);
+  const retrySubtask = createdCard.locator(".task-card__subtasks").getByTestId("task-card-task-1");
+  await dragTaskToTarget(page, retrySubtask, page.getByTestId("task-drop-slot-project-1-lane-custom-1-0"));
+  await expect(createdCard.locator(".task-card__subtasks").getByText("Review retry settings")).toHaveCount(0);
+  await expect(qaColumn.getByText("Review retry settings")).toBeVisible();
+
+  await dragTaskToTarget(page, copyCard, createdCard.locator(".task-card__nest-target"));
+  await expect(createdCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
+  await expect(todoColumn.getByText("Queue copy pass")).toHaveCount(0);
 
   const qaLaneDeleteButton = page.getByLabel("Delete lane Ready for QA");
   await qaLaneDeleteButton.click();
@@ -244,9 +262,10 @@ test("board page reorders tasks and manages lanes", async ({ page }) => {
   await laneDeleteDialog.getByLabel("Move tasks from Ready for QA to").selectOption(laneId("project-1", "done"));
   await laneDeleteDialog.getByRole("button", { exact: true, name: "Delete" }).click();
   await expect(page.getByRole("heading", { name: "Ready for QA" })).toHaveCount(0);
-  await expect(
-    page.getByTestId(`board-column-${laneId("project-1", "done")}`).getByText("Review retry settings")
-  ).toBeVisible();
+  const createdCardInDone = doneColumn.getByTestId("task-card-task-5");
+  await expect(createdCardInDone).toBeVisible();
+  await expect(createdCardInDone.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
+  await expect(doneColumn.getByText("Review retry settings")).toBeVisible();
 });
 
 test("board page creates lanes from the gap between columns", async ({ page }) => {

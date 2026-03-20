@@ -36,8 +36,14 @@ import {
 import { BoardSkeleton, CloseIcon, EmptyState, ErrorBanner, TrashIcon } from "../components/ui";
 import { useDismissableLayer } from "../hooks/useDismissableLayer";
 
-type TaskIdsByLane = Record<string, string[]>;
 type TaskEditorView = "preview" | "source";
+type TaskMoveTarget = {
+  kind: "nest" | "reorder";
+  laneId: string;
+  parentTaskId: string | null;
+  position: number;
+  taskId?: string;
+};
 
 const taskSortableTransition = {
   duration: 220,
@@ -52,6 +58,18 @@ const taskDropAnimation = {
 const taskCollisionDetection: CollisionDetection = (args) => {
   const pointerHits = pointerWithin(args);
   if (pointerHits.length > 0) {
+    const nestTargetHits = pointerHits.filter((collision) => {
+      const container = args.droppableContainers.find(
+        (droppableContainer) => droppableContainer.id === collision.id
+      );
+
+      return container?.data.current?.type === "nest-target";
+    });
+
+    if (nestTargetHits.length > 0) {
+      return nestTargetHits;
+    }
+
     const slotHits = pointerHits.filter((collision) => {
       const container = args.droppableContainers.find(
         (droppableContainer) => droppableContainer.id === collision.id
@@ -90,14 +108,29 @@ function compareTasks(left: Task, right: Task) {
   return left.updatedAt < right.updatedAt ? 1 : -1;
 }
 
-function buildTaskIdsByLane(lanes: BoardLane[], tasks: Task[]) {
-  const taskIdsByLane = Object.fromEntries(lanes.map((lane) => [lane.id, [] as string[]])) satisfies TaskIdsByLane;
+function listSiblingTasks(tasks: Task[], laneId: string, parentTaskId: string | null, excludedTaskId?: string) {
+  return tasks
+    .filter(
+      (task) =>
+        task.id !== excludedTaskId &&
+        task.laneId === laneId &&
+        task.parentTaskId === parentTaskId
+    )
+    .slice()
+    .sort(compareTasks);
+}
+
+function buildTopLevelTaskIdsByLane(lanes: BoardLane[], tasks: Task[]) {
+  const taskIdsByLane = Object.fromEntries(lanes.map((lane) => [lane.id, [] as string[]])) satisfies Record<
+    string,
+    string[]
+  >;
 
   tasks
     .slice()
     .sort(compareTasks)
     .forEach((task) => {
-      if (!task.laneId || !(task.laneId in taskIdsByLane)) {
+      if (task.parentTaskId !== null || !task.laneId || !(task.laneId in taskIdsByLane)) {
         return;
       }
 
@@ -107,77 +140,132 @@ function buildTaskIdsByLane(lanes: BoardLane[], tasks: Task[]) {
   return taskIdsByLane;
 }
 
-function findTaskLocation(taskIdsByLane: TaskIdsByLane, taskId: string) {
-  for (const [laneId, taskIds] of Object.entries(taskIdsByLane)) {
-    const index = taskIds.indexOf(taskId);
-    if (index !== -1) {
-      return { index, laneId };
-    }
-  }
+function buildSubtaskIdsByParent(tasks: Task[]) {
+  const subtaskIdsByParent = new Map<string, string[]>();
 
-  return null;
+  tasks
+    .filter((task) => task.parentTaskId !== null)
+    .slice()
+    .sort(compareTasks)
+    .forEach((task) => {
+      if (!task.parentTaskId) {
+        return;
+      }
+
+      const childTaskIds = subtaskIdsByParent.get(task.parentTaskId) ?? [];
+      childTaskIds.push(task.id);
+      subtaskIdsByParent.set(task.parentTaskId, childTaskIds);
+    });
+
+  return subtaskIdsByParent;
 }
 
-function moveTaskId(
-  taskIdsByLane: TaskIdsByLane,
+function taskHasSubtasks(tasks: Task[], taskId: string) {
+  return tasks.some((task) => task.parentTaskId === taskId);
+}
+
+function canTaskBecomeSubtask(tasks: Task[], task: Task) {
+  return task.parentTaskId === null && !taskHasSubtasks(tasks, task.id);
+}
+
+function findTaskLocation(tasks: Task[], taskId: string) {
+  const task = tasks.find((candidate) => candidate.id === taskId);
+  if (!task || !task.laneId) {
+    return null;
+  }
+
+  return {
+    laneId: task.laneId,
+    parentTaskId: task.parentTaskId,
+    position: task.position
+  };
+}
+
+function applyTaskMove(
+  tasks: Task[],
   taskId: string,
   targetLaneId: string,
+  targetParentTaskId: string | null,
   targetIndex: number
 ) {
-  const source = findTaskLocation(taskIdsByLane, taskId);
-  if (!source || !(targetLaneId in taskIdsByLane)) {
-    return taskIdsByLane;
+  const sourceTask = tasks.find((task) => task.id === taskId);
+  if (!sourceTask || !sourceTask.laneId) {
+    return tasks;
   }
 
-  const nextTaskIdsByLane = Object.fromEntries(
-    Object.entries(taskIdsByLane).map(([laneId, taskIds]) => [laneId, [...taskIds]])
-  ) satisfies TaskIdsByLane;
-
-  nextTaskIdsByLane[source.laneId].splice(source.index, 1);
-  const destinationTaskIds = nextTaskIdsByLane[targetLaneId];
+  const sourceSiblings = listSiblingTasks(tasks, sourceTask.laneId, sourceTask.parentTaskId);
+  const sourceIndex = sourceSiblings.findIndex((task) => task.id === taskId);
+  const sameGroup =
+    sourceTask.laneId === targetLaneId && sourceTask.parentTaskId === targetParentTaskId;
+  const nextSiblingTasks = listSiblingTasks(tasks, targetLaneId, targetParentTaskId, taskId);
   const normalizedTargetIndex =
-    source.laneId === targetLaneId && source.index < targetIndex ? targetIndex - 1 : targetIndex;
-  const clampedTargetIndex = Math.max(0, Math.min(normalizedTargetIndex, destinationTaskIds.length));
+    sameGroup && sourceIndex !== -1 && sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+  const clampedTargetIndex = Math.max(0, Math.min(normalizedTargetIndex, nextSiblingTasks.length));
 
-  if (source.laneId === targetLaneId && source.index === clampedTargetIndex) {
-    return taskIdsByLane;
+  if (sameGroup && sourceIndex === clampedTargetIndex) {
+    return tasks;
   }
 
-  destinationTaskIds.splice(clampedTargetIndex, 0, taskId);
-  return nextTaskIdsByLane;
-}
+  const nextTasksInSourceGroup = listSiblingTasks(
+    tasks,
+    sourceTask.laneId,
+    sourceTask.parentTaskId,
+    taskId
+  );
+  const nextTasksInTargetGroup = [...nextSiblingTasks];
+  nextTasksInTargetGroup.splice(clampedTargetIndex, 0, {
+    ...sourceTask,
+    laneId: targetLaneId,
+    parentTaskId: targetParentTaskId
+  });
 
-function applyTaskMove(tasks: Task[], lanes: BoardLane[], taskId: string, targetLaneId: string, targetIndex: number) {
-  const currentTaskIdsByLane = buildTaskIdsByLane(lanes, tasks);
-  const nextTaskIdsByLane = moveTaskId(currentTaskIdsByLane, taskId, targetLaneId, targetIndex);
-  const nextTaskPositions = new Map<string, { laneId: string; position: number }>();
-
-  Object.entries(nextTaskIdsByLane).forEach(([laneId, taskIds]) => {
-    taskIds.forEach((currentTaskId, position) => {
-      nextTaskPositions.set(currentTaskId, { laneId, position });
-    });
+  const nextTaskPositions = new Map<string, number>();
+  nextTasksInSourceGroup.forEach((task, position) => {
+    nextTaskPositions.set(task.id, position);
+  });
+  nextTasksInTargetGroup.forEach((task, position) => {
+    nextTaskPositions.set(task.id, position);
   });
 
   let hasChanges = false;
   const nextTasks = tasks.map((task) => {
-    const nextLocation = nextTaskPositions.get(task.id);
-    if (!nextLocation) {
-      return task;
+    let nextTask = task;
+
+    if (task.id === taskId) {
+      nextTask = {
+        ...nextTask,
+        laneId: targetLaneId,
+        parentTaskId: targetParentTaskId
+      };
+    } else if (
+      sourceTask.parentTaskId === null &&
+      task.parentTaskId === sourceTask.id &&
+      task.laneId !== targetLaneId
+    ) {
+      nextTask = {
+        ...nextTask,
+        laneId: targetLaneId
+      };
+    }
+
+    const nextPosition = nextTaskPositions.get(task.id);
+    if (nextPosition !== undefined && nextTask.position !== nextPosition) {
+      nextTask = {
+        ...nextTask,
+        position: nextPosition
+      };
     }
 
     if (
-      task.laneId === nextLocation.laneId &&
-      task.position === nextLocation.position
+      nextTask.laneId === task.laneId &&
+      nextTask.parentTaskId === task.parentTaskId &&
+      nextTask.position === task.position
     ) {
       return task;
     }
 
     hasChanges = true;
-    return {
-      ...task,
-      laneId: nextLocation.laneId,
-      position: nextLocation.position
-    };
+    return nextTask;
   });
 
   return hasChanges ? nextTasks : tasks;
@@ -401,16 +489,19 @@ function LaneDropArea({
 function TaskDropSlot({
   isVisible,
   laneId,
+  parentTaskId,
   position
 }: {
   isVisible: boolean;
   laneId: string;
+  parentTaskId: string | null;
   position: number;
 }) {
   const { isOver, setNodeRef } = useDroppable({
-    id: `slot:${laneId}:${position}`,
+    id: `slot:${laneId}:${parentTaskId ?? "root"}:${position}`,
     data: {
       laneId,
+      parentTaskId,
       position,
       type: "slot"
     }
@@ -424,7 +515,11 @@ function TaskDropSlot({
     <div
       aria-hidden="true"
       className={`task-drop-slot${isOver ? " is-active" : ""}`}
-      data-testid={`task-drop-slot-${laneId}-${position}`}
+      data-testid={
+        parentTaskId
+          ? `task-drop-slot-${parentTaskId}-${position}`
+          : `task-drop-slot-${laneId}-${position}`
+      }
       ref={setNodeRef}
     />
   );
@@ -460,21 +555,31 @@ function TaskCardPreview({
 }
 
 function TaskCard({
+  activeTagKey,
   isDragDisabled,
+  isNestTarget,
   laneId,
   onDelete,
   onOpen,
   onTagSelect,
-  activeTagKey,
+  showNestTarget,
+  showSubtaskSlots,
+  subtasks,
+  displaySubtasks,
   task,
   taskIndex
 }: {
   activeTagKey: string | null;
   isDragDisabled: boolean;
+  isNestTarget: boolean;
   laneId: string;
   onDelete: (taskId: string) => void;
   onOpen: (task: Task) => void;
   onTagSelect: (tag: string) => void;
+  showNestTarget: boolean;
+  showSubtaskSlots: boolean;
+  subtasks: Task[];
+  displaySubtasks: Task[];
   task: Task;
   taskIndex: number;
 }) {
@@ -487,8 +592,19 @@ function TaskCard({
     transition: taskSortableTransition,
     data: {
       laneId,
+      parentTaskId: task.parentTaskId,
       taskId: task.id,
       type: "task"
+    }
+  });
+  const { setNodeRef: setNestTargetRef } = useDroppable({
+    id: `nest:${task.id}`,
+    disabled: !showNestTarget,
+    data: {
+      laneId,
+      parentTaskId: task.id,
+      taskId: task.id,
+      type: "nest-target"
     }
   });
 
@@ -568,54 +684,99 @@ function TaskCard({
 
   return (
     <article
-      {...attributes}
-      {...listeners}
-      className={`task-card${isDragDisabled ? "" : " is-draggable"}${isConfirmOpen ? " is-confirm-open" : ""}${isDragging ? " is-dragging" : ""}`}
+      className={`task-card${isDragDisabled ? "" : " is-draggable"}${isConfirmOpen ? " is-confirm-open" : ""}${isDragging ? " is-dragging" : ""}${task.parentTaskId ? " task-card--subtask" : ""}${subtasks.length > 0 ? " has-subtasks" : ""}${isNestTarget ? " is-nest-target" : ""}`}
       data-testid={`task-card-${task.id}`}
-      onClick={() => {
-        if (suppressClickRef.current) {
-          return;
-        }
-
-        onOpen(task);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onOpen(task);
-        }
-      }}
       ref={setNodeRef}
-      role="button"
       style={{
         ...itemStyle(taskIndex),
         transform: CSS.Transform.toString(transform),
         transition
       }}
-      tabIndex={0}
     >
-      <div className="task-card__title-row">
-        <p className="task-card__title">{task.title}</p>
-        {deleteMenu}
+      <div className="task-card__surface-wrap">
+        {showNestTarget ? (
+          <div
+            aria-hidden="true"
+            className={`task-card__nest-target${isNestTarget ? " is-active" : ""}`}
+            ref={setNestTargetRef}
+          />
+        ) : null}
+        <div
+          {...attributes}
+          {...listeners}
+          className="task-card__surface"
+          onClick={() => {
+            if (suppressClickRef.current) {
+              return;
+            }
+
+            onOpen(task);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onOpen(task);
+            }
+          }}
+          role="button"
+          tabIndex={0}
+        >
+          <div className="task-card__title-row">
+            <p className="task-card__title">{task.title}</p>
+            {deleteMenu}
+          </div>
+          {task.tags.length > 0 ? (
+            <div className="task-card__tags">
+              {task.tags.map((tag) => (
+                <button
+                  className={`task-tag${activeTagKey === normalizeTagKey(tag.label) ? " is-active" : ""}`}
+                  data-no-dnd="true"
+                  key={tag.label}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onTagSelect(tag.label);
+                  }}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  style={getTaskTagStyle(tag.color)}
+                  type="button"
+                >
+                  {tag.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </div>
-      {task.tags.length > 0 ? (
-        <div className="task-card__tags">
-          {task.tags.map((tag) => (
-            <button
-              className={`task-tag${activeTagKey === normalizeTagKey(tag.label) ? " is-active" : ""}`}
-              data-no-dnd="true"
-              key={tag.label}
-              onClick={(event) => {
-                event.stopPropagation();
-                onTagSelect(tag.label);
-              }}
-              onPointerDown={(event) => event.stopPropagation()}
-              style={getTaskTagStyle(tag.color)}
-              type="button"
-            >
-              {tag.label}
-            </button>
-          ))}
+      {subtasks.length > 0 ? (
+        <div className="task-card__subtasks">
+          <SortableContext items={subtasks.map((subtask) => subtask.id)} strategy={verticalListSortingStrategy}>
+            <TaskDropSlot isVisible={showSubtaskSlots} laneId={laneId} parentTaskId={task.id} position={0} />
+            {displaySubtasks.map((subtask, subtaskIndex) => (
+              <div key={subtask.id}>
+                <TaskCard
+                  activeTagKey={activeTagKey}
+                  displaySubtasks={[]}
+                  isDragDisabled={isDragDisabled}
+                  isNestTarget={false}
+                  laneId={laneId}
+                  onDelete={onDelete}
+                  onOpen={onOpen}
+                  onTagSelect={onTagSelect}
+                  showNestTarget={false}
+                  showSubtaskSlots={showSubtaskSlots}
+                  subtasks={[]}
+                  task={subtask}
+                  taskIndex={subtaskIndex}
+                />
+                <TaskDropSlot
+                  isVisible={showSubtaskSlots}
+                  laneId={laneId}
+                  parentTaskId={task.id}
+                  position={subtaskIndex + 1}
+                />
+              </div>
+            ))}
+          </SortableContext>
         </div>
       ) : null}
     </article>
@@ -1090,19 +1251,19 @@ export function BoardPage() {
   const [draftTitle, setDraftTitle] = useState("");
   const [draggedLaneId, setDraggedLaneId] = useState<string | null>(null);
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
-  const [taskDragOrder, setTaskDragOrder] = useState<TaskIdsByLane | null>(null);
+  const [previewTasks, setPreviewTasks] = useState<Task[] | null>(null);
   const [laneDropTarget, setLaneDropTarget] = useState<{
     insertAfter: boolean;
     laneId: string;
     position: number;
   } | null>(null);
-  const [dropTarget, setDropTarget] = useState<{ laneId: string; position: number } | null>(null);
+  const [dropTarget, setDropTarget] = useState<TaskMoveTarget | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [laneName, setLaneName] = useState("");
   const [taskDragPreviewWidth, setTaskDragPreviewWidth] = useState<number | null>(null);
   const laneDragPreviewRef = useRef<HTMLElement | null>(null);
   const pointerClientYRef = useRef<number | null>(null);
-  const taskDragOrderRef = useRef<TaskIdsByLane | null>(null);
+  const previewTasksRef = useRef<Task[] | null>(null);
 
   const projectsQuery = useQuery({
     queryKey: ["projects"],
@@ -1130,14 +1291,23 @@ export function BoardPage() {
   const project = projectsQuery.data?.find((candidate) => candidate.id === projectId);
   const lanes = lanesQuery.data ?? project?.laneSummaries ?? [];
   const tasks = tasksQuery.data ?? [];
+  const activeTasks = previewTasks ?? tasks;
   const draggedLane = draggedLaneId ? lanes.find((lane) => lane.id === draggedLaneId) ?? null : null;
   const editingTask = editingTaskId ? tasks.find((task) => task.id === editingTaskId) ?? null : null;
   const isBoardFiltered = boardSearch.length > 0 || activeTagKey !== null;
-  const taskMap = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
-  const draggedTask = draggedTaskId ? taskMap.get(draggedTaskId) ?? null : null;
+  const committedTaskMap = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
+  const taskMap = useMemo(() => new Map(activeTasks.map((task) => [task.id, task])), [activeTasks]);
+  const draggedTask =
+    draggedTaskId
+      ? committedTaskMap.get(draggedTaskId) ?? taskMap.get(draggedTaskId) ?? null
+      : null;
   const availableTaskTags = taskTagsQuery.data ?? listSuggestedTags(tasks);
-  const orderedTaskIdsByLane = useMemo(() => buildTaskIdsByLane(lanes, tasks), [lanes, tasks]);
-  const previewTaskIdsByLane = taskDragOrder ?? orderedTaskIdsByLane;
+  const topLevelTaskIdsByLane = useMemo(
+    () => buildTopLevelTaskIdsByLane(lanes, activeTasks),
+    [activeTasks, lanes]
+  );
+  const subtaskIdsByParent = useMemo(() => buildSubtaskIdsByParent(activeTasks), [activeTasks]);
+  const canDraggedTaskBecomeSubtask = draggedTask ? canTaskBecomeSubtask(activeTasks, draggedTask) : false;
   const taskSensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -1163,13 +1333,36 @@ export function BoardPage() {
 
   const groupedTasks = lanes.map((lane) => ({
     ...lane,
-    displayTasks: (previewTaskIdsByLane[lane.id] ?? [])
+    displayTasks: (topLevelTaskIdsByLane[lane.id] ?? [])
       .map((taskId) => taskMap.get(taskId))
       .filter((task): task is Task => Boolean(task))
-      .filter((task) => taskMatchesBoardFilters(task)),
-    tasks: (previewTaskIdsByLane[lane.id] ?? [])
+      .map((task) => {
+        const subtasks = (subtaskIdsByParent.get(task.id) ?? [])
+          .map((subtaskId) => taskMap.get(subtaskId))
+          .filter((subtask): subtask is Task => Boolean(subtask));
+        const displaySubtasks = subtasks.filter((subtask) => taskMatchesBoardFilters(subtask));
+        const shouldDisplay = !isBoardFiltered || taskMatchesBoardFilters(task) || displaySubtasks.length > 0;
+
+        return {
+          displaySubtasks,
+          shouldDisplay,
+          subtasks,
+          task
+        };
+      })
+      .filter((taskGroup) => taskGroup.shouldDisplay),
+    tasks: (topLevelTaskIdsByLane[lane.id] ?? [])
       .map((taskId) => taskMap.get(taskId))
       .filter((task): task is Task => Boolean(task))
+      .map((task) => ({
+        displaySubtasks: (subtaskIdsByParent.get(task.id) ?? [])
+          .map((subtaskId) => taskMap.get(subtaskId))
+          .filter((subtask): subtask is Task => Boolean(subtask)),
+        subtasks: (subtaskIdsByParent.get(task.id) ?? [])
+          .map((subtaskId) => taskMap.get(subtaskId))
+          .filter((subtask): subtask is Task => Boolean(subtask)),
+        task
+      }))
   }));
 
   async function invalidateBoardData() {
@@ -1203,16 +1396,25 @@ export function BoardPage() {
   });
 
   const moveTaskMutation = useMutation({
-    mutationFn: ({ laneId, position, taskId }: { laneId: string; position: number; taskId: string }) =>
-      api.updateTask(projectId ?? "", taskId, { laneId, position }),
-    onMutate: async ({ laneId, position, taskId }) => {
+    mutationFn: ({
+      laneId,
+      parentTaskId,
+      position,
+      taskId
+    }: {
+      laneId: string;
+      parentTaskId: string | null;
+      position: number;
+      taskId: string;
+    }) => api.updateTask(projectId ?? "", taskId, { laneId, parentTaskId, position }),
+    onMutate: async ({ laneId, parentTaskId, position, taskId }) => {
       if (!projectId) {
         return { previousTasks: undefined };
       }
 
       await queryClient.cancelQueries({ queryKey: ["tasks", projectId] });
       const previousTasks = queryClient.getQueryData<Task[]>(["tasks", projectId]) ?? tasks;
-      const optimisticTasks = applyTaskMove(previousTasks, lanes, taskId, laneId, position);
+      const optimisticTasks = applyTaskMove(previousTasks, taskId, laneId, parentTaskId, position);
 
       queryClient.setQueryData(["tasks", projectId], optimisticTasks);
       return { previousTasks };
@@ -1361,9 +1563,9 @@ export function BoardPage() {
   function clearTaskDrag() {
     setDraggedTaskId(null);
     setDropTarget(null);
-    setTaskDragOrder(null);
+    setPreviewTasks(null);
     setTaskDragPreviewWidth(null);
-    taskDragOrderRef.current = null;
+    previewTasksRef.current = null;
   }
 
   function handleLaneDragStart(event: DragEvent<HTMLElement>, laneId: string) {
@@ -1465,14 +1667,22 @@ export function BoardPage() {
     }
 
     const activeTaskId = String(event.active.id);
-    const nextTaskOrder = buildTaskIdsByLane(lanes, tasks);
-    const source = findTaskLocation(nextTaskOrder, activeTaskId);
+    const source = findTaskLocation(tasks, activeTaskId);
 
     setDraggedTaskId(activeTaskId);
     setTaskDragPreviewWidth(event.active.rect.current.initial?.width ?? null);
-    setTaskDragOrder(nextTaskOrder);
-    taskDragOrderRef.current = nextTaskOrder;
-    setDropTarget(source ? { laneId: source.laneId, position: source.index } : null);
+    setPreviewTasks(tasks);
+    previewTasksRef.current = tasks;
+    setDropTarget(
+      source
+        ? {
+            kind: "reorder",
+            laneId: source.laneId,
+            parentTaskId: source.parentTaskId,
+            position: source.position
+          }
+        : null
+    );
   }
 
   function handleTaskDragOver(event: DragOverEvent) {
@@ -1481,25 +1691,37 @@ export function BoardPage() {
     }
 
     const activeTaskId = String(event.active.id);
-    const currentTaskOrder = taskDragOrder ?? orderedTaskIdsByLane;
+    const currentPreviewTasks = previewTasks ?? tasks;
+    const currentTopLevelTaskIdsByLane = buildTopLevelTaskIdsByLane(lanes, currentPreviewTasks);
+    const currentSubtaskIdsByParent = buildSubtaskIdsByParent(currentPreviewTasks);
+    const activeTask = currentPreviewTasks.find((task) => task.id === activeTaskId);
     const overData = event.over.data.current;
-    if (!overData) {
+    if (!overData || !activeTask) {
       return;
     }
 
-    let targetLaneId: string | null = null;
-    let targetIndex: number | null = null;
+    let nextDropTarget: TaskMoveTarget | null = null;
 
     if (overData.type === "slot") {
-      targetLaneId = String(overData.laneId);
-      targetIndex = Number(overData.position);
+      nextDropTarget = {
+        kind: "reorder",
+        laneId: String(overData.laneId),
+        parentTaskId:
+          typeof overData.parentTaskId === "string" ? String(overData.parentTaskId) : null,
+        position: Number(overData.position)
+      };
     }
 
-    if (overData.type === "lane") {
-      targetLaneId = String(overData.laneId);
-      const laneTaskIds = currentTaskOrder[targetLaneId] ?? [];
+    if (overData.type === "lane" && nextDropTarget === null) {
+      const targetLaneId = String(overData.laneId);
+      const laneTaskIds = currentTopLevelTaskIdsByLane[targetLaneId] ?? [];
       if (laneTaskIds.length === 0) {
-        targetIndex = 0;
+        nextDropTarget = {
+          kind: "reorder",
+          laneId: targetLaneId,
+          parentTaskId: null,
+          position: 0
+        };
       } else {
         const pointerClientY = pointerClientYRef.current;
         const translated = event.active.rect.current.translated;
@@ -1514,14 +1736,43 @@ export function BoardPage() {
           (relativeCenterY / Math.max(event.over.rect.height, 1)) * laneTaskIds.length
         );
 
-        targetIndex = Math.max(0, Math.min(normalizedIndex, laneTaskIds.length));
+        nextDropTarget = {
+          kind: "reorder",
+          laneId: targetLaneId,
+          parentTaskId: null,
+          position: Math.max(0, Math.min(normalizedIndex, laneTaskIds.length))
+        };
       }
     }
 
-    if (overData.type === "task") {
-      targetLaneId = String(overData.laneId);
+    if (overData.type === "nest-target" && nextDropTarget === null) {
       const overTaskId = String(overData.taskId);
-      const overIndex = currentTaskOrder[targetLaneId]?.indexOf(overTaskId) ?? -1;
+      const overTask = currentPreviewTasks.find((task) => task.id === overTaskId);
+      if (
+        overTask &&
+        overTask.parentTaskId === null &&
+        overTask.id !== activeTask.id &&
+        canTaskBecomeSubtask(currentPreviewTasks, activeTask)
+      ) {
+        nextDropTarget = {
+          kind: "nest",
+          laneId: String(overData.laneId),
+          parentTaskId: overTask.id,
+          position: (currentSubtaskIdsByParent.get(overTask.id) ?? []).length,
+          taskId: overTask.id
+        };
+      }
+    }
+
+    if (overData.type === "task" && nextDropTarget === null) {
+      const targetLaneId = String(overData.laneId);
+      const overTaskId = String(overData.taskId);
+      const overTask = currentPreviewTasks.find((task) => task.id === overTaskId);
+      const siblingTaskIds =
+        overTask?.parentTaskId === null
+          ? currentTopLevelTaskIdsByLane[targetLaneId] ?? []
+          : currentSubtaskIdsByParent.get(overTask?.parentTaskId ?? "") ?? [];
+      const overIndex = siblingTaskIds.indexOf(overTaskId);
       if (overIndex !== -1) {
         const pointerClientY = pointerClientYRef.current;
         const translated = event.active.rect.current.translated;
@@ -1530,46 +1781,65 @@ export function BoardPage() {
           pointerClientY ?? (translated !== null ? translated.top + activeHeight / 2 : event.over.rect.top);
         const isBelowOverItem =
           translatedCenter > event.over.rect.top + event.over.rect.height / 2;
-        targetIndex = overIndex + (isBelowOverItem ? 1 : 0);
+
+        nextDropTarget = {
+          kind: "reorder",
+          laneId: targetLaneId,
+          parentTaskId: overTask?.parentTaskId ?? null,
+          position: overIndex + (isBelowOverItem ? 1 : 0)
+        };
       }
     }
 
-    if (targetLaneId === null || targetIndex === null) {
+    if (!nextDropTarget) {
       return;
     }
 
-    const nextTaskOrder = moveTaskId(currentTaskOrder, activeTaskId, targetLaneId, targetIndex);
-    const nextLocation = findTaskLocation(nextTaskOrder, activeTaskId);
+    const nextPreviewTasks = applyTaskMove(
+      currentPreviewTasks,
+      activeTaskId,
+      nextDropTarget.laneId,
+      nextDropTarget.parentTaskId,
+      nextDropTarget.position
+    );
+    const nextLocation = findTaskLocation(nextPreviewTasks, activeTaskId);
     if (!nextLocation) {
       return;
     }
 
-    setTaskDragOrder(nextTaskOrder);
-    taskDragOrderRef.current = nextTaskOrder;
+    setPreviewTasks(nextPreviewTasks);
+    previewTasksRef.current = nextPreviewTasks;
     setDropTarget({
+      ...nextDropTarget,
       laneId: nextLocation.laneId,
-      position: nextLocation.index
+      parentTaskId: nextLocation.parentTaskId,
+      position: nextLocation.position
     });
   }
 
   function handleTaskDragEnd(event: DragEndEvent) {
     const activeTaskId = String(event.active.id);
-    const currentTaskOrder = taskDragOrderRef.current ?? taskDragOrder ?? orderedTaskIdsByLane;
-    const source = findTaskLocation(orderedTaskIdsByLane, activeTaskId);
-    const destination = findTaskLocation(currentTaskOrder, activeTaskId);
+    const currentPreviewTasks = previewTasksRef.current ?? previewTasks ?? tasks;
+    const source = findTaskLocation(tasks, activeTaskId);
+    const destination = findTaskLocation(currentPreviewTasks, activeTaskId);
     if (!source || !destination) {
       clearTaskDrag();
       return;
     }
 
-    if (source.laneId === destination.laneId && source.index === destination.index) {
+    if (
+      source.laneId === destination.laneId &&
+      source.parentTaskId === destination.parentTaskId &&
+      source.position === destination.position
+    ) {
       clearTaskDrag();
       return;
     }
 
     moveTaskMutation.mutate({
       laneId: destination.laneId,
-      position: destination.index,
+      parentTaskId: destination.parentTaskId,
+      position: destination.position,
       taskId: activeTaskId
     });
     clearTaskDrag();
@@ -1776,7 +2046,10 @@ export function BoardPage() {
                       onDragStart={handleLaneDragStart}
                     />
                     <LaneDropArea laneId={lane.id}>
-                      <SortableContext items={lane.tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
+                      <SortableContext
+                        items={lane.tasks.map((taskGroup) => taskGroup.task.id)}
+                        strategy={verticalListSortingStrategy}
+                      >
                         {composerLaneId === lane.id ? (
                           <form
                             className="lane-composer"
@@ -1820,22 +2093,39 @@ export function BoardPage() {
                             </div>
                           </form>
                         ) : null}
-                        <TaskDropSlot isVisible={Boolean(draggedTaskId)} laneId={lane.id} position={0} />
-                        {lane.displayTasks.map((task, taskIndex) => (
-                          <div key={task.id}>
+                        <TaskDropSlot
+                          isVisible={Boolean(draggedTaskId)}
+                          laneId={lane.id}
+                          parentTaskId={null}
+                          position={0}
+                        />
+                        {lane.displayTasks.map((taskGroup, taskIndex) => (
+                          <div key={taskGroup.task.id}>
                             <TaskCard
                               activeTagKey={activeTagKey}
+                              displaySubtasks={taskGroup.displaySubtasks}
                               isDragDisabled={isDragDisabled}
+                              isNestTarget={
+                                dropTarget?.kind === "nest" && dropTarget.taskId === taskGroup.task.id
+                              }
                               laneId={lane.id}
                               onDelete={(taskId) => deleteTaskMutation.mutate(taskId)}
                               onOpen={(taskToEdit) => setEditingTaskId(taskToEdit.id)}
                               onTagSelect={handleTagSelect}
-                              task={task}
+                              showNestTarget={
+                                Boolean(draggedTaskId) &&
+                                canDraggedTaskBecomeSubtask &&
+                                draggedTaskId !== taskGroup.task.id
+                              }
+                              showSubtaskSlots={Boolean(draggedTaskId)}
+                              subtasks={taskGroup.subtasks}
+                              task={taskGroup.task}
                               taskIndex={taskIndex}
                             />
                             <TaskDropSlot
                               isVisible={Boolean(draggedTaskId)}
                               laneId={lane.id}
+                              parentTaskId={null}
                               position={taskIndex + 1}
                             />
                           </div>
