@@ -94,11 +94,7 @@ test("project cards open on click and delete through a confirmation popover", as
 
   const projectCard = page.getByTestId("project-card-project-1");
   await expect(projectCard).toBeVisible();
-  await expect(projectCard.locator(".project-card__timestamp")).toHaveText("2026-03-18");
-  await expect(projectCard.locator(".project-card__timestamp")).toHaveAttribute(
-    "datetime",
-    "2026-03-18T07:30:00.000Z"
-  );
+  await expect(projectCard.locator(".project-card__timestamp")).toHaveCount(0);
 
   await projectCard.click();
   await expect(page).toHaveURL(/\/projects\/project-1$/);
