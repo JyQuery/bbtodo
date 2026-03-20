@@ -105,6 +105,12 @@ jobs:
       - name: Verify web health
         run: curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:38080/healthz
 
+      - name: Verify docs redirect
+        run: test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code} %{redirect_url}' http://127.0.0.1:38080/docs)" = "308 http://127.0.0.1:38080/docs/"
+
+      - name: Verify docs page
+        run: curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:38080/docs/
+
       - name: Stop CI stack
         if: always()
         run: docker compose -f docker-compose-ci.yml down --volumes --remove-orphans

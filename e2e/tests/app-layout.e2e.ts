@@ -815,7 +815,7 @@ test("login screen uses the updated cool accent palette", async ({ page }) => {
   await expect(page.locator(".metric-ribbon")).toHaveCount(0);
   await expect(page.getByText("Live shape")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Sign in with OIDC" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Read API docs" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Read API docs" })).toHaveAttribute("href", "/docs/");
   const loginPanelBox = await page.locator(".hero-panel--simple").boundingBox();
   const loginHeadingBox = await page.getByRole("heading", { name: "BBTodo" }).boundingBox();
   const ctaRowBox = await page.locator(".hero-panel--simple .cta-row").boundingBox();
