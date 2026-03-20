@@ -237,6 +237,10 @@ test("board page creates lanes from the gap between columns", async ({ page }) =
 
   const createLaneGap = page.getByTestId(`create-lane-gap-after-${laneId("project-1", "todo")}`);
   await expect(createLaneGap).toBeVisible();
+  const gapDividerContent = await createLaneGap.evaluate((element) =>
+    window.getComputedStyle(element, "::before").content.replaceAll('"', "")
+  );
+  expect(["none", "normal"]).toContain(gapDividerContent);
   await createLaneGap.dblclick();
 
   const laneDialog = page.getByRole("dialog", { name: "Create Lane" });

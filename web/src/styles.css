@@ -1823,26 +1823,6 @@ textarea:focus {
   z-index: 6;
 }
 
-.board-lane-gap::before {
-  content: "";
-  position: absolute;
-  top: 1.2rem;
-  bottom: 1.2rem;
-  left: 50%;
-  width: 1px;
-  background: linear-gradient(
-    180deg,
-    rgba(47, 119, 116, 0),
-    color-mix(in srgb, var(--line-strong) 72%, var(--accent)) 20%,
-    rgba(47, 119, 116, 0)
-  );
-  transform: translateX(-50%);
-  opacity: 0.72;
-  transition:
-    opacity 220ms var(--ease),
-    background 220ms var(--ease);
-}
-
 .board-lane-gap__marker {
   position: absolute;
   top: 50%;
@@ -1867,17 +1847,6 @@ textarea:focus {
     transform 220ms var(--ease),
     border-color 220ms var(--ease),
     color 220ms var(--ease);
-}
-
-.board-lane-gap:hover::before,
-.board-lane-gap:focus-visible::before {
-  background: linear-gradient(
-    180deg,
-    rgba(47, 119, 116, 0),
-    color-mix(in srgb, var(--accent) 75%, white 12%),
-    rgba(47, 119, 116, 0)
-  );
-  opacity: 1;
 }
 
 .board-lane-gap:hover .board-lane-gap__marker,
