@@ -72,8 +72,10 @@ test("board page edits cards and filters tasks", async ({ page }) => {
   await expect(editDialog).toBeVisible();
   await expect(createdMeta).toContainText("Created");
   await expect(createdMeta.locator("time")).toHaveAttribute("datetime", "2026-03-18T07:00:00.000Z");
+  await expect(createdMeta.locator("time")).toHaveText("2026-03-18T07:00:00.000Z");
   await expect(updatedMeta).toContainText("Updated");
   await expect(updatedMeta.locator("time")).toHaveAttribute("datetime", "2026-03-18T07:10:00.000Z");
+  await expect(updatedMeta.locator("time")).toHaveText("2026-03-18T07:10:00.000Z");
   await expect(editDialog.getByLabel("Title")).toHaveValue("Review retry settings");
   await expect(editDialog.getByRole("button", { name: "Remove tag backend" })).toBeVisible();
   await expect(editDialog.getByRole("button", { name: "Remove tag retry" })).toBeVisible();

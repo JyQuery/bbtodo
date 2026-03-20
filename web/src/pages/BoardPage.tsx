@@ -26,7 +26,6 @@ import {
   taskTagColorOptions
 } from "../app/tag-colors";
 import {
-  formatDateTime,
   formatSingleTagInput,
   getTaskInputLabel,
   itemStyle,
@@ -950,13 +949,13 @@ function TaskEditorDialog({
           <div className="task-editor__meta-item">
             <dt>Created</dt>
             <dd>
-              <time dateTime={task.createdAt}>{formatDateTime(task.createdAt)}</time>
+              <time dateTime={task.createdAt}>{task.createdAt}</time>
             </dd>
           </div>
           <div className="task-editor__meta-item">
             <dt>Updated</dt>
             <dd>
-              <time dateTime={task.updatedAt}>{formatDateTime(task.updatedAt)}</time>
+              <time dateTime={task.updatedAt}>{task.updatedAt}</time>
             </dd>
           </div>
         </dl>
