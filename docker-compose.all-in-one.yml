@@ -1,0 +1,17 @@
+services:
+  bbtodo:
+    image: ghcr.io/jyquery/bbtodo-all-in-one:${BBTODO_IMAGE_TAG:-latest}
+    pull_policy: always
+    user: "${BBTODO_UID:-1000}:${BBTODO_GID:-1000}"
+    environment:
+      CLIENT_URL: ${CLIENT_URL}
+      SESSION_SECRET: ${SESSION_SECRET}
+      OIDC_ISSUER: ${OIDC_ISSUER}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+      OIDC_SCOPES: ${OIDC_SCOPES}
+    restart: unless-stopped
+    volumes:
+      - ./data:/data
+    ports:
+      - "${CLIENT_PORT:-8080}:3000"

@@ -10,11 +10,17 @@
 
 ## Run the project
 
-Run the project with:
-
 ```bash
-cp .env.example .env # Create .env file and modify as you wish
-docker compose up --build
+# Create .env file and modify as you wish
+wget https://raw.githubusercontent.com/JyQuery/bbtodo/refs/heads/main/.env.example -O .env 
+
+# Download the all-in-one docker compose file
+wget https://raw.githubusercontent.com/JyQuery/bbtodo/refs/heads/main/docker-compose.all-in-one.yml -O docker-compose.yml
+
+# Create data folder
+mkdir data
+
+docker compose up -d
 ```
 
-The compose stack exposes the web app on `http://localhost:8080` by default, exposes the server on `http://localhost:3000` by default, and stores SQLite data at `/data/bbtodo.sqlite`.
+The app is available at `http://localhost:8080` by default.

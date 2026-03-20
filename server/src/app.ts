@@ -1,4 +1,8 @@
+import { stat } from "node:fs/promises";
+import path from "node:path";
+
 import cookie from "@fastify/cookie";
+import staticFiles from "@fastify/static";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import Fastify from "fastify";
@@ -81,6 +85,38 @@ const callbackQuerySchema = z.object({
 
 function isSecureCookie(clientUrl: string) {
   return new URL(clientUrl).protocol === "https:";
+}
+
+function isReservedAppPath(pathname: string) {
+  return (
+    pathname === "/health" ||
+    pathname === "/api" ||
+    pathname.startsWith("/api/") ||
+    pathname === "/auth" ||
+    pathname.startsWith("/auth/") ||
+    pathname === "/docs" ||
+    pathname.startsWith("/docs/")
+  );
+}
+
+async function resolveClientAssetPath(root: string, pathname: string) {
+  const relativePath = pathname.replace(/^\/+/, "");
+  if (!relativePath) {
+    return null;
+  }
+
+  const absolutePath = path.resolve(root, relativePath);
+  const relativeToRoot = path.relative(root, absolutePath);
+  if (relativeToRoot.startsWith("..") || path.isAbsolute(relativeToRoot)) {
+    return null;
+  }
+
+  try {
+    const entry = await stat(absolutePath);
+    return entry.isFile() ? relativeToRoot : null;
+  } catch {
+    return null;
+  }
 }
 
 function parseSignedCookie(
@@ -224,6 +260,7 @@ async function requireSessionApiUser(
 
 export function buildApp(options: {
   config: AppConfig;
+  clientDistPath?: string;
   oidcProvider?: OidcProvider;
   sqlitePath?: string;
 }) {
@@ -233,6 +270,9 @@ export function buildApp(options: {
   const database = createDatabase(options.sqlitePath ?? SQLITE_DATABASE_PATH);
   const oidcProvider = options.oidcProvider ?? createOidcProvider(options.config);
   const secureCookie = isSecureCookie(options.config.clientUrl);
+  const clientDistPath = options.clientDistPath
+    ? path.resolve(options.clientDistPath)
+    : null;
 
   app.register(cookie, {
     secret: options.config.sessionSecret
@@ -258,6 +298,12 @@ export function buildApp(options: {
   app.register(swaggerUi, {
     routePrefix: "/docs"
   });
+  if (clientDistPath) {
+    app.register(staticFiles, {
+      root: clientDistPath,
+      serve: false
+    });
+  }
 
   app.after(() => {
     const typedApp = app.withTypeProvider<ZodTypeProvider>();
@@ -953,6 +999,37 @@ export function buildApp(options: {
     },
     handler: async () => app.swagger()
   });
+
+  if (clientDistPath) {
+    typedApp.route({
+      method: "GET",
+      url: "/*",
+      schema: {
+        hide: true
+      },
+      handler: async (request, reply) => {
+        const pathname = new URL(
+          request.raw.url ?? request.url,
+          options.config.clientUrl
+        ).pathname;
+
+        if (isReservedAppPath(pathname)) {
+          return reply.callNotFound();
+        }
+
+        const assetPath = await resolveClientAssetPath(clientDistPath, pathname);
+        if (assetPath) {
+          return reply.sendFile(assetPath);
+        }
+
+        if (path.extname(pathname)) {
+          return reply.callNotFound();
+        }
+
+        return reply.sendFile("index.html");
+      }
+    });
+  }
 
   });
 
