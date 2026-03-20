@@ -1565,7 +1565,7 @@ textarea:focus {
 .project-card__lane-counts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(7.75rem, 7.75rem));
-  grid-auto-rows: minmax(5rem, auto);
+  grid-auto-rows: minmax(4.5rem, auto);
   gap: 0.55rem;
   margin-top: 0.4rem;
   justify-content: start;
