@@ -2093,13 +2093,17 @@ textarea:focus {
   background: rgba(159, 61, 51, 0.08);
 }
 
-.task-card__delete-menu .icon-button.danger-button {
+.task-card__delete-menu .icon-button.danger-button,
+.lane-delete-button {
   color: var(--task-delete-icon);
 }
 
 .task-card__delete-menu .icon-button.danger-button:hover,
 .task-card__delete-menu .icon-button.danger-button:focus-visible,
-.task-card.is-confirm-open .task-card__delete-menu .icon-button.danger-button {
+.task-card.is-confirm-open .task-card__delete-menu .icon-button.danger-button,
+.lane-delete-button:hover,
+.lane-delete-button:focus-visible,
+.lane-delete-button[aria-expanded="true"] {
   color: var(--danger);
   background: transparent;
 }
