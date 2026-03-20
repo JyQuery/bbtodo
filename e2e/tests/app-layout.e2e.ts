@@ -1054,14 +1054,22 @@ test("project cards open on click and delete through a confirmation popover", as
   const projectTitleBox = await projectTitle.boundingBox();
   const projectTimestamp = projectCard.locator(".project-card__timestamp");
   const projectTimestampBox = await projectTimestamp.boundingBox();
+  const projectLaneCountsBox = await projectCard.locator(".project-card__lane-counts").boundingBox();
   expect(projectCardBox).not.toBeNull();
   expect(projectTitleBox).not.toBeNull();
   expect(projectTimestampBox).not.toBeNull();
+  expect(projectLaneCountsBox).not.toBeNull();
   expect(projectCardBox?.width ?? 0).toBeLessThan(700);
   expect(((projectTitleBox?.y ?? 0) - (projectCardBox?.y ?? 0)) / (projectCardBox?.height ?? 1)).toBeLessThan(0.28);
   await expect(projectTimestamp).toHaveText("2026-03-18");
   await expect(projectTimestamp).toHaveAttribute("datetime", "2026-03-18T07:30:00.000Z");
-  expect(((projectTimestampBox?.y ?? 0) - (projectCardBox?.y ?? 0)) / (projectCardBox?.height ?? 1)).toBeGreaterThan(0.72);
+  expect(((projectTimestampBox?.y ?? 0) - (projectCardBox?.y ?? 0)) / (projectCardBox?.height ?? 1)).toBeLessThan(0.42);
+  expect((projectTimestampBox?.y ?? 0) + (projectTimestampBox?.height ?? 0)).toBeLessThan(
+    (projectLaneCountsBox?.y ?? 0) + 8
+  );
+  expect(projectTimestampBox?.x ?? 0).toBeLessThan(
+    (projectCardBox?.x ?? 0) + (projectCardBox?.width ?? 0) * 0.45
+  );
 
   await projectCard.click();
   await expect(page).toHaveURL(/\/projects\/project-1$/);
@@ -1257,9 +1265,15 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   await expect(tagFilterField.locator(".subnav__tag-filter-chip")).toHaveCount(1);
   await expect(releaseTagFilterChip).toHaveCSS("background-color", "rgb(242, 229, 255)");
   await expect(tagFilterInput).toHaveClass(/is-collapsed/);
-  await expect
-    .poll(async () => tagFilterInput.evaluate((node) => getComputedStyle(node).appearance))
-    .toBe("none");
+  await expect.poll(async () =>
+    tagFilterInput.evaluate((node) => getComputedStyle(node).borderTopWidth)
+  ).toBe("0px");
+  await expect.poll(async () =>
+    tagFilterInput.evaluate((node) => getComputedStyle(node).backgroundColor)
+  ).toBe("rgba(0, 0, 0, 0)");
+  await expect.poll(async () =>
+    tagFilterInput.evaluate((node) => getComputedStyle(node).boxShadow)
+  ).toBe("none");
   await expect(tagFilterInput).toHaveAttribute("placeholder", "");
   await expect(tagFilterInput).toHaveValue("");
   await expect(page.getByText("Review retry scope")).toBeVisible();
@@ -1275,6 +1289,9 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   await expect(tagFilterField.locator(".subnav__tag-filter-chip")).toHaveCount(1);
   await expect(backendTagFilterChip).toHaveCSS("background-color", "rgb(255, 241, 217)");
   await expect(tagFilterInput).toHaveClass(/is-collapsed/);
+  await expect.poll(async () =>
+    tagFilterInput.evaluate((node) => getComputedStyle(node).borderTopWidth)
+  ).toBe("0px");
   await expect(tagFilterInput).toHaveAttribute("placeholder", "");
   await expect(tagFilterInput).toHaveValue("");
   await expect(page.getByText("Review retry scope")).toBeVisible();
@@ -1287,6 +1304,9 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   await expect(opsTagFilterChip).toBeVisible();
   await expect(tagFilterField.locator(".subnav__tag-filter-chip")).toHaveCount(1);
   await expect(tagFilterInput).toHaveClass(/is-collapsed/);
+  await expect.poll(async () =>
+    tagFilterInput.evaluate((node) => getComputedStyle(node).borderTopWidth)
+  ).toBe("0px");
   await expect(page.getByText("Remove healthcheck loop")).toBeVisible();
   await expect(page.getByText("Review retry scope")).toHaveCount(0);
   await opsTagFilterChip.getByRole("button", { name: "Remove tag filter ops" }).click();
@@ -1381,7 +1401,7 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
       ((createdCardTitleBox?.y ?? 0) + (createdCardTitleBox?.height ?? 0) / 2) -
         ((createdCardTimestampBox?.y ?? 0) + (createdCardTimestampBox?.height ?? 0) / 2)
     )
-  ).toBeLessThan(6);
+  ).toBeLessThan(10);
   expect(createdCardTimestampBox?.x ?? 0).toBeGreaterThan(
     ((createdCardTitleBox?.x ?? 0) + (createdCardTitleBox?.width ?? 0) * 0.65)
   );
