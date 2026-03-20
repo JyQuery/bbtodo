@@ -15,12 +15,10 @@
 wget https://raw.githubusercontent.com/JyQuery/bbtodo/refs/heads/main/.env.example -O .env 
 
 # Download the docker compose file
-wget https://raw.githubusercontent.com/JyQuery/bbtodo/refs/heads/main/docker-compose.prod.yml -O docker-compose.prod.yml
+wget https://raw.githubusercontent.com/JyQuery/bbtodo/refs/heads/main/docker-compose.prod.yml -O docker-compose.yml
 
 # Create data folder
 mkdir data
 
-docker compose -f docker-compose.prod.yml up -d
+docker compose up -d
 ```
-
-`docker-compose.prod.yml` runs the server container as `BBTODO_UID:BBTODO_GID` so the bind-mounted `./data` directory is owned by your chosen host user.
