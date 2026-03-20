@@ -14,8 +14,11 @@
 # Create .env file and modify as you wish
 wget https://raw.githubusercontent.com/JyQuery/bbtodo/refs/heads/main/.env.example -O .env 
 
-# download the docker compose file
+# Download the docker compose file
 wget https://raw.githubusercontent.com/JyQuery/bbtodo/refs/heads/main/docker-compose.prod.yml -O docker-compose.prod.yml
+
+# Create data folder
+mkdir data
 
 docker compose -f docker-compose.prod.yml up -d
 ```
