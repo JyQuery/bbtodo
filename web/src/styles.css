@@ -688,7 +688,7 @@ h3 {
   height: 0.72rem;
 }
 
-.subnav__tag-filter-input {
+.subnav__search--tag-filter .subnav__tag-filter-input {
   appearance: none;
   -webkit-appearance: none;
   min-height: 2.18rem;
@@ -702,26 +702,30 @@ h3 {
   box-shadow: none;
 }
 
-.subnav__tag-filter-input:focus {
+.subnav__search--tag-filter .subnav__tag-filter-input:focus {
   outline: none;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
 }
 
-.subnav__tag-filter-input::-webkit-search-decoration,
-.subnav__tag-filter-input::-webkit-search-cancel-button,
-.subnav__tag-filter-input::-webkit-search-results-button,
-.subnav__tag-filter-input::-webkit-search-results-decoration {
+.subnav__search--tag-filter .subnav__tag-filter-input::-webkit-search-decoration,
+.subnav__search--tag-filter .subnav__tag-filter-input::-webkit-search-cancel-button,
+.subnav__search--tag-filter .subnav__tag-filter-input::-webkit-search-results-button,
+.subnav__search--tag-filter .subnav__tag-filter-input::-webkit-search-results-decoration {
   appearance: none;
   -webkit-appearance: none;
 }
 
-.subnav__tag-filter-input.is-collapsed {
+.subnav__search--tag-filter .subnav__tag-filter-input.is-collapsed {
   flex-basis: 0;
   width: 0;
   min-width: 0;
   padding: 0;
 }
 
-.subnav__tag-filter-input.is-collapsed:focus {
+.subnav__search--tag-filter .subnav__tag-filter-input.is-collapsed:focus {
   flex-basis: 3.2rem;
   width: 3.2rem;
   min-width: 3.2rem;
