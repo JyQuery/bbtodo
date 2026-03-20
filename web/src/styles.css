@@ -2093,11 +2093,15 @@ textarea:focus {
   background: rgba(159, 61, 51, 0.08);
 }
 
+.project-card__delete-menu .icon-button.danger-button,
 .task-card__delete-menu .icon-button.danger-button,
 .lane-delete-button {
   color: var(--task-delete-icon);
 }
 
+.project-card__delete-menu .icon-button.danger-button:hover,
+.project-card__delete-menu .icon-button.danger-button:focus-visible,
+.project-card.is-confirm-open .project-card__delete-menu .icon-button.danger-button,
 .task-card__delete-menu .icon-button.danger-button:hover,
 .task-card__delete-menu .icon-button.danger-button:focus-visible,
 .task-card.is-confirm-open .task-card__delete-menu .icon-button.danger-button,
