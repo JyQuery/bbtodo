@@ -65,8 +65,8 @@ test("projects page lists boards and opens them from the switcher", async ({ pag
   );
 
   expect(compactLanePillHeight).toBe(regularLanePillHeight);
-  expect(compactLanePillHeight).toBeLessThanOrEqual(72);
-  expect(compactLanePillHeight).toBeGreaterThanOrEqual(68);
+  expect(compactLanePillHeight).toBeLessThanOrEqual(67);
+  expect(compactLanePillHeight).toBeGreaterThanOrEqual(63);
 
   await page.getByLabel("Open account menu").click();
   await page.getByRole("button", { name: "Ember" }).click();
