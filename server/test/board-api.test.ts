@@ -477,9 +477,17 @@ describe("projects and tasks API", () => {
       method: "GET",
       url: "/docs/openapi.json"
     });
+    const swaggerUiJsonResponse = await app.inject({
+      method: "GET",
+      url: "/docs/json"
+    });
 
     expect(openApiResponse.statusCode).toBe(200);
+    expect(openApiResponse.headers["cache-control"]).toBe("no-store");
+    expect(swaggerUiJsonResponse.statusCode).toBe(200);
+    expect(swaggerUiJsonResponse.headers["cache-control"]).toBe("no-store");
     const openApi = openApiResponse.json();
+    const swaggerUiJson = swaggerUiJsonResponse.json();
     expect(openApi.openapi).toBe("3.1.0");
     expect(openApi.components?.securitySchemes).toEqual(
       expect.objectContaining({
@@ -514,6 +522,11 @@ describe("projects and tasks API", () => {
     expect(openApi.paths["/api/v1/api-tokens"].post.security).toEqual([
       { sessionCookie: [] }
     ]);
+    expect(swaggerUiJson.components.schemas.TaskTag.$id).toBeUndefined();
+    expect(swaggerUiJson.components.schemas.TaskTag.$schema).toBeUndefined();
+    expect(swaggerUiJson.paths["/api/v1/task-tags"].get.responses["200"].content["application/json"].schema.items).toEqual({
+      $ref: "#/components/schemas/TaskTag"
+    });
     expect(
       openApi.paths["/api/v1/projects/{projectId}/tasks"].post.requestBody.content["application/json"].schema.properties
         .tags.items.anyOf[1]

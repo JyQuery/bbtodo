@@ -104,6 +104,22 @@ function isReservedAppPath(pathname: string) {
   );
 }
 
+function sanitizeOpenApiForDocs(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizeOpenApiForDocs(entry));
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== "$id" && key !== "$schema")
+      .map(([key, entry]) => [key, sanitizeOpenApiForDocs(entry)])
+  );
+}
+
 async function resolveClientAssetPath(root: string, pathname: string) {
   const relativePath = pathname.replace(/^\/+/, "");
   if (!relativePath) {
@@ -318,7 +334,8 @@ export function buildApp(options: {
     transformObject: jsonSchemaTransformObject
   });
   app.register(swaggerUi, {
-    routePrefix: "/docs"
+    routePrefix: "/docs",
+    transformSpecification: (swaggerObject) => sanitizeOpenApiForDocs(swaggerObject) as Record<string, unknown>
   });
   if (clientDistPath) {
     app.register(staticFiles, {
@@ -326,6 +343,14 @@ export function buildApp(options: {
       serve: false
     });
   }
+  app.addHook("onSend", async (request, reply, payload) => {
+    const pathname = new URL(request.raw.url ?? request.url, options.config.clientUrl).pathname;
+    if (pathname === "/docs" || pathname.startsWith("/docs/")) {
+      reply.header("Cache-Control", "no-store");
+    }
+
+    return payload;
+  });
 
   app.after(() => {
     const typedApp = app.withTypeProvider<ZodTypeProvider>();
@@ -1034,7 +1059,10 @@ export function buildApp(options: {
     schema: {
       hide: true
     },
-    handler: async () => app.swagger()
+    handler: async (_request, reply) => {
+      reply.header("Cache-Control", "no-store");
+      return sanitizeOpenApiForDocs(app.swagger());
+    }
   });
 
   if (clientDistPath) {

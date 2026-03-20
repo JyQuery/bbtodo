@@ -9,10 +9,13 @@ test.describe("API docs", () => {
   );
 
   test("loads Swagger UI without resolver errors", async ({ page }) => {
+    const specResponsePromise = page.waitForResponse((response) => response.url().endsWith("/docs/json"));
     await page.goto("/docs/");
     await page.waitForLoadState("networkidle");
+    const specResponse = await specResponsePromise;
 
     await expect(page).toHaveTitle(/Swagger UI/i);
+    expect(specResponse.headers()["cache-control"]).toBe("no-store");
     await expect(page.locator(".info .title")).toContainText("bbtodo API");
     await expect(page.locator(".opblock-tag-section .opblock-tag")).toContainText([
       "system",
