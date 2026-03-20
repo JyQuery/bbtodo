@@ -7,6 +7,8 @@ const devCommand =
     : "npm run dev -- --host 127.0.0.1 --port 4173";
 
 const webCwd = fileURLToPath(new URL("../web/", import.meta.url));
+const externalBaseURL = process.env.PLAYWRIGHT_BASE_URL?.trim();
+const useExternalBaseURL = typeof externalBaseURL === "string" && externalBaseURL.length > 0;
 
 export default defineConfig({
   testDir: "./tests",
@@ -15,15 +17,19 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   use: {
-    baseURL: "http://127.0.0.1:4173",
+    baseURL: useExternalBaseURL ? externalBaseURL : "http://127.0.0.1:4173",
     trace: "on-first-retry"
   },
-  webServer: {
-    command: devCommand,
-    cwd: webCwd,
-    port: 4173,
-    reuseExistingServer: !process.env.CI
-  },
+  ...(useExternalBaseURL
+    ? {}
+    : {
+        webServer: {
+          command: devCommand,
+          cwd: webCwd,
+          port: 4173,
+          reuseExistingServer: !process.env.CI
+        }
+      }),
   projects: [
     {
       name: "chromium",

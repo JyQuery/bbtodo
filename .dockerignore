@@ -4,6 +4,10 @@ dist
 **/dist
 coverage
 **/coverage
+test-results
+**/test-results
+playwright-report
+**/playwright-report
 .git
 .env
 npm-debug.log*

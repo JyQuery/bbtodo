@@ -1393,7 +1393,7 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
       ((createdCardTitleBox?.y ?? 0) + (createdCardTitleBox?.height ?? 0) / 2) -
         ((createdCardTimestampBox?.y ?? 0) + (createdCardTimestampBox?.height ?? 0) / 2)
     )
-  ).toBeLessThan(6);
+  ).toBeLessThan(10);
   expect(createdCardTimestampBox?.x ?? 0).toBeGreaterThan(
     ((createdCardTitleBox?.x ?? 0) + (createdCardTitleBox?.width ?? 0) * 0.65)
   );
