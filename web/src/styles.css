@@ -1564,9 +1564,10 @@ textarea:focus {
 
 .project-card__lane-counts {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(7.75rem, 7.75rem));
   gap: 0.55rem;
   margin-top: 0.4rem;
+  justify-content: start;
 }
 
 .project-card__lane-pill {
@@ -2847,7 +2848,6 @@ textarea:focus {
   .page-header__meta,
   .metric-ribbon,
   .board-grid,
-  .project-card__lane-counts,
   .task-editor__grid,
   .empty-state {
     grid-template-columns: 1fr;

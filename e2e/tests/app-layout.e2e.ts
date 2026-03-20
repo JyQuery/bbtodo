@@ -841,8 +841,23 @@ test("projects page uses the project switcher and removes extra board chrome", a
   await expect(page.getByTestId("project-card-project-1").getByLabel("In review 0")).toBeVisible();
   await expect(page.getByTestId("project-card-project-1").getByLabel("Done 1")).toBeVisible();
   await expect(page.getByTestId("project-card-project-1").getByLabel("Ready for QA 0")).toBeVisible();
-  await expect(page.getByTestId("project-card-project-1").locator(".project-card__lane-pill")).toHaveCount(5);
+  const projectLanePills = page.getByTestId("project-card-project-1").locator(".project-card__lane-pill");
+  await expect(projectLanePills).toHaveCount(5);
+  const initialLanePillWidths = await projectLanePills.evaluateAll((nodes) =>
+    nodes.map((node) => node.getBoundingClientRect().width)
+  );
+  expect(Math.max(...initialLanePillWidths) - Math.min(...initialLanePillWidths)).toBeLessThan(1);
   await expect(page.getByTestId("project-card-project-1").getByText("More")).toHaveCount(0);
+  const originalViewport = page.viewportSize();
+  await page.setViewportSize({ width: 700, height: 960 });
+  const resizedLanePillWidths = await projectLanePills.evaluateAll((nodes) =>
+    nodes.map((node) => node.getBoundingClientRect().width)
+  );
+  expect(Math.max(...resizedLanePillWidths) - Math.min(...resizedLanePillWidths)).toBeLessThan(1);
+  expect(Math.abs(initialLanePillWidths[0] - resizedLanePillWidths[0])).toBeLessThan(1);
+  if (originalViewport) {
+    await page.setViewportSize(originalViewport);
+  }
   const rootSwitcherButton = page.getByRole("button", { name: "Open project switcher" });
   await expect(page.locator(".subnav__current")).toHaveCount(1);
   await expect(rootSwitcherButton).toBeVisible();
