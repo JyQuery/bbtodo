@@ -137,6 +137,10 @@ body::after {
   z-index: 0;
 }
 
+:root[data-theme="midnight"] body::after {
+  opacity: 0.22;
+}
+
 #root {
   position: relative;
   z-index: 1;

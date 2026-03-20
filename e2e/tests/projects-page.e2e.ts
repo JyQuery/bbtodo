@@ -71,6 +71,9 @@ test("projects page lists boards and opens them from the switcher", async ({ pag
 
   await expect(projectDeleteButton).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await expect(projectDeleteButton).toHaveCSS("color", "rgb(47, 119, 116)");
+  await expect
+    .poll(() => page.evaluate(() => getComputedStyle(document.body, "::after").opacity))
+    .toBe("0.65");
 
   await page.getByLabel("Open account menu").click();
   await page.getByRole("button", { name: "Ember" }).click();
@@ -81,6 +84,9 @@ test("projects page lists boards and opens them from the switcher", async ({ pag
   await expect(page.locator("html")).toHaveAttribute("data-theme", "midnight");
   await expect(projectDeleteButton).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await expect(projectDeleteButton).toHaveCSS("color", "rgb(142, 229, 224)");
+  await expect
+    .poll(() => page.evaluate(() => getComputedStyle(document.body, "::after").opacity))
+    .toBe("0.22");
   await page.getByLabel("Open account menu").click();
 
   const switcherButton = page.getByRole("button", { name: "Open project switcher" });
