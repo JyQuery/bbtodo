@@ -27,10 +27,11 @@ import {
 } from "../app/tag-colors";
 import {
   formatIsoDate,
-  formatTagInput,
+  formatSingleTagInput,
   getTaskInputLabel,
   itemStyle,
   normalizeTagKey,
+  parseSingleTagInput,
   parseTagInput
 } from "../app/utils";
 import { BoardSkeleton, CloseIcon, EmptyState, ErrorBanner, TrashIcon } from "../components/ui";
@@ -398,10 +399,10 @@ function TaskDropSlot({
 }
 
 function TaskCardPreview({
-  activeTagKeys,
+  activeTagKey,
   task
 }: {
-  activeTagKeys: Set<string>;
+  activeTagKey: string | null;
   task: Task;
 }) {
   return (
@@ -413,7 +414,7 @@ function TaskCardPreview({
             <div className="task-card__tags">
               {task.tags.map((tag) => (
                 <span
-                  className={`task-tag${activeTagKeys.has(normalizeTagKey(tag.label)) ? " is-active" : ""}`}
+                  className={`task-tag${activeTagKey === normalizeTagKey(tag.label) ? " is-active" : ""}`}
                   key={tag.label}
                   style={getTaskTagStyle(tag.color)}
                 >
@@ -444,11 +445,11 @@ function TaskCard({
   onDelete,
   onOpen,
   onTagSelect,
-  activeTagKeys,
+  activeTagKey,
   task,
   taskIndex
 }: {
-  activeTagKeys: Set<string>;
+  activeTagKey: string | null;
   isDragDisabled: boolean;
   laneId: string;
   onDelete: (taskId: string) => void;
@@ -583,7 +584,7 @@ function TaskCard({
             <div className="task-card__tags">
               {task.tags.map((tag) => (
                 <button
-                  className={`task-tag${activeTagKeys.has(normalizeTagKey(tag.label)) ? " is-active" : ""}`}
+                  className={`task-tag${activeTagKey === normalizeTagKey(tag.label) ? " is-active" : ""}`}
                   data-no-dnd="true"
                   key={tag.label}
                   onClick={(event) => {
@@ -1107,14 +1108,14 @@ export function BoardPage() {
 
   const isCreateLaneDialogOpen = searchParams.get("createLane") === "1";
   const boardSearch = searchParams.get("q")?.trim().toLowerCase() ?? "";
-  const activeTagFilters = parseTagInput(searchParams.get("tags") ?? "");
-  const activeTagKeys = new Set(activeTagFilters.map((tag) => normalizeTagKey(tag)));
+  const activeTagFilter = parseSingleTagInput(searchParams.get("tags") ?? "");
+  const activeTagKey = activeTagFilter ? normalizeTagKey(activeTagFilter) : null;
   const project = projectsQuery.data?.find((candidate) => candidate.id === projectId);
   const lanes = lanesQuery.data ?? project?.laneSummaries ?? [];
   const tasks = tasksQuery.data ?? [];
   const draggedLane = draggedLaneId ? lanes.find((lane) => lane.id === draggedLaneId) ?? null : null;
   const editingTask = editingTaskId ? tasks.find((task) => task.id === editingTaskId) ?? null : null;
-  const isBoardFiltered = boardSearch.length > 0 || activeTagKeys.size > 0;
+  const isBoardFiltered = boardSearch.length > 0 || activeTagKey !== null;
   const taskMap = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
   const draggedTask = draggedTaskId ? taskMap.get(draggedTaskId) ?? null : null;
   const availableTaskTags = taskTagsQuery.data ?? listSuggestedTags(tasks);
@@ -1135,12 +1136,12 @@ export function BoardPage() {
       return false;
     }
 
-    if (activeTagKeys.size === 0) {
+    if (activeTagKey === null) {
       return true;
     }
 
     const taskTagKeys = new Set(task.tags.map((tag) => normalizeTagKey(tag.label)));
-    return Array.from(activeTagKeys).every((tag) => taskTagKeys.has(tag));
+    return taskTagKeys.has(activeTagKey);
   }
 
   const groupedTasks = lanes.map((lane) => ({
@@ -1287,9 +1288,9 @@ export function BoardPage() {
     saveTaskMutation.reset();
   }
 
-  function updateTagFilters(tags: string[]) {
+  function updateTagFilter(tag: string | null) {
     updateBoardParams((params) => {
-      const nextValue = formatTagInput(tags);
+      const nextValue = formatSingleTagInput(tag);
       if (nextValue) {
         params.set("tags", nextValue);
       } else {
@@ -1299,11 +1300,11 @@ export function BoardPage() {
   }
 
   function handleTagSelect(tag: string) {
-    if (activeTagKeys.has(normalizeTagKey(tag))) {
+    if (activeTagKey === normalizeTagKey(tag)) {
       return;
     }
 
-    updateTagFilters([...activeTagFilters, tag]);
+    updateTagFilter(tag);
   }
 
   function clearLaneDrag() {
@@ -1773,7 +1774,7 @@ export function BoardPage() {
                     {lane.displayTasks.map((task, taskIndex) => (
                       <div key={task.id}>
                         <TaskCard
-                          activeTagKeys={activeTagKeys}
+                          activeTagKey={activeTagKey}
                           isDragDisabled={isDragDisabled}
                           laneId={lane.id}
                           onDelete={(taskId) => deleteTaskMutation.mutate(taskId)}
@@ -1800,7 +1801,7 @@ export function BoardPage() {
                 className="task-drag-overlay"
                 style={taskDragPreviewWidth ? { width: `${taskDragPreviewWidth}px` } : undefined}
               >
-                <TaskCardPreview activeTagKeys={activeTagKeys} task={draggedTask} />
+                <TaskCardPreview activeTagKey={activeTagKey} task={draggedTask} />
               </div>
             ) : null}
           </DragOverlay>

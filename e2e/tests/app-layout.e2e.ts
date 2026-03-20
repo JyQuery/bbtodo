@@ -1094,7 +1094,7 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   await expect(page.getByLabel("Filter by tags")).toBeVisible();
   await expect(page.getByRole("button", { name: "Show tag filter suggestions" })).toBeVisible();
   await expect(page.locator(".subnav__search-label")).toHaveCount(0);
-  await expect(page.getByLabel("Filter by tags")).toHaveAttribute("placeholder", "tags");
+  await expect(page.getByLabel("Filter by tags")).toHaveAttribute("placeholder", "tag");
   const currentProjectBackground = await page
     .locator(".subnav__current")
     .evaluate((element) => getComputedStyle(element).backgroundColor);
@@ -1232,19 +1232,45 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   await tagFilterDropdown.getByRole("button", { name: "Add tag filter release" }).click();
   const releaseTagFilterChip = tagFilterField.locator(".subnav__tag-filter-chip", { hasText: "release" });
   await expect(releaseTagFilterChip).toBeVisible();
+  await expect(tagFilterField.locator(".subnav__tag-filter-chip")).toHaveCount(1);
   await expect(releaseTagFilterChip).toHaveCSS("background-color", "rgb(242, 229, 255)");
   await expect(tagFilterInput).toHaveValue("");
   await expect(page.getByText("Review retry scope")).toBeVisible();
   await expect(page.getByText("Tighten callback logging")).toHaveCount(0);
   await expect(page.getByText("Queue copy pass")).toHaveCount(0);
-  await tagFilterInput.fill("backend");
+  await page
+    .getByTestId("task-card-task-1")
+    .getByRole("button", { name: "backend" })
+    .click({ force: true });
   const backendTagFilterChip = tagFilterField.locator(".subnav__tag-filter-chip", { hasText: "backend" });
+  await expect(releaseTagFilterChip).toHaveCount(0);
   await expect(backendTagFilterChip).toBeVisible();
+  await expect(tagFilterField.locator(".subnav__tag-filter-chip")).toHaveCount(1);
   await expect(backendTagFilterChip).toHaveCSS("background-color", "rgb(255, 241, 217)");
   await expect(tagFilterInput).toHaveValue("");
   await expect(page.getByText("Review retry scope")).toBeVisible();
   await expect(page.getByText("Tighten callback logging")).toHaveCount(0);
   await expect(page.getByText("Queue copy pass")).toHaveCount(0);
+  await page.getByRole("button", { name: "Show tag filter suggestions" }).click();
+  await tagFilterDropdown.getByRole("button", { name: "Add tag filter ops" }).click();
+  const opsTagFilterChip = tagFilterField.locator(".subnav__tag-filter-chip", { hasText: "ops" });
+  await expect(backendTagFilterChip).toHaveCount(0);
+  await expect(opsTagFilterChip).toBeVisible();
+  await expect(tagFilterField.locator(".subnav__tag-filter-chip")).toHaveCount(1);
+  await expect(page.getByText("Remove healthcheck loop")).toBeVisible();
+  await expect(page.getByText("Review retry scope")).toHaveCount(0);
+  await opsTagFilterChip.getByRole("button", { name: "Remove tag filter ops" }).click();
+  await expect(tagFilterField.locator(".subnav__tag-filter-chip")).toHaveCount(0);
+  await expect(tagFilterInput).toHaveValue("");
+  await expect(page.getByText("Review retry scope")).toBeVisible();
+  await expect(page.getByText("Queue copy pass")).toBeVisible();
+  await page.goto("/projects/project-1?tags=ops,backend");
+  const routedOpsTagFilterChip = tagFilterField.locator(".subnav__tag-filter-chip", { hasText: "ops" });
+  await expect(routedOpsTagFilterChip).toBeVisible();
+  await expect(tagFilterField.locator(".subnav__tag-filter-chip", { hasText: "backend" })).toHaveCount(0);
+  await expect(page.getByText("Remove healthcheck loop")).toBeVisible();
+  await expect(page.getByText("Review retry scope")).toHaveCount(0);
+  await routedOpsTagFilterChip.getByRole("button", { name: "Remove tag filter ops" }).click();
   await page.goto("/projects/project-1");
   await expect(page.getByTestId("task-card-task-4")).toBeVisible();
 

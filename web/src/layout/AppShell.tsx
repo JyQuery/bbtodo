@@ -11,9 +11,14 @@ import {
 } from "react-router-dom";
 
 import { api, type TaskTag, type User } from "../api";
-import { defaultTaskTagColor, getTaskTagStyle } from "../app/tag-colors";
+import { getTaskTagStyle } from "../app/tag-colors";
 import { themeOptions } from "../app/constants";
-import { formatTagInput, getAvatarLetter, normalizeTagKey, parseTagInput } from "../app/utils";
+import {
+  formatSingleTagInput,
+  getAvatarLetter,
+  normalizeTagKey,
+  parseSingleTagInput
+} from "../app/utils";
 import { ChevronDownIcon, CloseIcon, ErrorBanner, PencilIcon } from "../components/ui";
 import { useDismissableLayer } from "../hooks/useDismissableLayer";
 
@@ -82,49 +87,23 @@ export function AppShell({ user }: { user: User }) {
     () => new Map(availableTagFilters.map((tag) => [normalizeTagKey(tag.label), tag])),
     [availableTagFilters]
   );
-  const availableTagFilterKeys = useMemo(
-    () => new Set(availableTagFilters.map((tag) => normalizeTagKey(tag.label))),
-    [availableTagFilters]
-  );
-  const hasTagFilterTrailingSeparator = /,\s*$/.test(navTagSearch);
-  const tagFilterSegments = navTagSearch.split(",");
-  const tagFilterDraftValue = tagFilterSegments.at(-1) ?? "";
-  const tagFilterDraftKey = normalizeTagKey(tagFilterDraftValue);
-  const hasTagFilterDraft =
-    !hasTagFilterTrailingSeparator &&
-    tagFilterDraftKey.length > 0 &&
-    !availableTagFilterKeys.has(tagFilterDraftKey);
-  const committedTagFilterInput = hasTagFilterDraft
-    ? tagFilterSegments.slice(0, -1).join(",")
-    : navTagSearch;
-  const committedTagFilters = useMemo(
-    () => parseTagInput(committedTagFilterInput),
-    [committedTagFilterInput]
-  );
-  const selectedTagFilterChips = useMemo(
-    () =>
-      committedTagFilters.map((label) => ({
-        color: availableTagFilterMap.get(normalizeTagKey(label))?.color ?? defaultTaskTagColor,
-        label
-      })),
-    [availableTagFilterMap, committedTagFilters]
-  );
-  const committedTagFilterKeys = useMemo(
-    () => new Set(committedTagFilters.map((tag) => normalizeTagKey(tag))),
-    [committedTagFilters]
-  );
-  const tagFilterInputValue = hasTagFilterDraft ? tagFilterDraftValue.trimStart() : "";
+  const activeTagFilter = useMemo(() => parseSingleTagInput(navTagSearch), [navTagSearch]);
+  const activeTagFilterKey = normalizeTagKey(activeTagFilter);
+  const selectedTagFilterChip =
+    activeTagFilterKey.length > 0 ? availableTagFilterMap.get(activeTagFilterKey) ?? null : null;
+  const tagFilterInputValue = selectedTagFilterChip ? "" : activeTagFilter;
+  const tagFilterQuery = normalizeTagKey(tagFilterInputValue);
   const visibleTagFilterOptions = useMemo(
     () =>
       availableTagFilters.filter((tag) => {
         const key = normalizeTagKey(tag.label);
-        if (committedTagFilterKeys.has(key)) {
+        if (selectedTagFilterChip && key === activeTagFilterKey) {
           return false;
         }
 
-        return !hasTagFilterDraft || key.includes(tagFilterDraftKey);
+        return tagFilterQuery.length === 0 || key.includes(tagFilterQuery);
       }),
-    [availableTagFilters, committedTagFilterKeys, hasTagFilterDraft, tagFilterDraftKey]
+    [activeTagFilterKey, availableTagFilters, selectedTagFilterChip, tagFilterQuery]
   );
   const activeProject =
     boardMatch && projectsQuery.data
@@ -181,21 +160,10 @@ export function AppShell({ user }: { user: User }) {
     });
   }
 
-  function composeTagFilterValue(tags: string[], draftValue: string) {
-    const nextTags = formatTagInput(tags);
-    const nextDraft = draftValue.trimStart();
-
-    if (nextTags && nextDraft) {
-      return `${nextTags}, ${nextDraft}`;
-    }
-
-    return nextTags || nextDraft;
-  }
-
   function updateTagFilterSearch(draftValue: string) {
     updateRouteParams((params) => {
-      const nextValue = composeTagFilterValue(committedTagFilters, draftValue);
-      if (nextValue.trim()) {
+      const nextValue = formatSingleTagInput(draftValue);
+      if (nextValue) {
         params.set("tags", nextValue);
       } else {
         params.delete("tags");
@@ -203,18 +171,9 @@ export function AppShell({ user }: { user: User }) {
     });
   }
 
-  function removeTagFilter(tagToRemove: string) {
-    const nextTags = committedTagFilters.filter(
-      (tag) => normalizeTagKey(tag) !== normalizeTagKey(tagToRemove)
-    );
-
+  function removeTagFilter() {
     updateRouteParams((params) => {
-      const nextValue = composeTagFilterValue(nextTags, tagFilterInputValue);
-      if (nextValue.trim()) {
-        params.set("tags", nextValue);
-      } else {
-        params.delete("tags");
-      }
+      params.delete("tags");
     });
 
     setIsTagFilterOpen(true);
@@ -224,19 +183,8 @@ export function AppShell({ user }: { user: User }) {
   }
 
   function selectTagFilter(tag: TaskTag) {
-    const nextTags = committedTagFilters.some(
-      (selectedTag) => normalizeTagKey(selectedTag) === normalizeTagKey(tag.label)
-    )
-      ? committedTagFilters
-      : [...committedTagFilters, tag.label];
-
     updateRouteParams((params) => {
-      const nextValue = composeTagFilterValue(nextTags, "");
-      if (nextValue) {
-        params.set("tags", nextValue);
-      } else {
-        params.delete("tags");
-      }
+      params.set("tags", formatSingleTagInput(tag.label));
     });
 
     setIsTagFilterOpen(true);
@@ -384,27 +332,27 @@ export function AppShell({ user }: { user: User }) {
                         role="presentation"
                       >
                         <div className="subnav__tag-filter-field">
-                          {selectedTagFilterChips.map((tag) => (
+                          {selectedTagFilterChip ? (
                             <span
                               className="subnav__tag-filter-chip"
-                              key={tag.label}
-                              style={getTaskTagStyle(tag.color)}
+                              key={selectedTagFilterChip.label}
+                              style={getTaskTagStyle(selectedTagFilterChip.color)}
                             >
                               <span aria-hidden="true" className="subnav__tag-filter-chip-swatch" />
-                              <span className="subnav__tag-filter-chip-label">{tag.label}</span>
+                              <span className="subnav__tag-filter-chip-label">{selectedTagFilterChip.label}</span>
                               <button
-                                aria-label={`Remove tag filter ${tag.label}`}
+                                aria-label={`Remove tag filter ${selectedTagFilterChip.label}`}
                                 className="subnav__tag-filter-chip-remove"
                                 onClick={(event) => {
                                   event.stopPropagation();
-                                  removeTagFilter(tag.label);
+                                  removeTagFilter();
                                 }}
                                 type="button"
                               >
                                 <CloseIcon />
                               </button>
                             </span>
-                          ))}
+                          ) : null}
                         <input
                           aria-controls="tag-filter-dropdown"
                           aria-expanded={isTagFilterOpen}
@@ -427,13 +375,13 @@ export function AppShell({ user }: { user: User }) {
                             if (
                               (event.key === "Backspace" || event.key === "Delete") &&
                               tagFilterInputValue.length === 0 &&
-                              committedTagFilters.length > 0
+                              selectedTagFilterChip
                             ) {
                               event.preventDefault();
-                              removeTagFilter(committedTagFilters.at(-1) ?? "");
+                              removeTagFilter();
                             }
                           }}
-                          placeholder={selectedTagFilterChips.length > 0 ? "Add tag" : "tags"}
+                          placeholder="tag"
                           ref={tagFilterInputRef}
                           type="search"
                           value={tagFilterInputValue}
