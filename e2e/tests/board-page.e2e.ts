@@ -57,11 +57,8 @@ test("board page edits cards and filters tasks", async ({ page }) => {
 
   const firstTaskCard = page.getByTestId("task-card-task-1");
   await expect(firstTaskCard.locator(".task-tag")).toHaveText(["backend", "retry"]);
-  await expect(firstTaskCard.locator(".task-card__timestamp")).toHaveText("2026-03-18");
-  await expect(firstTaskCard.locator(".task-card__timestamp")).toHaveAttribute(
-    "datetime",
-    "2026-03-18T07:10:00.000Z"
-  );
+  await expect(firstTaskCard.locator(".task-card__timestamp")).toHaveCount(0);
+  await expect(firstTaskCard).toHaveCSS("border-radius", "0px");
 
   await firstTaskCard.click();
 
@@ -69,8 +66,14 @@ test("board page edits cards and filters tasks", async ({ page }) => {
   const sourceTab = editDialog.getByRole("tab", { name: "Markdown source" });
   const previewTab = editDialog.getByRole("tab", { name: "Rendered preview" });
   const tagInput = editDialog.getByLabel("Task tags");
+  const createdMeta = editDialog.locator(".task-editor__meta-item", { hasText: "Created" });
+  const updatedMeta = editDialog.locator(".task-editor__meta-item", { hasText: "Updated" });
 
   await expect(editDialog).toBeVisible();
+  await expect(createdMeta).toContainText("Created");
+  await expect(createdMeta.locator("time")).toHaveAttribute("datetime", "2026-03-18T07:00:00.000Z");
+  await expect(updatedMeta).toContainText("Updated");
+  await expect(updatedMeta.locator("time")).toHaveAttribute("datetime", "2026-03-18T07:10:00.000Z");
   await expect(editDialog.getByLabel("Title")).toHaveValue("Review retry settings");
   await expect(editDialog.getByRole("button", { name: "Remove tag backend" })).toBeVisible();
   await expect(editDialog.getByRole("button", { name: "Remove tag retry" })).toBeVisible();

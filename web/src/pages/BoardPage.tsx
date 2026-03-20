@@ -26,7 +26,7 @@ import {
   taskTagColorOptions
 } from "../app/tag-colors";
 import {
-  formatIsoDate,
+  formatDateTime,
   formatSingleTagInput,
   getTaskInputLabel,
   itemStyle,
@@ -440,34 +440,22 @@ function TaskCardPreview({
 }) {
   return (
     <article className="task-card task-card--drag-overlay">
+      <div className="task-card__title-row">
+        <p className="task-card__title">{task.title}</p>
+      </div>
       {task.tags.length > 0 ? (
-        <>
-          <p className="task-card__title">{task.title}</p>
-          <div className="task-card__footer">
-            <div className="task-card__tags">
-              {task.tags.map((tag) => (
-                <span
-                  className={`task-tag${activeTagKey === normalizeTagKey(tag.label) ? " is-active" : ""}`}
-                  key={tag.label}
-                  style={getTaskTagStyle(tag.color)}
-                >
-                  {tag.label}
-                </span>
-              ))}
-            </div>
-            <time className="task-card__timestamp" dateTime={task.updatedAt}>
-              {formatIsoDate(task.updatedAt)}
-            </time>
-          </div>
-        </>
-      ) : (
-        <div className="task-card__headline">
-          <p className="task-card__title">{task.title}</p>
-          <time className="task-card__timestamp" dateTime={task.updatedAt}>
-            {formatIsoDate(task.updatedAt)}
-          </time>
+        <div className="task-card__tags">
+          {task.tags.map((tag) => (
+            <span
+              className={`task-tag${activeTagKey === normalizeTagKey(tag.label) ? " is-active" : ""}`}
+              key={tag.label}
+              style={getTaskTagStyle(tag.color)}
+            >
+              {tag.label}
+            </span>
+          ))}
         </div>
-      )}
+      ) : null}
     </article>
   );
 }
@@ -607,47 +595,30 @@ function TaskCard({
       }}
       tabIndex={0}
     >
+      <div className="task-card__title-row">
+        <p className="task-card__title">{task.title}</p>
+        {deleteMenu}
+      </div>
       {task.tags.length > 0 ? (
-        <>
-          <div className="task-card__title-row">
-            <p className="task-card__title">{task.title}</p>
-            {deleteMenu}
-          </div>
-          <div className="task-card__footer">
-            <div className="task-card__tags">
-              {task.tags.map((tag) => (
-                <button
-                  className={`task-tag${activeTagKey === normalizeTagKey(tag.label) ? " is-active" : ""}`}
-                  data-no-dnd="true"
-                  key={tag.label}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onTagSelect(tag.label);
-                  }}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  style={getTaskTagStyle(tag.color)}
-                  type="button"
-                >
-                  {tag.label}
-                </button>
-              ))}
-            </div>
-            <time className="task-card__timestamp" dateTime={task.updatedAt}>
-              {formatIsoDate(task.updatedAt)}
-            </time>
-          </div>
-        </>
-      ) : (
-        <div className="task-card__headline">
-          <p className="task-card__title">{task.title}</p>
-          <div className="task-card__headline-actions">
-            <time className="task-card__timestamp" dateTime={task.updatedAt}>
-              {formatIsoDate(task.updatedAt)}
-            </time>
-            {deleteMenu}
-          </div>
+        <div className="task-card__tags">
+          {task.tags.map((tag) => (
+            <button
+              className={`task-tag${activeTagKey === normalizeTagKey(tag.label) ? " is-active" : ""}`}
+              data-no-dnd="true"
+              key={tag.label}
+              onClick={(event) => {
+                event.stopPropagation();
+                onTagSelect(tag.label);
+              }}
+              onPointerDown={(event) => event.stopPropagation()}
+              style={getTaskTagStyle(tag.color)}
+              type="button"
+            >
+              {tag.label}
+            </button>
+          ))}
         </div>
-      )}
+      ) : null}
     </article>
   );
 }
@@ -975,6 +946,20 @@ function TaskEditorDialog({
             <CloseIcon />
           </button>
         </div>
+        <dl aria-label="Card timing" className="task-editor__meta">
+          <div className="task-editor__meta-item">
+            <dt>Created</dt>
+            <dd>
+              <time dateTime={task.createdAt}>{formatDateTime(task.createdAt)}</time>
+            </dd>
+          </div>
+          <div className="task-editor__meta-item">
+            <dt>Updated</dt>
+            <dd>
+              <time dateTime={task.updatedAt}>{formatDateTime(task.updatedAt)}</time>
+            </dd>
+          </div>
+        </dl>
         <form
           className="dialog-form task-editor"
           onSubmit={(event) => {
