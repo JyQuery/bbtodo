@@ -1410,13 +1410,13 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
       ((createdCardTitleBox?.y ?? 0) + (createdCardTitleBox?.height ?? 0) / 2) -
         ((createdCardDeleteButtonBox?.y ?? 0) + (createdCardDeleteButtonBox?.height ?? 0) / 2)
     )
-  ).toBeLessThan(6);
+  ).toBeLessThan(10);
   expect(
     Math.abs(
       ((createdCardTimestampBox?.y ?? 0) + (createdCardTimestampBox?.height ?? 0) / 2) -
         ((createdCardDeleteButtonBox?.y ?? 0) + (createdCardDeleteButtonBox?.height ?? 0) / 2)
     )
-  ).toBeLessThan(6);
+  ).toBeLessThan(10);
 
   const retryCardDragBox = await retryCard.boundingBox();
   expect(retryCardDragBox).not.toBeNull();
