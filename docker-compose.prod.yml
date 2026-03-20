@@ -2,6 +2,7 @@ services:
   server:
     image: ghcr.io/jyquery/bbtodo-server:${BBTODO_IMAGE_TAG:-latest}
     pull_policy: always
+    user: "${BBTODO_UID:-1000}:${BBTODO_GID:-1000}"
     environment:
       CLIENT_URL: ${CLIENT_URL}
       SESSION_SECRET: ${SESSION_SECRET}
