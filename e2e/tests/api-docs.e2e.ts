@@ -14,7 +14,21 @@ test.describe("API docs", () => {
 
     await expect(page).toHaveTitle(/Swagger UI/i);
     await expect(page.locator(".info .title")).toContainText("bbtodo API");
-    await expect(page.locator(".opblock-tag-section .opblock-tag")).toContainText(["system", "auth", "api-tokens", "tags", "projects", "lanes", "tasks"]);
+    await expect(page.locator(".opblock-tag-section .opblock-tag")).toContainText([
+      "system",
+      "auth",
+      "api-tokens",
+      "tags",
+      "projects",
+      "lanes",
+      "tasks"
+    ]);
+    const authorizeButton = page.getByRole("button", { name: "Authorize" });
+    await expect(authorizeButton).toBeVisible();
+    await authorizeButton.click();
+    await expect(page.locator(".dialog-ux .modal-ux-content")).toContainText("apiToken");
+    await expect(page.locator(".dialog-ux .modal-ux-content")).toContainText("sessionCookie");
+    await expect(page.locator(".dialog-ux input")).toHaveCount(2);
     await expect(page.locator(".errors-wrapper")).toHaveCount(0);
     await expect(page.locator("#swagger-ui")).not.toContainText("Resolver error");
   });

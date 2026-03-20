@@ -481,6 +481,20 @@ describe("projects and tasks API", () => {
     expect(openApiResponse.statusCode).toBe(200);
     const openApi = openApiResponse.json();
     expect(openApi.openapi).toBe("3.1.0");
+    expect(openApi.components?.securitySchemes).toEqual(
+      expect.objectContaining({
+        apiToken: expect.objectContaining({
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "API token"
+        }),
+        sessionCookie: expect.objectContaining({
+          type: "apiKey",
+          in: "cookie",
+          name: "bbtodo_session"
+        })
+      })
+    );
     expect(openApi.components?.schemas).toEqual(
       expect.objectContaining({
         ErrorResponse: expect.any(Object),
@@ -493,6 +507,13 @@ describe("projects and tasks API", () => {
     expect(openApi.paths["/api/v1/projects/{projectId}/lanes"]).toBeDefined();
     expect(openApi.paths["/api/v1/projects/{projectId}/lanes/{laneId}"]).toBeDefined();
     expect(openApi.paths["/api/v1/projects/{projectId}/tasks"]).toBeDefined();
+    expect(openApi.paths["/api/v1/projects"].get.security).toEqual([
+      { apiToken: [] },
+      { sessionCookie: [] }
+    ]);
+    expect(openApi.paths["/api/v1/api-tokens"].post.security).toEqual([
+      { sessionCookie: [] }
+    ]);
     expect(
       openApi.paths["/api/v1/projects/{projectId}/tasks"].post.requestBody.content["application/json"].schema.properties
         .tags.items.anyOf[1]
