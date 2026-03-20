@@ -1223,6 +1223,21 @@ test("board workspace adds lanes and filters cards front-end only", async ({ pag
   await page.getByLabel("Search cards").fill("");
   const tagFilterInput = page.getByLabel("Filter by tags");
   const tagFilterField = page.locator(".subnav__search--tag-filter");
+  const searchInputPaddingLeft = await page
+    .getByLabel("Search cards")
+    .evaluate((node) => Number.parseFloat(getComputedStyle(node).paddingLeft));
+  const tagComboPaddingLeft = await tagFilterField
+    .locator(".subnav__search-combo")
+    .evaluate((node) => Number.parseFloat(getComputedStyle(node).paddingLeft));
+  const tagFieldPaddingLeft = await tagFilterField
+    .locator(".subnav__tag-filter-field")
+    .evaluate((node) => Number.parseFloat(getComputedStyle(node).paddingLeft));
+  const tagInputPaddingLeft = await tagFilterInput.evaluate((node) =>
+    Number.parseFloat(getComputedStyle(node).paddingLeft)
+  );
+  expect(Math.abs(searchInputPaddingLeft - (tagComboPaddingLeft + tagFieldPaddingLeft + tagInputPaddingLeft))).toBeLessThan(
+    1
+  );
   await page.getByRole("button", { name: "Show tag filter suggestions" }).click();
   const tagFilterDropdown = page.getByRole("list", { name: "Available tag filters" });
   await expect(tagFilterDropdown).toBeVisible();
