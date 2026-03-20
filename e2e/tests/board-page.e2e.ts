@@ -50,7 +50,7 @@ test("board page edits cards and filters tasks", async ({ page }) => {
 
   await expect(page).toHaveTitle("Billing cleanup | BBTodo");
   await expect(page.locator(".subnav__current-value")).toHaveText("Billing cleanup");
-  await expect(page.getByRole("button", { name: "Create Lane" })).toBeVisible();
+  await expect(page.getByRole("button", { exact: true, name: "Create Lane" })).toHaveCount(0);
   await expect(page.getByLabel("Search cards")).toBeVisible();
   await expect(page.getByLabel("Filter by tags")).toHaveAttribute("placeholder", "tag");
   await expect(page.locator(".board-column")).toHaveCount(4);
@@ -157,19 +157,29 @@ test("board page edits cards and filters tasks", async ({ page }) => {
 });
 
 test("board page reorders tasks and manages lanes", async ({ page }) => {
-  await mockAuthenticated(page, { projects: projectsForGrid });
+  const projectsWithQaLane = structuredClone(projectsForGrid);
+  const billingCleanupProject = projectsWithQaLane.find((project) => project.id === "project-1");
+  if (!billingCleanupProject) {
+    throw new Error("Expected project-1 test fixture to exist");
+  }
+
+  billingCleanupProject.laneSummaries.push({
+    createdAt: "2026-03-18T08:00:00.000Z",
+    id: "project-1-lane-custom-1",
+    name: "Ready for QA",
+    position: 4,
+    projectId: "project-1",
+    taskCount: 0,
+    updatedAt: "2026-03-18T08:00:00.000Z"
+  });
+
+  await mockAuthenticated(page, { projects: projectsWithQaLane });
 
   await page.goto("/projects/project-1");
 
   const todoColumn = page.getByTestId(`board-column-${laneId("project-1", "todo")}`);
   const retryCard = page.getByTestId("task-card-task-1");
   await expect(todoColumn.getByText("Review retry settings")).toBeVisible();
-
-  await page.getByRole("button", { name: "Create Lane" }).click();
-  const laneDialog = page.getByRole("dialog", { name: "Create Lane" });
-  await expect(laneDialog).toBeVisible();
-  await laneDialog.getByLabel("Lane name").fill("Ready for QA");
-  await laneDialog.getByRole("button", { exact: true, name: "Create Lane" }).click();
 
   const laneHeadings = page.locator(".board-column__header h2");
   await expect(laneHeadings).toHaveText(["Todo", "In Progress", "In review", "Done", "Ready for QA"]);
@@ -214,6 +224,31 @@ test("board page reorders tasks and manages lanes", async ({ page }) => {
   await expect(
     page.getByTestId(`board-column-${laneId("project-1", "done")}`).getByText("Review retry settings")
   ).toBeVisible();
+});
+
+test("board page creates lanes from the gap between columns", async ({ page }) => {
+  await mockAuthenticated(page, { projects: projectsForGrid });
+
+  await page.goto("/projects/project-1");
+
+  await expect(page.getByRole("button", { exact: true, name: "Create Lane" })).toHaveCount(0);
+
+  const createLaneGap = page.getByTestId(`create-lane-gap-after-${laneId("project-1", "todo")}`);
+  await expect(createLaneGap).toBeVisible();
+  await createLaneGap.dblclick();
+
+  const laneDialog = page.getByRole("dialog", { name: "Create Lane" });
+  await expect(laneDialog).toBeVisible();
+  await laneDialog.getByLabel("Lane name").fill("Ready for QA");
+  await laneDialog.getByRole("button", { exact: true, name: "Create Lane" }).click();
+
+  await expect(page.locator(".board-column__header h2")).toHaveText([
+    "Todo",
+    "In Progress",
+    "In review",
+    "Done",
+    "Ready for QA"
+  ]);
 });
 
 test("board page switcher renames and creates projects while guarding the last lane", async ({ page }) => {

@@ -1310,6 +1310,14 @@ export function BoardPage() {
     createLaneMutation.reset();
   }
 
+  function openCreateLaneDialog() {
+    updateBoardParams((params) => {
+      params.set("createLane", "1");
+    });
+    setLaneName("");
+    createLaneMutation.reset();
+  }
+
   function openComposer(laneId: string) {
     setComposerLaneId(laneId);
     setDraftTitle("");
@@ -1718,119 +1726,149 @@ export function BoardPage() {
           sensors={taskSensors}
         >
           <section className="board-grid board-grid--lanes" data-testid="board-grid">
-            {groupedTasks.map((lane, laneIndex) => (
-              <div
-                className={`board-column${dropTarget?.laneId === lane.id ? " is-drop-target" : ""}${draggedLaneId === lane.id ? " is-lane-dragging" : ""}${laneDropTarget?.laneId === lane.id ? " is-lane-drop-target" : ""}${laneDropTarget?.laneId === lane.id && laneDropTarget.insertAfter ? " is-lane-drop-after" : ""}${laneDropTarget?.laneId === lane.id && !laneDropTarget.insertAfter ? " is-lane-drop-before" : ""}`}
-                data-testid={`board-column-${lane.id}`}
-                key={lane.id}
-                onDoubleClick={(event) => {
-                  const target = event.target as HTMLElement;
-                  if (target.closest("button, input, textarea, form, a")) {
-                    return;
-                  }
+            {groupedTasks.map((lane, laneIndex) => {
+              const nextLane = groupedTasks[laneIndex + 1] ?? null;
+              const gapLabel = nextLane
+                ? `Create lane between ${lane.name} and ${nextLane.name}`
+                : `Create lane after ${lane.name}`;
 
-                  openComposer(lane.id);
-                }}
-                onDragLeave={(event) => {
-                  if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null)) {
-                    setLaneDropTarget((current) => (current?.laneId === lane.id ? null : current));
-                  }
-                }}
-                onDragOver={(event) => handleLaneDragOver(event, lane)}
-                onDrop={(event) => {
-                  if (!draggedLaneId) {
-                    return;
-                  }
+              return (
+                <div className="board-column-shell" key={lane.id}>
+                  <div
+                    className={`board-column${dropTarget?.laneId === lane.id ? " is-drop-target" : ""}${draggedLaneId === lane.id ? " is-lane-dragging" : ""}${laneDropTarget?.laneId === lane.id ? " is-lane-drop-target" : ""}${laneDropTarget?.laneId === lane.id && laneDropTarget.insertAfter ? " is-lane-drop-after" : ""}${laneDropTarget?.laneId === lane.id && !laneDropTarget.insertAfter ? " is-lane-drop-before" : ""}`}
+                    data-testid={`board-column-${lane.id}`}
+                    onDoubleClick={(event) => {
+                      const target = event.target as HTMLElement;
+                      if (target.closest("button, input, textarea, form, a")) {
+                        return;
+                      }
 
-                  event.preventDefault();
-                  event.stopPropagation();
-                  handleLaneDrop();
-                }}
-                style={itemStyle(laneIndex)}
-              >
-                <LaneHeader
-                  destinationLanes={lanes.filter((candidate) => candidate.id !== lane.id)}
-                  isDeletePending={deleteLaneMutation.isPending}
-                  isDragDisabled={isLaneDragDisabled}
-                  lane={lane}
-                  onDelete={(destinationLaneId) =>
-                    deleteLaneMutation.mutate({
-                      laneId: lane.id,
-                      destinationLaneId
-                    })
-                  }
-                  onDragEnd={() => clearLaneDrag()}
-                  onDragStart={handleLaneDragStart}
-                />
-                <LaneDropArea laneId={lane.id}>
-                  <SortableContext items={lane.tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
-                    {composerLaneId === lane.id ? (
-                      <form
-                        className="lane-composer"
-                        data-testid={`lane-composer-${lane.id}`}
-                        onDoubleClick={(event) => event.stopPropagation()}
-                        onSubmit={(event) => {
-                          event.preventDefault();
-                          createTaskMutation.mutate({
-                            laneId: lane.id,
-                            title: draftTitle.trim()
-                          });
-                        }}
-                      >
-                        <label className="field">
-                          <input
-                            aria-label={getTaskInputLabel(lane.name)}
-                            autoFocus
-                            maxLength={240}
-                            onChange={(event) => setDraftTitle(event.target.value)}
-                            onKeyDown={(event) => {
-                              if (event.key === "Escape") {
-                                closeComposer();
-                              }
+                      openComposer(lane.id);
+                    }}
+                    onDragLeave={(event) => {
+                      if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null)) {
+                        setLaneDropTarget((current) => (current?.laneId === lane.id ? null : current));
+                      }
+                    }}
+                    onDragOver={(event) => handleLaneDragOver(event, lane)}
+                    onDrop={(event) => {
+                      if (!draggedLaneId) {
+                        return;
+                      }
+
+                      event.preventDefault();
+                      event.stopPropagation();
+                      handleLaneDrop();
+                    }}
+                    style={itemStyle(laneIndex)}
+                  >
+                    <LaneHeader
+                      destinationLanes={lanes.filter((candidate) => candidate.id !== lane.id)}
+                      isDeletePending={deleteLaneMutation.isPending}
+                      isDragDisabled={isLaneDragDisabled}
+                      lane={lane}
+                      onDelete={(destinationLaneId) =>
+                        deleteLaneMutation.mutate({
+                          laneId: lane.id,
+                          destinationLaneId
+                        })
+                      }
+                      onDragEnd={() => clearLaneDrag()}
+                      onDragStart={handleLaneDragStart}
+                    />
+                    <LaneDropArea laneId={lane.id}>
+                      <SortableContext items={lane.tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
+                        {composerLaneId === lane.id ? (
+                          <form
+                            className="lane-composer"
+                            data-testid={`lane-composer-${lane.id}`}
+                            onDoubleClick={(event) => event.stopPropagation()}
+                            onSubmit={(event) => {
+                              event.preventDefault();
+                              createTaskMutation.mutate({
+                                laneId: lane.id,
+                                title: draftTitle.trim()
+                              });
                             }}
-                            placeholder={`Add to ${lane.name}`}
-                            required
-                            value={draftTitle}
-                          />
-                        </label>
-                        <div className="lane-composer__actions">
-                          <button
-                            className="primary-button"
-                            disabled={createTaskMutation.isPending || draftTitle.trim().length === 0}
-                            type="submit"
                           >
-                            {createTaskMutation.isPending ? "Adding..." : "Add task"}
-                          </button>
-                          <button className="text-button" onClick={() => closeComposer()} type="button">
-                            Cancel
-                          </button>
-                        </div>
-                      </form>
-                    ) : null}
-                    <TaskDropSlot isVisible={Boolean(draggedTaskId)} laneId={lane.id} position={0} />
-                    {lane.displayTasks.map((task, taskIndex) => (
-                      <div key={task.id}>
-                        <TaskCard
-                          activeTagKey={activeTagKey}
-                          isDragDisabled={isDragDisabled}
-                          laneId={lane.id}
-                          onDelete={(taskId) => deleteTaskMutation.mutate(taskId)}
-                          onOpen={(taskToEdit) => setEditingTaskId(taskToEdit.id)}
-                          onTagSelect={handleTagSelect}
-                          task={task}
-                          taskIndex={taskIndex}
-                        />
-                        <TaskDropSlot
-                          isVisible={Boolean(draggedTaskId)}
-                          laneId={lane.id}
-                          position={taskIndex + 1}
-                        />
-                      </div>
-                    ))}
-                  </SortableContext>
-                </LaneDropArea>
-              </div>
-            ))}
+                            <label className="field">
+                              <input
+                                aria-label={getTaskInputLabel(lane.name)}
+                                autoFocus
+                                maxLength={240}
+                                onChange={(event) => setDraftTitle(event.target.value)}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Escape") {
+                                    closeComposer();
+                                  }
+                                }}
+                                placeholder={`Add to ${lane.name}`}
+                                required
+                                value={draftTitle}
+                              />
+                            </label>
+                            <div className="lane-composer__actions">
+                              <button
+                                className="primary-button"
+                                disabled={createTaskMutation.isPending || draftTitle.trim().length === 0}
+                                type="submit"
+                              >
+                                {createTaskMutation.isPending ? "Adding..." : "Add task"}
+                              </button>
+                              <button className="text-button" onClick={() => closeComposer()} type="button">
+                                Cancel
+                              </button>
+                            </div>
+                          </form>
+                        ) : null}
+                        <TaskDropSlot isVisible={Boolean(draggedTaskId)} laneId={lane.id} position={0} />
+                        {lane.displayTasks.map((task, taskIndex) => (
+                          <div key={task.id}>
+                            <TaskCard
+                              activeTagKey={activeTagKey}
+                              isDragDisabled={isDragDisabled}
+                              laneId={lane.id}
+                              onDelete={(taskId) => deleteTaskMutation.mutate(taskId)}
+                              onOpen={(taskToEdit) => setEditingTaskId(taskToEdit.id)}
+                              onTagSelect={handleTagSelect}
+                              task={task}
+                              taskIndex={taskIndex}
+                            />
+                            <TaskDropSlot
+                              isVisible={Boolean(draggedTaskId)}
+                              laneId={lane.id}
+                              position={taskIndex + 1}
+                            />
+                          </div>
+                        ))}
+                      </SortableContext>
+                    </LaneDropArea>
+                  </div>
+                  <button
+                    aria-label={gapLabel}
+                    className="board-lane-gap"
+                    data-testid={`create-lane-gap-after-${lane.id}`}
+                    onDoubleClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      openCreateLaneDialog();
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        openCreateLaneDialog();
+                      }
+                    }}
+                    title="Double-click to create a lane"
+                    type="button"
+                  >
+                    <span aria-hidden="true" className="board-lane-gap__marker">
+                      +
+                    </span>
+                  </button>
+                </div>
+              );
+            })}
           </section>
           <DragOverlay dropAnimation={taskDropAnimation}>
             {draggedTask ? (

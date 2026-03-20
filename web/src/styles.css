@@ -1648,6 +1648,16 @@ textarea:focus {
   min-height: calc(100dvh - 15rem);
 }
 
+.board-grid--lanes {
+  padding-right: 1rem;
+}
+
+.board-column-shell {
+  position: relative;
+  min-width: 0;
+  overflow: visible;
+}
+
 .board-column {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -1666,6 +1676,10 @@ textarea:focus {
     border-color 220ms var(--ease),
     box-shadow 220ms var(--ease),
     transform 220ms var(--ease);
+}
+
+.board-column-shell .board-column {
+  height: 100%;
 }
 
 .board-column::before {
@@ -1794,6 +1808,88 @@ textarea:focus {
   transition:
     background-color 240ms var(--ease),
     box-shadow 240ms var(--ease);
+}
+
+.board-lane-gap {
+  position: absolute;
+  top: 0;
+  right: -1rem;
+  bottom: 0;
+  width: 1rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  z-index: 6;
+}
+
+.board-lane-gap::before {
+  content: "";
+  position: absolute;
+  top: 1.2rem;
+  bottom: 1.2rem;
+  left: 50%;
+  width: 1px;
+  background: linear-gradient(
+    180deg,
+    rgba(47, 119, 116, 0),
+    color-mix(in srgb, var(--line-strong) 72%, var(--accent)) 20%,
+    rgba(47, 119, 116, 0)
+  );
+  transform: translateX(-50%);
+  opacity: 0.72;
+  transition:
+    opacity 220ms var(--ease),
+    background 220ms var(--ease);
+}
+
+.board-lane-gap__marker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: inline-grid;
+  place-items: center;
+  width: 0.95rem;
+  height: 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-popover);
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  line-height: 1;
+  box-shadow:
+    inset 0 1px 0 var(--surface-highlight),
+    0 10px 22px -18px rgba(18, 34, 36, 0.28);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.92);
+  transition:
+    opacity 180ms var(--ease),
+    transform 220ms var(--ease),
+    border-color 220ms var(--ease),
+    color 220ms var(--ease);
+}
+
+.board-lane-gap:hover::before,
+.board-lane-gap:focus-visible::before {
+  background: linear-gradient(
+    180deg,
+    rgba(47, 119, 116, 0),
+    color-mix(in srgb, var(--accent) 75%, white 12%),
+    rgba(47, 119, 116, 0)
+  );
+  opacity: 1;
+}
+
+.board-lane-gap:hover .board-lane-gap__marker,
+.board-lane-gap:focus-visible .board-lane-gap__marker {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+  color: var(--accent-strong);
+}
+
+.board-lane-gap:focus-visible {
+  outline: none;
 }
 
 .task-drop-slot {
