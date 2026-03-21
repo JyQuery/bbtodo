@@ -22,6 +22,19 @@ function normalizeTaskTagLabel(tag: string) {
   return normalized.length > 0 ? normalized : null;
 }
 
+function normalizeLaneName(name: string) {
+  return name.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function isDoneLaneName(name: string) {
+  return normalizeLaneName(name) === "done";
+}
+
+function isProtectedLaneName(name: string) {
+  const normalizedLaneName = normalizeLaneName(name);
+  return normalizedLaneName === "todo" || normalizedLaneName === "done";
+}
+
 function normalizeTaskTagColor(color: string | undefined): TaskTagColor {
   return taskTagColorValues.includes(color as TaskTagColor)
     ? (color as TaskTagColor)
@@ -201,12 +214,28 @@ function resolveTaskLane(
   return listProjectLanesByProjectId(db, input.projectId)[0] ?? null;
 }
 
-function compareTaskRecords(left: TaskRecord, right: TaskRecord) {
+function compareTaskRecordsInLane(left: TaskRecord, right: TaskRecord, isDoneLane: boolean) {
+  if (isDoneLane) {
+    if (left.updatedAt !== right.updatedAt) {
+      return left.updatedAt.localeCompare(right.updatedAt);
+    }
+
+    if (left.position !== right.position) {
+      return left.position - right.position;
+    }
+
+    return left.id.localeCompare(right.id);
+  }
+
   if (left.position !== right.position) {
     return left.position - right.position;
   }
 
-  return left.updatedAt < right.updatedAt ? 1 : -1;
+  if (left.updatedAt !== right.updatedAt) {
+    return left.updatedAt < right.updatedAt ? 1 : -1;
+  }
+
+  return left.id.localeCompare(right.id);
 }
 
 function listSiblingTaskIds(
@@ -429,12 +458,16 @@ function orderTasksForProject(taskRows: TaskRecord[], projectLanes: LaneRecord[]
   });
 
   projectLanes.forEach((lane) => {
-    const laneTasks = (topLevelByLane.get(lane.id) ?? []).sort(compareTaskRecords);
+    const laneTasks = (topLevelByLane.get(lane.id) ?? []).sort((left, right) =>
+      compareTaskRecordsInLane(left, right, isDoneLaneName(lane.name))
+    );
     laneTasks.forEach((task) => {
       orderedTasks.push(task);
       includedTaskIds.add(task.id);
 
-      const childTasks = (subtasksByParent.get(task.id) ?? []).sort(compareTaskRecords);
+      const childTasks = (subtasksByParent.get(task.id) ?? []).sort((left, right) =>
+        compareTaskRecordsInLane(left, right, isDoneLaneName(lane.name))
+      );
       childTasks.forEach((childTask) => {
         orderedTasks.push(childTask);
         includedTaskIds.add(childTask.id);
@@ -444,7 +477,7 @@ function orderTasksForProject(taskRows: TaskRecord[], projectLanes: LaneRecord[]
 
   taskRows
     .filter((task) => !includedTaskIds.has(task.id))
-    .sort(compareTaskRecords)
+    .sort((left, right) => compareTaskRecordsInLane(left, right, false))
     .forEach((task) => {
       if (task.parentTaskId !== null && !tasksById.has(task.parentTaskId)) {
         orderedTasks.push({
@@ -786,6 +819,12 @@ export function deleteOwnedLane(
   if (!lane) {
     return {
       status: "lane_not_found" as const
+    };
+  }
+
+  if (isProtectedLaneName(lane.name)) {
+    return {
+      status: "protected_lane" as const
     };
   }
 

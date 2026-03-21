@@ -1186,7 +1186,147 @@ describe("projects and tasks API", () => {
     ]);
   });
 
-  it("rejects deleting the final remaining lane", async () => {
+  it("rejects deleting protected Todo and Done lanes", async () => {
+    const oidc = createMutableMockOidcProvider({
+      subject: "user-1",
+      email: "one@example.com",
+      displayName: "User One"
+    });
+    const app = buildApp({
+      config: testConfig,
+      oidcProvider: oidc.provider,
+      sqlitePath: ":memory:"
+    });
+    createdApps.push(app);
+
+    const session = await loginWithOidc(app);
+
+    const createProjectResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects",
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        name: "Protected lanes"
+      }
+    });
+    const project = createProjectResponse.json();
+    const todoLane = project.laneSummaries[0];
+    const doneLane = project.laneSummaries[3];
+
+    for (const lane of [todoLane, doneLane]) {
+      const deleteLaneResponse = await app.inject({
+        method: "DELETE",
+        url: `/api/v1/projects/${project.id}/lanes/${lane.id}`,
+        cookies: {
+          bbtodo_session: session.sessionCookie
+        }
+      });
+
+      expect(deleteLaneResponse.statusCode).toBe(400);
+      expect(deleteLaneResponse.json()).toEqual({
+        message: "Todo and Done lanes cannot be deleted."
+      });
+    }
+  });
+
+  it("lists Done tasks in updated-at ascending order after moves and updates", async () => {
+    const oidc = createMutableMockOidcProvider({
+      subject: "user-1",
+      email: "one@example.com",
+      displayName: "User One"
+    });
+    const app = buildApp({
+      config: testConfig,
+      oidcProvider: oidc.provider,
+      sqlitePath: ":memory:"
+    });
+    createdApps.push(app);
+
+    const session = await loginWithOidc(app);
+
+    const createProjectResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects",
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        name: "Done ordering"
+      }
+    });
+    const project = createProjectResponse.json();
+    const inProgressLane = project.laneSummaries[1];
+    const doneLane = project.laneSummaries[3];
+
+    const firstDoneTaskResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/projects/${project.id}/tasks`,
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        title: "Already done",
+        laneId: doneLane.id
+      }
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const movedTaskResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/projects/${project.id}/tasks`,
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        title: "Move me later",
+        laneId: inProgressLane.id
+      }
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    await app.inject({
+      method: "PATCH",
+      url: `/api/v1/projects/${project.id}/tasks/${movedTaskResponse.json().id}`,
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        laneId: doneLane.id
+      }
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    await app.inject({
+      method: "PATCH",
+      url: `/api/v1/projects/${project.id}/tasks/${firstDoneTaskResponse.json().id}`,
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        title: "Already done, updated"
+      }
+    });
+
+    const tasksResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/projects/${project.id}/tasks`,
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      }
+    });
+
+    expect(tasksResponse.statusCode).toBe(200);
+    expect(
+      tasksResponse
+        .json()
+        .filter((task: { laneId: string }) => task.laneId === doneLane.id)
+        .map((task: { id: string }) => task.id)
+    ).toEqual([movedTaskResponse.json().id, firstDoneTaskResponse.json().id]);
+  });
+
+  it("keeps the remaining protected lanes undeletable", async () => {
     const oidc = createMutableMockOidcProvider({
       subject: "user-1",
       email: "one@example.com",
@@ -1213,7 +1353,7 @@ describe("projects and tasks API", () => {
     });
     const project = createProjectResponse.json();
 
-    for (const lane of project.laneSummaries.slice(0, -1)) {
+    for (const lane of project.laneSummaries.slice(1, -1)) {
       const deleteLaneResponse = await app.inject({
         method: "DELETE",
         url: `/api/v1/projects/${project.id}/lanes/${lane.id}`,
@@ -1225,20 +1365,19 @@ describe("projects and tasks API", () => {
       expect(deleteLaneResponse.statusCode).toBe(204);
     }
 
-    const finalLane = project.laneSummaries.at(-1);
-    expect(finalLane).toBeDefined();
+    for (const lane of [project.laneSummaries[0], project.laneSummaries[3]]) {
+      const deleteProtectedLaneResponse = await app.inject({
+        method: "DELETE",
+        url: `/api/v1/projects/${project.id}/lanes/${lane.id}`,
+        cookies: {
+          bbtodo_session: session.sessionCookie
+        }
+      });
 
-    const deleteFinalLaneResponse = await app.inject({
-      method: "DELETE",
-      url: `/api/v1/projects/${project.id}/lanes/${finalLane?.id}`,
-      cookies: {
-        bbtodo_session: session.sessionCookie
-      }
-    });
-
-    expect(deleteFinalLaneResponse.statusCode).toBe(400);
-    expect(deleteFinalLaneResponse.json()).toEqual({
-      message: "Projects must keep at least one lane."
-    });
+      expect(deleteProtectedLaneResponse.statusCode).toBe(400);
+      expect(deleteProtectedLaneResponse.json()).toEqual({
+        message: "Todo and Done lanes cannot be deleted."
+      });
+    }
   });
 });

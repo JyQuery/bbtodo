@@ -892,6 +892,12 @@ export function buildApp(options: {
         });
       }
 
+      if (deleted.status === "protected_lane") {
+        return reply.status(400).send({
+          message: "Todo and Done lanes cannot be deleted."
+        });
+      }
+
       if (deleted.status === "destination_required") {
         return reply.status(400).send({
           message: "Select a destination lane before deleting this lane."

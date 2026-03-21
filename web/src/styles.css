@@ -580,6 +580,51 @@ h3 {
   transform: translateY(1px) scale(0.98);
 }
 
+.subnav__task-trash-host {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.subnav__task-trash-shell {
+  position: relative;
+}
+
+.subnav__task-trash {
+  border-color: color-mix(in srgb, var(--danger) 24%, var(--line-strong));
+  background: color-mix(in srgb, var(--surface-muted) 88%, var(--surface-strong));
+}
+
+.subnav__task-trash .ui-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.subnav__task-trash-mark {
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--danger) 78%, white 22%) 0%,
+    color-mix(in srgb, var(--danger) 92%, black 8%) 100%
+  );
+}
+
+.subnav__task-trash.is-active,
+.subnav__task-trash.is-confirm-open {
+  border-color: color-mix(in srgb, var(--danger) 46%, var(--line-strong));
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface-strong));
+  color: var(--danger);
+  box-shadow:
+    inset 0 1px 0 var(--surface-highlight-strong),
+    0 18px 34px -28px rgba(159, 61, 51, 0.34);
+}
+
+.subnav__task-trash-popover {
+  top: calc(100% + 0.65rem);
+  right: 0;
+  left: auto;
+}
+
 .subnav__search {
   display: grid;
   gap: 0.35rem;
@@ -1649,7 +1694,7 @@ textarea:focus {
 
 .board-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(17.5rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
   gap: 1rem;
   align-items: stretch;
   min-height: calc(100dvh - 15rem);
@@ -1668,9 +1713,9 @@ textarea:focus {
 .board-column {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: 1rem;
+  gap: 0.75rem;
   min-height: 100%;
-  padding: 1rem;
+  padding: 0.8rem;
   background:
     linear-gradient(180deg, var(--surface-strong), var(--surface)),
     var(--surface);
@@ -1806,7 +1851,7 @@ textarea:focus {
 
 .board-column__content {
   display: grid;
-  gap: 0.85rem;
+  gap: 0.6rem;
   align-content: start;
   align-items: start;
   min-height: 8rem;
@@ -1910,8 +1955,8 @@ textarea:focus {
 
 .task-card {
   display: grid;
-  gap: 0.58rem;
-  padding: 0.82rem;
+  gap: 0.4rem;
+  padding: 0.65rem;
   border-radius: 0;
   background: var(--surface-popover);
   position: relative;
@@ -1942,7 +1987,7 @@ textarea:focus {
 
 .task-card__surface {
   display: grid;
-  gap: 0.58rem;
+  gap: 0.4rem;
   position: relative;
   z-index: 1;
   outline: none;
@@ -1959,10 +2004,10 @@ textarea:focus {
 
 .task-card__subtasks {
   display: grid;
-  gap: 0.55rem;
+  gap: 0.4rem;
   margin-top: 0.1rem;
-  padding-top: 0.72rem;
-  padding-left: 0.95rem;
+  padding-top: 0.55rem;
+  padding-left: 0.75rem;
   border-top: 1px solid color-mix(in srgb, var(--line) 88%, transparent);
   position: relative;
 }
@@ -1970,7 +2015,7 @@ textarea:focus {
 .task-card__subtasks::before {
   content: "";
   position: absolute;
-  top: 0.82rem;
+  top: 0.65rem;
   bottom: 0.35rem;
   left: 0.2rem;
   width: 2px;
@@ -1979,7 +2024,7 @@ textarea:focus {
 }
 
 .task-card--subtask {
-  padding: 0.72rem;
+  padding: 0.58rem;
   background: color-mix(in srgb, var(--surface-popover) 74%, var(--surface-muted));
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--surface-highlight-strong) 75%, transparent),
@@ -2012,8 +2057,7 @@ textarea:focus {
 
 .task-card__title-row {
   display: flex;
-  justify-content: space-between;
-  gap: 0.7rem;
+  gap: 0.5rem;
 }
 
 .task-card__title-row {
@@ -2040,13 +2084,13 @@ textarea:focus {
 .task-tag {
   display: inline-flex;
   align-items: center;
-  min-height: 1.6rem;
-  padding: 0.18rem 0.56rem;
+  min-height: 1.35rem;
+  padding: 0.12rem 0.46rem;
   border: 1px solid var(--tag-border, var(--line));
   border-radius: 999px;
   background: var(--tag-bg, var(--surface-muted));
   color: var(--tag-fg, var(--ink-soft));
-  font-size: 0.68rem;
+  font-size: 0.64rem;
   font-weight: 600;
   letter-spacing: 0.03em;
   transition:
@@ -2093,16 +2137,11 @@ textarea:focus {
   will-change: transform;
 }
 
-.task-card.is-confirm-open {
-  z-index: 4;
-}
-
 .project-card.is-confirm-open {
   z-index: 4;
 }
 
-.project-card__delete-menu,
-.task-card__delete-menu {
+.project-card__delete-menu {
   position: relative;
   z-index: 5;
 }
@@ -2162,7 +2201,6 @@ textarea:focus {
 }
 
 .project-card__delete-menu .icon-button.danger-button,
-.task-card__delete-menu .icon-button.danger-button,
 .lane-delete-button {
   color: var(--task-delete-icon);
 }
@@ -2170,9 +2208,6 @@ textarea:focus {
 .project-card__delete-menu .icon-button.danger-button:hover,
 .project-card__delete-menu .icon-button.danger-button:focus-visible,
 .project-card.is-confirm-open .project-card__delete-menu .icon-button.danger-button,
-.task-card__delete-menu .icon-button.danger-button:hover,
-.task-card__delete-menu .icon-button.danger-button:focus-visible,
-.task-card.is-confirm-open .task-card__delete-menu .icon-button.danger-button,
 .lane-delete-button:hover,
 .lane-delete-button:focus-visible,
 .lane-delete-button[aria-expanded="true"] {

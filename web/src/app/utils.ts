@@ -56,6 +56,19 @@ export function normalizeTagKey(value: string) {
   return normalizeTagValue(value).toLowerCase();
 }
 
+export function normalizeLaneName(value: string) {
+  return normalizeTagValue(value).toLowerCase();
+}
+
+export function isDoneLaneName(value: string) {
+  return normalizeLaneName(value) === "done";
+}
+
+export function isProtectedLaneName(value: string) {
+  const normalizedLaneName = normalizeLaneName(value);
+  return normalizedLaneName === "todo" || normalizedLaneName === "done";
+}
+
 export function parseTagInput(value: string) {
   const seen = new Set<string>();
   const tags: string[] = [];

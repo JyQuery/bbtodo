@@ -20,6 +20,16 @@ async function beginTaskDrag(page: Page, source: Locator) {
 }
 
 async function hoverDraggedTaskOver(page: Page, target: Locator, targetYRatio = 0.5) {
+  await expect(target).toBeVisible();
+  const initialTargetBox = await target.boundingBox();
+
+  expect(initialTargetBox).not.toBeNull();
+
+  const initialTargetCenterX = (initialTargetBox?.x ?? 0) + (initialTargetBox?.width ?? 0) / 2;
+
+  await page.mouse.move(initialTargetCenterX, Math.max((initialTargetBox?.y ?? 0) - 28, 0), { steps: 18 });
+  await page.waitForTimeout(40);
+
   // Drag previews can shift the list while the pointer is in flight, so re-center on
   // the live target a few times before releasing.
   for (const steps of [24, 14, 10]) {
@@ -85,27 +95,25 @@ test("board page edits cards and filters tasks", async ({ page }) => {
   await expect(page.locator(".board-column")).toHaveCount(4);
 
   const firstTaskCard = page.getByTestId("task-card-task-1");
-  const taskDeleteButton = firstTaskCard.getByLabel("Delete task Review retry settings");
-  const laneDeleteButton = page.getByLabel("Delete lane Todo");
+  const laneDeleteButton = page.getByLabel("Delete lane In Progress");
   await expect(firstTaskCard.locator(".task-tag")).toHaveText(["backend", "retry"]);
   await expect(firstTaskCard.locator(".task-card__timestamp")).toHaveCount(0);
+  await expect(firstTaskCard.getByLabel("Delete task Review retry settings")).toHaveCount(0);
+  await expect(page.getByLabel("Delete lane Todo")).toHaveCount(0);
+  await expect(page.getByLabel("Delete lane Done")).toHaveCount(0);
   await expect(firstTaskCard).toHaveCSS("border-radius", "0px");
-  await expect(taskDeleteButton).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-  await expect(taskDeleteButton).toHaveCSS("color", "rgb(47, 119, 116)");
+  await expect(firstTaskCard).toHaveCSS("padding-top", "10.4px");
+  await expect(firstTaskCard).toHaveCSS("padding-bottom", "10.4px");
   await expect(laneDeleteButton).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await expect(laneDeleteButton).toHaveCSS("color", "rgb(47, 119, 116)");
 
   await page.getByLabel("Open account menu").click();
   await page.getByRole("button", { name: "Ember" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "ember");
-  await expect(taskDeleteButton).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-  await expect(taskDeleteButton).toHaveCSS("color", "rgb(184, 94, 63)");
   await expect(laneDeleteButton).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await expect(laneDeleteButton).toHaveCSS("color", "rgb(184, 94, 63)");
   await page.getByRole("button", { name: "Midnight" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "midnight");
-  await expect(taskDeleteButton).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-  await expect(taskDeleteButton).toHaveCSS("color", "rgb(142, 229, 224)");
   await expect(laneDeleteButton).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await expect(laneDeleteButton).toHaveCSS("color", "rgb(142, 229, 224)");
   await page.getByLabel("Open account menu").click();
@@ -208,6 +216,43 @@ test("board page edits cards and filters tasks", async ({ page }) => {
   await expect(page.getByText("Review retry scope")).toHaveCount(0);
 });
 
+test("board page deletes tasks from the subnav trash target", async ({ page }) => {
+  await mockAuthenticated(page, {
+    projects: projectsForGrid,
+    tasks
+  });
+
+  await page.goto("/projects/project-1");
+
+  const firstTaskCard = page.getByTestId("task-card-task-1");
+  const trashTarget = page.getByTestId("subnav-task-trash-target");
+
+  await expect(firstTaskCard.getByLabel("Delete task Review retry settings")).toHaveCount(0);
+  await expect(trashTarget).toHaveCount(0);
+
+  await beginTaskDrag(page, taskCardSurface(firstTaskCard));
+  await expect(trashTarget).toBeVisible();
+  await hoverDraggedTaskOver(page, trashTarget);
+  await finishTaskDrag(page);
+
+  const deleteDialog = page.getByRole("alertdialog", { name: "Delete task Review retry settings" });
+  await expect(deleteDialog).toBeVisible();
+  await deleteDialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(firstTaskCard).toBeVisible();
+  await expect(trashTarget).toHaveCount(0);
+
+  await beginTaskDrag(page, taskCardSurface(firstTaskCard));
+  await expect(trashTarget).toBeVisible();
+  await hoverDraggedTaskOver(page, trashTarget);
+  await finishTaskDrag(page);
+
+  await expect(deleteDialog).toBeVisible();
+  await deleteDialog.getByRole("button", { exact: true, name: "Delete" }).click();
+  await expect(firstTaskCard).toHaveCount(0);
+  await expect(page.getByTestId("task-card-task-4")).toBeVisible();
+  await expect(trashTarget).toHaveCount(0);
+});
+
 test("board page reorders tasks and manages lanes", async ({ page }) => {
   const projectsWithQaLane = structuredClone(projectsForGrid);
   const tasksWithQaCard = structuredClone(tasks);
@@ -275,7 +320,10 @@ test("board page reorders tasks and manages lanes", async ({ page }) => {
   await expect(releaseChecklistCard).toBeVisible();
   await expect(createdCard.locator(".task-tag")).toHaveCount(0);
 
-  await dragTaskToTarget(page, retryCard, taskCardNestTarget(createdCard));
+  await beginTaskDrag(page, retryCard);
+  await hoverDraggedTaskOver(page, taskCardNestTarget(createdCard), 0.25);
+  await expect(createdCard.locator(".task-card__subtasks").getByText("Review retry settings")).toBeVisible();
+  await finishTaskDrag(page);
   await expect(createdCard.locator(".task-card__subtasks").getByText("Review retry settings")).toBeVisible();
   await expect(todoColumn.getByText("Review retry settings")).toHaveCount(0);
 
@@ -284,7 +332,10 @@ test("board page reorders tasks and manages lanes", async ({ page }) => {
   await expect(createdCard.locator(".task-card__subtasks").getByText("Review retry settings")).toHaveCount(0);
   await expect(qaColumn.getByText("Review retry settings")).toBeVisible();
 
-  await dragTaskToTarget(page, copyCard, taskCardNestTarget(createdCard));
+  await beginTaskDrag(page, copyCard);
+  await hoverDraggedTaskOver(page, taskCardNestTarget(createdCard), 0.25);
+  await expect(createdCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
+  await finishTaskDrag(page);
   await expect(createdCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
   await expect(todoColumn.getByText("Queue copy pass")).toHaveCount(0);
 
@@ -313,6 +364,62 @@ test("board page reorders tasks and manages lanes", async ({ page }) => {
   await expect(createdCardInDone).toBeVisible();
   await expect(createdCardInDone.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
   await expect(doneColumn.getByText("Review retry settings")).toBeVisible();
+});
+
+test("board page keeps Done ordered by update time and ignores drag reordering", async ({ page }) => {
+  const tasksWithDoneCards = structuredClone(tasks);
+
+  tasksWithDoneCards.push(
+    {
+      body: "",
+      createdAt: "2026-03-18T07:00:00.000Z",
+      id: "task-5",
+      laneId: laneId("project-1", "done"),
+      parentTaskId: null,
+      position: 2,
+      projectId: "project-1",
+      tags: [],
+      title: "Archive roadmap",
+      updatedAt: "2026-03-18T07:40:00.000Z"
+    },
+    {
+      body: "",
+      createdAt: "2026-03-18T07:10:00.000Z",
+      id: "task-6",
+      laneId: laneId("project-1", "done"),
+      parentTaskId: null,
+      position: 1,
+      projectId: "project-1",
+      tags: [],
+      title: "Ship docs",
+      updatedAt: "2026-03-18T08:10:00.000Z"
+    }
+  );
+
+  await mockAuthenticated(page, {
+    projects: projectsForGrid,
+    tasks: tasksWithDoneCards
+  });
+
+  await page.goto("/projects/project-1");
+
+  const doneColumn = page.getByTestId(`board-column-${laneId("project-1", "done")}`);
+  const archivedRoadmapCard = page.getByTestId("task-card-task-5");
+  const shippedDocsCard = page.getByTestId("task-card-task-6");
+
+  await expect(doneColumn.locator(".task-card__title")).toHaveText([
+    "Archive roadmap",
+    "Remove healthcheck loop",
+    "Ship docs"
+  ]);
+
+  await dragTaskToTarget(page, taskCardSurface(shippedDocsCard), taskCardSurface(archivedRoadmapCard), 0.2);
+
+  await expect(doneColumn.locator(".task-card__title")).toHaveText([
+    "Archive roadmap",
+    "Remove healthcheck loop",
+    "Ship docs"
+  ]);
 });
 
 test("board page moves a dragged subtask under another empty parent", async ({ page }) => {
@@ -371,11 +478,17 @@ test("board page moves a dragged subtask under another empty parent", async ({ p
   const releaseChecklistCard = page.getByTestId("task-card-task-6");
   const copyCard = page.getByTestId("task-card-task-4");
 
-  await dragTaskToTarget(page, copyCard, taskCardNestTarget(shipNoteCard));
+  await beginTaskDrag(page, copyCard);
+  await hoverDraggedTaskOver(page, taskCardNestTarget(shipNoteCard), 0.25);
+  await expect(shipNoteCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
+  await finishTaskDrag(page);
   await expect(shipNoteCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
 
   const copySubtask = shipNoteCard.locator(".task-card__subtasks").getByTestId("task-card-task-4");
-  await dragTaskToTarget(page, copySubtask, taskCardNestTarget(releaseChecklistCard));
+  await beginTaskDrag(page, copySubtask);
+  await hoverDraggedTaskOver(page, taskCardNestTarget(releaseChecklistCard), 0.25);
+  await expect(releaseChecklistCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
+  await finishTaskDrag(page);
 
   await expect(shipNoteCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toHaveCount(0);
   await expect(releaseChecklistCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
@@ -548,7 +661,7 @@ test("board page creates lanes from the gap between columns", async ({ page }) =
   ]);
 });
 
-test("board page switcher renames and creates projects while guarding the last lane", async ({ page }) => {
+test("board page switcher renames and creates projects while guarding protected lanes", async ({ page }) => {
   await mockAuthenticated(page, {
     nextProjectId: 7,
     projects: projectsForGrid
@@ -587,7 +700,10 @@ test("board page switcher renames and creates projects while guarding the last l
     "Done"
   ]);
 
-  for (const laneName of ["Todo", "In Progress", "In review"]) {
+  await expect(page.getByLabel("Delete lane Todo")).toHaveCount(0);
+  await expect(page.getByLabel("Delete lane Done")).toHaveCount(0);
+
+  for (const laneName of ["In Progress", "In review"]) {
     await page.getByLabel(`Delete lane ${laneName}`).click();
     const deleteDialog = page.getByRole("alertdialog", { name: `Delete lane ${laneName}` });
     await expect(deleteDialog).toBeVisible();
@@ -595,10 +711,9 @@ test("board page switcher renames and creates projects while guarding the last l
     await expect(page.getByRole("heading", { name: laneName })).toHaveCount(0);
   }
 
-  await page.getByLabel("Delete lane Done").click();
-  const lastLaneDialog = page.getByRole("alertdialog", { name: "Delete lane Done" });
-  await expect(lastLaneDialog).toBeVisible();
-  await lastLaneDialog.getByRole("button", { exact: true, name: "Delete" }).click();
+  await expect(page.locator(".board-column__header h2")).toHaveText(["Todo", "Done"]);
+  await expect(page.getByLabel("Delete lane Todo")).toHaveCount(0);
+  await expect(page.getByLabel("Delete lane Done")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Done" })).toBeVisible();
-  await expect(page.getByText("Projects must keep at least one lane.")).toBeVisible();
+  await expect(page.getByText("Todo and Done lanes cannot be deleted.")).toHaveCount(0);
 });
