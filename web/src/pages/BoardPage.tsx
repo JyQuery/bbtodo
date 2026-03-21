@@ -193,6 +193,23 @@ function canTaskBecomeSubtask(tasks: Task[], task: Task) {
   return task.parentTaskId === null && !taskHasSubtasks(tasks, task.id);
 }
 
+function canTaskNestUnderParent(tasks: Task[], task: Task, parentTaskId: string | null) {
+  if (parentTaskId === null) {
+    return false;
+  }
+
+  if (task.id === parentTaskId || task.parentTaskId === parentTaskId) {
+    return false;
+  }
+
+  const parentTask = tasks.find((candidate) => candidate.id === parentTaskId);
+  if (!parentTask || parentTask.parentTaskId !== null) {
+    return false;
+  }
+
+  return task.parentTaskId !== null || canTaskBecomeSubtask(tasks, task);
+}
+
 function canTaskJoinParentGroup(tasks: Task[], task: Task, parentTaskId: string | null) {
   if (parentTaskId === null) {
     return true;
@@ -205,6 +222,10 @@ function canTaskJoinParentGroup(tasks: Task[], task: Task, parentTaskId: string 
   const parentTask = tasks.find((candidate) => candidate.id === parentTaskId);
   if (!parentTask || parentTask.parentTaskId !== null) {
     return false;
+  }
+
+  if (task.parentTaskId === parentTaskId) {
+    return true;
   }
 
   return task.parentTaskId !== null || canTaskBecomeSubtask(tasks, task);
@@ -1736,9 +1757,27 @@ export function BoardPage() {
     const currentTopLevelTaskIdsByLane = buildTopLevelTaskIdsByLane(lanes, currentPreviewTasks);
     const currentSubtaskIdsByParent = buildSubtaskIdsByParent(currentPreviewTasks);
     const activeTask = currentPreviewTasks.find((task) => task.id === activeTaskId);
+    const sourceTask = tasks.find((task) => task.id === activeTaskId) ?? null;
+    const sourceParentTaskId = sourceTask?.parentTaskId ?? null;
     const overData = event.over.data.current;
     if (!overData || !activeTask) {
       return;
+    }
+
+    function resetPreviewToSource() {
+      const source = findTaskLocation(tasks, activeTaskId);
+      setPreviewTasks(tasks);
+      previewTasksRef.current = tasks;
+      setDropTarget(
+        source
+          ? {
+              kind: "reorder",
+              laneId: source.laneId,
+              parentTaskId: source.parentTaskId,
+              position: source.position
+            }
+          : null
+      );
     }
 
     let nextDropTarget: TaskMoveTarget | null = null;
@@ -1794,12 +1833,12 @@ export function BoardPage() {
     if (overData.type === "nest-target" && nextDropTarget === null) {
       const overTaskId = String(overData.taskId);
       const overTask = currentPreviewTasks.find((task) => task.id === overTaskId);
-      if (
-        overTask &&
-        overTask.parentTaskId === null &&
-        overTask.id !== activeTask.id &&
-        canTaskBecomeSubtask(currentPreviewTasks, activeTask)
-      ) {
+      if (sourceParentTaskId === overTaskId) {
+        resetPreviewToSource();
+        return;
+      }
+
+      if (overTask && canTaskNestUnderParent(currentPreviewTasks, activeTask, overTask.id)) {
         nextDropTarget = {
           kind: "nest",
           laneId: String(overData.laneId),
@@ -1814,6 +1853,11 @@ export function BoardPage() {
       const targetLaneId = String(overData.laneId);
       const overTaskId = String(overData.taskId);
       const overTask = currentPreviewTasks.find((task) => task.id === overTaskId);
+      if (sourceParentTaskId === overTaskId) {
+        resetPreviewToSource();
+        return;
+      }
+
       const targetParentTaskId = overTask?.parentTaskId ?? null;
       if (!overTask || !canTaskJoinParentGroup(currentPreviewTasks, activeTask, targetParentTaskId)) {
         return;
@@ -2166,7 +2210,7 @@ export function BoardPage() {
                               showNestTarget={
                                 draggedTask !== null &&
                                 draggedTask.id !== taskGroup.task.id &&
-                                canTaskJoinParentGroup(activeTasks, draggedTask, taskGroup.task.id)
+                                canTaskNestUnderParent(activeTasks, draggedTask, taskGroup.task.id)
                               }
                               showSubtaskSlots={Boolean(draggedTaskId)}
                               subtasks={taskGroup.subtasks}

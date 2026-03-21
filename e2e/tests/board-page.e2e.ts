@@ -2,7 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { laneId, mockAuthenticated, projectsForGrid, tag, tasks } from "./fixtures";
 
-async function dragTaskToTarget(page: Page, source: Locator, target: Locator, targetYRatio = 0.5) {
+async function beginTaskDrag(page: Page, source: Locator) {
   const sourceBox = await source.boundingBox();
 
   expect(sourceBox).not.toBeNull();
@@ -17,7 +17,9 @@ async function dragTaskToTarget(page: Page, source: Locator, target: Locator, ta
     (sourceBox?.y ?? 0) + (sourceBox?.height ?? 0) / 2,
     { steps: 6 }
   );
+}
 
+async function hoverDraggedTaskOver(page: Page, target: Locator, targetYRatio = 0.5) {
   // Drag previews can shift the list while the pointer is in flight, so re-center on
   // the live target a few times before releasing.
   for (const steps of [24, 14, 10]) {
@@ -33,8 +35,16 @@ async function dragTaskToTarget(page: Page, source: Locator, target: Locator, ta
     );
     await page.waitForTimeout(40);
   }
+}
 
+async function finishTaskDrag(page: Page) {
   await page.mouse.up();
+}
+
+async function dragTaskToTarget(page: Page, source: Locator, target: Locator, targetYRatio = 0.5) {
+  await beginTaskDrag(page, source);
+  await hoverDraggedTaskOver(page, target, targetYRatio);
+  await finishTaskDrag(page);
 }
 
 function taskCardSurface(card: Locator) {
@@ -429,6 +439,82 @@ test("board page keeps subtask drags inside the parent group", async ({ page }) 
 
   await expect(shipNoteCard.locator(".task-card__subtasks .task-card--subtask")).toHaveCount(2);
   await expect(shipNoteCard.locator(".task-card__subtasks").getByText("Review retry settings")).toBeVisible();
+  await expect(shipNoteCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
+});
+
+test("board page resets a subtask preview when dragged back over its current parent", async ({ page }) => {
+  const projectsWithQaLane = structuredClone(projectsForGrid);
+  const tasksWithQaCards = structuredClone(tasks);
+  const billingCleanupProject = projectsWithQaLane.find((project) => project.id === "project-1");
+  if (!billingCleanupProject) {
+    throw new Error("Expected project-1 test fixture to exist");
+  }
+
+  billingCleanupProject.laneSummaries.push({
+    createdAt: "2026-03-18T08:00:00.000Z",
+    id: "project-1-lane-custom-1",
+    name: "Ready for QA",
+    position: 4,
+    projectId: "project-1",
+    taskCount: 0,
+    updatedAt: "2026-03-18T08:00:00.000Z"
+  });
+
+  const copyTask = tasksWithQaCards.find((task) => task.id === "task-4");
+  if (!copyTask) {
+    throw new Error("Expected task-4 test fixture to exist");
+  }
+
+  copyTask.laneId = "project-1-lane-custom-1";
+  copyTask.parentTaskId = "task-5";
+  copyTask.position = 0;
+
+  tasksWithQaCards.push(
+    {
+      body: "",
+      createdAt: "2026-03-18T08:00:00.000Z",
+      id: "task-5",
+      laneId: "project-1-lane-custom-1",
+      parentTaskId: null,
+      position: 0,
+      projectId: "project-1",
+      tags: [],
+      title: "Ship note",
+      updatedAt: "2026-03-18T08:00:00.000Z"
+    },
+    {
+      body: "",
+      createdAt: "2026-03-18T08:05:00.000Z",
+      id: "task-6",
+      laneId: "project-1-lane-custom-1",
+      parentTaskId: null,
+      position: 1,
+      projectId: "project-1",
+      tags: [],
+      title: "Release checklist",
+      updatedAt: "2026-03-18T08:05:00.000Z"
+    }
+  );
+
+  await mockAuthenticated(page, {
+    projects: projectsWithQaLane,
+    tasks: tasksWithQaCards
+  });
+
+  await page.goto("/projects/project-1");
+
+  const shipNoteCard = page.getByTestId("task-card-task-5");
+  const releaseChecklistCard = page.getByTestId("task-card-task-6");
+  const copySubtask = shipNoteCard.locator(".task-card__subtasks").getByTestId("task-card-task-4");
+
+  await beginTaskDrag(page, copySubtask);
+  await hoverDraggedTaskOver(page, taskCardSurface(releaseChecklistCard), 0.2);
+  await expect(shipNoteCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toHaveCount(0);
+
+  await hoverDraggedTaskOver(page, taskCardSurface(shipNoteCard), 0.3);
+  await expect(shipNoteCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
+
+  await finishTaskDrag(page);
   await expect(shipNoteCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
 });
 

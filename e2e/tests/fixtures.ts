@@ -821,7 +821,11 @@ export async function mockAuthenticated(
       }
 
       const nextParentTaskId =
-        body?.parentTaskId === undefined ? task.parentTaskId : body.parentTaskId;
+        body?.parentTaskId === undefined && task.parentTaskId !== null && body?.laneId !== undefined
+          ? null
+          : body?.parentTaskId === undefined
+            ? task.parentTaskId
+            : body.parentTaskId;
       const parentTask =
         nextParentTaskId === null
           ? null

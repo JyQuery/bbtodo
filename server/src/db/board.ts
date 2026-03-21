@@ -1020,11 +1020,16 @@ export function updateOwnedTask(
     };
   }
 
+  const nextParentTaskIdInput =
+    input.parentTaskId === undefined && task.parentTaskId !== null && input.laneId !== undefined
+      ? null
+      : input.parentTaskId;
+
   const placement = resolveTaskPlacement(
     db,
     {
       laneId: input.laneId,
-      parentTaskId: input.parentTaskId,
+      parentTaskId: nextParentTaskIdInput,
       projectId: input.projectId
     },
     task
