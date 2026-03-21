@@ -58,6 +58,7 @@ import {
   deleteOwnedProject,
   deleteOwnedTask,
   deleteSession,
+  getOwnedProject,
   getUserForApiToken,
   getUserForSession,
   listLanesForProject,
@@ -650,6 +651,7 @@ export function buildApp(options: {
       security: apiDocsSecurity,
       response: {
         201: projectResponseSchema,
+        400: errorResponseSchema,
         401: errorResponseSchema
       },
       tags: ["projects"]
@@ -661,14 +663,13 @@ export function buildApp(options: {
       }
 
       const project = createProject(database.db, user.id, request.body.name.trim());
+
       const laneSummaries = listLanesForProject(database.db, {
         userId: user.id,
         projectId: project.id
       });
 
-      return reply
-        .status(201)
-        .send(toProjectResponse(project, laneSummaries ?? []));
+      return reply.status(201).send(toProjectResponse(project, laneSummaries ?? []));
     }
   });
 
@@ -933,6 +934,13 @@ export function buildApp(options: {
         return;
       }
 
+      const project = getOwnedProject(database.db, user.id, request.params.projectId);
+      if (!project) {
+        return reply.status(404).send({
+          message: "Project not found."
+        });
+      }
+
       const tasks = listTasksForProject(database.db, {
         userId: user.id,
         projectId: request.params.projectId
@@ -943,7 +951,7 @@ export function buildApp(options: {
         });
       }
 
-      return tasks.map(toTaskResponse);
+      return tasks.map((task) => toTaskResponse(task, { ticketPrefix: project.ticketPrefix as string }));
     }
   });
 
@@ -996,7 +1004,14 @@ export function buildApp(options: {
         throw new Error(`Unexpected create task status: ${task.status}`);
       }
 
-      return reply.status(201).send(toTaskResponse(task.task));
+      const project = getOwnedProject(database.db, user.id, request.params.projectId);
+      if (!project) {
+        return reply.status(404).send({
+          message: "Project or lane not found."
+        });
+      }
+
+      return reply.status(201).send(toTaskResponse(task.task, { ticketPrefix: project.ticketPrefix as string }));
     }
   });
 
@@ -1053,7 +1068,14 @@ export function buildApp(options: {
         throw new Error(`Unexpected update task status: ${task.status}`);
       }
 
-      return toTaskResponse(task.task);
+      const project = getOwnedProject(database.db, user.id, request.params.projectId);
+      if (!project) {
+        return reply.status(404).send({
+          message: "Task or lane not found."
+        });
+      }
+
+      return toTaskResponse(task.task, { ticketPrefix: project.ticketPrefix as string });
     }
   });
 

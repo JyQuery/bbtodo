@@ -137,6 +137,7 @@ test("board page edits cards and filters tasks", async ({ page }) => {
     parentTaskId: null,
     position: 0,
     projectId: "project-2",
+    ticketId: "ROAD-1",
     tags: [tag("global-brand", "amber")],
     title: "Refresh homepage copy",
     updatedAt: "2026-03-18T08:22:00.000Z"
@@ -158,6 +159,7 @@ test("board page edits cards and filters tasks", async ({ page }) => {
 
   const firstTaskCard = page.getByTestId("task-card-task-1");
   const laneDeleteButton = page.getByLabel("Delete lane In Progress");
+  await expect(firstTaskCard.locator(".task-card__title")).toHaveText("[BILL-1] Review retry settings");
   await expect(firstTaskCard.locator(".task-tag")).toHaveText(["backend", "retry"]);
   await expect(firstTaskCard.locator(".task-card__timestamp")).toHaveCount(0);
   await expect(firstTaskCard.getByLabel("Delete task Review retry settings")).toHaveCount(0);
@@ -230,7 +232,7 @@ test("board page edits cards and filters tasks", async ({ page }) => {
   await editDialog.getByRole("button", { name: "Save card" }).click();
 
   await expect(editDialog).toHaveCount(0);
-  await expect(firstTaskCard.getByText("Review retry scope")).toBeVisible();
+  await expect(firstTaskCard.locator(".task-card__title")).toHaveText("[BILL-1] Review retry scope");
   const updatedTaskTags = firstTaskCard.locator(".task-tag");
   await expect(updatedTaskTags).toHaveText(["backend", "release"]);
   await expect(updatedTaskTags.nth(0)).toHaveCSS("background-color", "rgb(255, 241, 217)");
@@ -295,6 +297,9 @@ test("board page deletes tasks from the lane header trash target", async ({ page
   await expect(doneLaneTrashTarget).toBeHidden();
 
   await beginTaskDrag(page, taskCardSurface(firstTaskCard));
+  await expect(page.locator(".task-drag-overlay .task-card__title")).toHaveText(
+    "[BILL-1] Review retry settings"
+  );
   await dropDraggedTaskOnTrashTarget(page, todoLaneTrashTarget);
 
   const deleteDialog = page.getByRole("alertdialog", { name: "Delete task Review retry settings" });
@@ -339,6 +344,7 @@ test("board page reorders tasks and manages lanes", async ({ page }) => {
     parentTaskId: null,
     position: 0,
     projectId: "project-1",
+    ticketId: "BILL-5",
     tags: [],
     title: "Ship note",
     updatedAt: "2026-03-18T08:00:00.000Z"
@@ -351,6 +357,7 @@ test("board page reorders tasks and manages lanes", async ({ page }) => {
     parentTaskId: null,
     position: 1,
     projectId: "project-1",
+    ticketId: "BILL-6",
     tags: [],
     title: "Release checklist",
     updatedAt: "2026-03-18T08:05:00.000Z"
@@ -393,7 +400,7 @@ test("board page reorders tasks and manages lanes", async ({ page }) => {
   await expect(qaColumn.getByText("Review retry settings")).toBeVisible();
 
   await beginTaskDrag(page, copyCard);
-  await hoverDraggedTaskOver(page, taskCardNestTarget(createdCard), 0.25);
+  await hoverDraggedTaskDirectlyToTarget(page, taskCardNestTarget(createdCard), 0.5);
   await expect(createdCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
   await finishTaskDrag(page);
   await expect(createdCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
@@ -438,6 +445,7 @@ test("board page keeps Done ordered by newest update time and ignores drag reord
       parentTaskId: null,
       position: 2,
       projectId: "project-1",
+      ticketId: "BILL-5",
       tags: [],
       title: "Archive roadmap",
       updatedAt: "2026-03-18T07:40:00.000Z"
@@ -450,6 +458,7 @@ test("board page keeps Done ordered by newest update time and ignores drag reord
       parentTaskId: null,
       position: 1,
       projectId: "project-1",
+      ticketId: "BILL-6",
       tags: [],
       title: "Ship docs",
       updatedAt: "2026-03-18T08:10:00.000Z"
@@ -468,17 +477,17 @@ test("board page keeps Done ordered by newest update time and ignores drag reord
   const shippedDocsCard = page.getByTestId("task-card-task-6");
 
   await expect(doneColumn.locator(".task-card__title")).toHaveText([
-    "Ship docs",
-    "Remove healthcheck loop",
-    "Archive roadmap"
+    "[BILL-6] Ship docs",
+    "[BILL-3] Remove healthcheck loop",
+    "[BILL-5] Archive roadmap"
   ]);
 
   await dragTaskToTarget(page, taskCardSurface(shippedDocsCard), taskCardSurface(archivedRoadmapCard), 0.2);
 
   await expect(doneColumn.locator(".task-card__title")).toHaveText([
-    "Ship docs",
-    "Remove healthcheck loop",
-    "Archive roadmap"
+    "[BILL-6] Ship docs",
+    "[BILL-3] Remove healthcheck loop",
+    "[BILL-5] Archive roadmap"
   ]);
 });
 
@@ -509,6 +518,7 @@ test("board page moves a dragged subtask under another empty parent", async ({ p
       parentTaskId: null,
       position: 0,
       projectId: "project-1",
+      ticketId: "BILL-5",
       tags: [],
       title: "Ship note",
       updatedAt: "2026-03-18T08:00:00.000Z"
@@ -521,6 +531,7 @@ test("board page moves a dragged subtask under another empty parent", async ({ p
       parentTaskId: null,
       position: 1,
       projectId: "project-1",
+      ticketId: "BILL-6",
       tags: [],
       title: "Release checklist",
       updatedAt: "2026-03-18T08:05:00.000Z"
@@ -591,6 +602,7 @@ test("board page keeps subtask drags inside the parent group", async ({ page }) 
     parentTaskId: null,
     position: 0,
     projectId: "project-1",
+    ticketId: "BILL-5",
     tags: [],
     title: "Ship note",
     updatedAt: "2026-03-18T08:00:00.000Z"
@@ -649,6 +661,7 @@ test("board page resets a subtask preview when dragged back over its current par
       parentTaskId: null,
       position: 0,
       projectId: "project-1",
+      ticketId: "BILL-5",
       tags: [],
       title: "Ship note",
       updatedAt: "2026-03-18T08:00:00.000Z"
@@ -661,6 +674,7 @@ test("board page resets a subtask preview when dragged back over its current par
       parentTaskId: null,
       position: 1,
       projectId: "project-1",
+      ticketId: "BILL-6",
       tags: [],
       title: "Release checklist",
       updatedAt: "2026-03-18T08:05:00.000Z"
@@ -679,14 +693,14 @@ test("board page resets a subtask preview when dragged back over its current par
   const copySubtask = shipNoteCard.locator(".task-card__subtasks").getByTestId("task-card-task-4");
 
   await beginTaskDrag(page, copySubtask);
-  await hoverDraggedTaskOver(page, taskCardSurface(releaseChecklistCard), 0.2);
-  await expect(shipNoteCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toHaveCount(0);
+  await hoverDraggedTaskDirectlyToTarget(page, taskCardSurface(releaseChecklistCard), 0.5);
 
   await hoverDraggedTaskOver(page, taskCardSurface(shipNoteCard), 0.3);
   await expect(shipNoteCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
 
   await finishTaskDrag(page);
   await expect(shipNoteCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
+  await expect(releaseChecklistCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toHaveCount(0);
 });
 
 test("board page creates lanes from the gap between columns", async ({ page }) => {
@@ -774,4 +788,17 @@ test("board page switcher renames and creates projects while guarding protected 
   await expect(page.getByLabel("Delete lane Done")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Done" })).toBeVisible();
   await expect(page.getByText("Todo and Done lanes cannot be deleted.")).toHaveCount(0);
+
+  await switcherButton.click();
+  await switcherInput.fill("12345");
+  await page.getByRole("button", { name: "Create Project" }).click();
+
+  await expect(page).toHaveURL(/\/projects\/project-8$/);
+  await expect(page.locator(".subnav__current-value")).toHaveText("12345");
+  await expect(page.locator(".board-column__header h2")).toHaveText([
+    "Todo",
+    "In Progress",
+    "In review",
+    "Done"
+  ]);
 });

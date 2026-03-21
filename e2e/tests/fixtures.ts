@@ -109,6 +109,70 @@ function createDefaultLaneSummaries(
   ];
 }
 
+const generatedTicketPrefixLetters = [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"];
+const generatedTicketPrefixLength = 4;
+const totalGeneratedTicketPrefixCount = generatedTicketPrefixLetters.length ** generatedTicketPrefixLength;
+
+function toFixtureTicketPrefixStem(name: string) {
+  return name.normalize("NFKD").replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 4);
+}
+
+function encodeGeneratedTicketPrefix(index: number) {
+  let remaining = index;
+  let prefix = "";
+
+  for (let digitIndex = 0; digitIndex < generatedTicketPrefixLength; digitIndex += 1) {
+    prefix = `${generatedTicketPrefixLetters[remaining % generatedTicketPrefixLetters.length]}${prefix}`;
+    remaining = Math.floor(remaining / generatedTicketPrefixLetters.length);
+  }
+
+  return prefix;
+}
+
+function findAvailableGeneratedTicketPrefix(usedPrefixes: Set<string>) {
+  if (usedPrefixes.size >= totalGeneratedTicketPrefixCount) {
+    throw new Error("No unique project ticket prefix is available for e2e fixtures.");
+  }
+
+  for (let index = 0; index < totalGeneratedTicketPrefixCount; index += 1) {
+    const candidate = encodeGeneratedTicketPrefix(index);
+    if (!usedPrefixes.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  throw new Error("No unique project ticket prefix is available for e2e fixtures.");
+}
+
+function allocateFixtureTicketPrefix(name: string, usedPrefixes: Set<string>) {
+  // Keep the browser mock lightweight: seeded tasks define their own prefixes,
+  // and newly created projects only need a stable unique prefix for UI coverage.
+  const stem = toFixtureTicketPrefixStem(name);
+
+  if (stem.length >= 2 && !usedPrefixes.has(stem)) {
+    return stem;
+  }
+
+  if (stem.length === 1) {
+    const paddedStem = `${stem}X`;
+    if (!usedPrefixes.has(paddedStem)) {
+      return paddedStem;
+    }
+  }
+
+  return findAvailableGeneratedTicketPrefix(usedPrefixes);
+}
+
+function parseTicketNumber(ticketId: string) {
+  const match = ticketId.match(/-(\d+)$/);
+  return match ? Number(match[1]) : null;
+}
+
+function parseTicketPrefix(ticketId: string) {
+  const match = ticketId.match(/^([A-Z]{2,4})-\d+$/);
+  return match ? match[1] : null;
+}
+
 export const projects: Project[] = [
   {
     createdAt: "2026-03-17T09:00:00.000Z",
@@ -197,6 +261,7 @@ export const tasks: Task[] = [
     parentTaskId: null,
     position: 0,
     projectId: "project-1",
+    ticketId: "BILL-1",
     tags: [tag("backend", "sky"), tag("retry", "coral")],
     title: "Review retry settings",
     updatedAt: "2026-03-18T07:10:00.000Z"
@@ -209,6 +274,7 @@ export const tasks: Task[] = [
     parentTaskId: null,
     position: 0,
     projectId: "project-1",
+    ticketId: "BILL-2",
     tags: [tag("observability", "slate"), tag("oidc", "orchid")],
     title: "Tighten callback logging",
     updatedAt: "2026-03-18T07:45:00.000Z"
@@ -221,6 +287,7 @@ export const tasks: Task[] = [
     parentTaskId: null,
     position: 0,
     projectId: "project-1",
+    ticketId: "BILL-3",
     tags: [tag("ops", "amber")],
     title: "Remove healthcheck loop",
     updatedAt: "2026-03-18T07:50:00.000Z"
@@ -233,6 +300,7 @@ export const tasks: Task[] = [
     parentTaskId: null,
     position: 1,
     projectId: "project-1",
+    ticketId: "BILL-4",
     tags: [tag("copy", "moss")],
     title: "Queue copy pass",
     updatedAt: "2026-03-18T07:15:00.000Z"
@@ -274,6 +342,67 @@ export async function mockAuthenticated(
   const apiTokenState = (options?.apiTokens ?? []).map((token) => structuredClone(token));
   const projectState = (options?.projects ?? projects).map((project) => structuredClone(project));
   const taskState = (options?.tasks ?? tasks).map((task) => structuredClone(task));
+  const projectTicketPrefixes = new Map<string, string>();
+  const nextTicketNumbers = new Map<string, number>();
+
+  function syncProjectTicketState() {
+    const usedPrefixes = new Set<string>();
+
+    [...projectState]
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id))
+      .forEach((project) => {
+        const existingPrefix = projectTicketPrefixes.get(project.id);
+        if (existingPrefix) {
+          usedPrefixes.add(existingPrefix);
+          return;
+        }
+
+        const seededPrefixes = new Set(
+          taskState
+            .filter((task) => task.projectId === project.id)
+            .map((task) => parseTicketPrefix(task.ticketId))
+            .filter((prefix): prefix is string => prefix !== null)
+        );
+
+        if (seededPrefixes.size > 1) {
+          throw new Error(`Expected a single seeded ticket prefix for project ${project.id}.`);
+        }
+
+        const resolvedPrefix =
+          seededPrefixes.size === 1
+            ? (seededPrefixes.values().next().value as string)
+            : allocateFixtureTicketPrefix(project.name, usedPrefixes);
+
+        projectTicketPrefixes.set(project.id, resolvedPrefix);
+        usedPrefixes.add(resolvedPrefix);
+      });
+
+    projectState.forEach((project) => {
+      const prefix = projectTicketPrefixes.get(project.id);
+      if (!prefix) {
+        throw new Error(`Expected ticket prefix state for project ${project.id}.`);
+      }
+
+      let highestTicketNumber = 0;
+
+      [...taskState]
+        .filter((task) => task.projectId === project.id)
+        .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id))
+        .forEach((task) => {
+          const parsedTicketNumber = parseTicketNumber(task.ticketId);
+          if (parsedTicketNumber !== null) {
+            highestTicketNumber = Math.max(highestTicketNumber, parsedTicketNumber);
+            return;
+          }
+
+          highestTicketNumber += 1;
+          task.ticketId = `${prefix}-${highestTicketNumber}`;
+        });
+
+      const currentNextTicketNumber = nextTicketNumbers.get(project.id) ?? 1;
+      nextTicketNumbers.set(project.id, Math.max(currentNextTicketNumber, highestTicketNumber + 1, 1));
+    });
+  }
 
   function getProject(projectId: string) {
     return projectState.find((project) => project.id === projectId) ?? null;
@@ -523,6 +652,7 @@ export async function mockAuthenticated(
     return { status: "deleted" as const };
   }
 
+  syncProjectTicketState();
   syncAllProjects();
 
   await page.route("**/auth/logout", async (route) => {
@@ -587,6 +717,9 @@ export async function mockAuthenticated(
       }
       case "POST /api/v1/projects": {
         const createdProjectId = `project-${nextProjectId++}`;
+        const projectName = body?.title ?? body?.name ?? "Untitled board";
+        const resolvedPrefix = allocateFixtureTicketPrefix(projectName, new Set(projectTicketPrefixes.values()));
+
         const createdProject: Project = {
           createdAt: "2026-03-18T08:00:00.000Z",
           id: createdProjectId,
@@ -596,10 +729,12 @@ export async function mockAuthenticated(
             in_review: 0,
             done: 0
           }),
-          name: body?.title ?? body?.name ?? "Untitled board",
+          name: projectName,
           updatedAt: "2026-03-18T08:00:00.000Z"
         };
         projectState.unshift(createdProject);
+        projectTicketPrefixes.set(createdProject.id, resolvedPrefix);
+        nextTicketNumbers.set(createdProject.id, 1);
         await fulfillJson(route, 201, createdProject);
         return;
       }
@@ -784,11 +919,13 @@ export async function mockAuthenticated(
         parentTaskId,
         position: listSiblingTasks(projectId, targetLane.id, parentTaskId).length,
         projectId,
+        ticketId: `${projectTicketPrefixes.get(projectId) ?? "XX"}-${nextTicketNumbers.get(projectId) ?? 1}`,
         tags: body?.tags ?? [],
         title: body?.title ?? "Untitled task",
         updatedAt: "2026-03-18T08:00:00.000Z"
       };
       taskState.push(createdTask);
+      nextTicketNumbers.set(projectId, (nextTicketNumbers.get(projectId) ?? 1) + 1);
       syncReusableTagColors(createdTask.tags);
       syncProject(projectId);
       await fulfillJson(route, 201, createdTask);
@@ -805,6 +942,8 @@ export async function mockAuthenticated(
       }
 
       projectState.splice(projectIndex, 1);
+      projectTicketPrefixes.delete(projectId);
+      nextTicketNumbers.delete(projectId);
       for (let index = taskState.length - 1; index >= 0; index -= 1) {
         if (taskState[index].projectId === projectId) {
           taskState.splice(index, 1);

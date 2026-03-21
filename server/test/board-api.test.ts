@@ -104,6 +104,7 @@ describe("projects and tasks API", () => {
       laneId: project.laneSummaries[0].id,
       projectId: project.id,
       position: 0,
+      ticketId: "LAUN-1",
       tags: [tag("launch", "sky"), tag("api", "amber")],
       title: "Write the first task"
     });
@@ -127,6 +128,7 @@ describe("projects and tasks API", () => {
     expect(updateTaskResponse.json()).toMatchObject({
       id: task.id,
       laneId: inProgressLane.id,
+      ticketId: "LAUN-1",
       tags: [tag("backend", "coral"), tag("launch", "sky")]
     });
 
@@ -166,6 +168,7 @@ describe("projects and tasks API", () => {
     expect(listedTasksResponse.json()[0]).toMatchObject({
       id: task.id,
       laneId: inProgressLane.id,
+      ticketId: "LAUN-1",
       tags: [tag("backend", "coral"), tag("launch", "sky")]
     });
 
@@ -199,6 +202,253 @@ describe("projects and tasks API", () => {
 
     expect(afterDeleteListResponse.statusCode).toBe(200);
     expect(afterDeleteListResponse.json()).toEqual([]);
+  });
+
+  it("keeps project prefixes frozen and task ticket ids stable across renames and subtasks", async () => {
+    const oidc = createMutableMockOidcProvider({
+      subject: "user-1",
+      email: "one@example.com",
+      displayName: "User One"
+    });
+    const app = buildApp({
+      config: testConfig,
+      oidcProvider: oidc.provider,
+      sqlitePath: ":memory:"
+    });
+    createdApps.push(app);
+
+    const session = await loginWithOidc(app);
+
+    const createProjectResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects",
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        name: "Billing cleanup"
+      }
+    });
+    expect(createProjectResponse.statusCode).toBe(201);
+    const project = createProjectResponse.json();
+
+    const createParentTaskResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/projects/${project.id}/tasks`,
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        title: "Parent task"
+      }
+    });
+    expect(createParentTaskResponse.statusCode).toBe(201);
+    expect(createParentTaskResponse.json()).toMatchObject({
+      ticketId: "BILL-1",
+      title: "Parent task"
+    });
+    const parentTask = createParentTaskResponse.json();
+
+    const createSubtaskResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/projects/${project.id}/tasks`,
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        parentTaskId: parentTask.id,
+        title: "Child task"
+      }
+    });
+    expect(createSubtaskResponse.statusCode).toBe(201);
+    expect(createSubtaskResponse.json()).toMatchObject({
+      parentTaskId: parentTask.id,
+      ticketId: "BILL-2",
+      title: "Child task"
+    });
+
+    const renameProjectResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/projects/${project.id}`,
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        name: "Operations board"
+      }
+    });
+    expect(renameProjectResponse.statusCode).toBe(200);
+
+    const createPostRenameTaskResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/projects/${project.id}/tasks`,
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        title: "Post rename task"
+      }
+    });
+    expect(createPostRenameTaskResponse.statusCode).toBe(201);
+    expect(createPostRenameTaskResponse.json()).toMatchObject({
+      ticketId: "BILL-3",
+      title: "Post rename task"
+    });
+
+    const moveParentTaskResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/projects/${project.id}/tasks/${parentTask.id}`,
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        laneId: project.laneSummaries[1].id
+      }
+    });
+    expect(moveParentTaskResponse.statusCode).toBe(200);
+    expect(moveParentTaskResponse.json()).toMatchObject({
+      id: parentTask.id,
+      ticketId: "BILL-1"
+    });
+  });
+
+  it("falls back for non-letter names and exhausted name-derived prefixes while resolving collisions", async () => {
+    const oidc = createMutableMockOidcProvider({
+      subject: "user-1",
+      email: "one@example.com",
+      displayName: "User One"
+    });
+    const app = buildApp({
+      config: testConfig,
+      oidcProvider: oidc.provider,
+      sqlitePath: ":memory:"
+    });
+    createdApps.push(app);
+
+    const session = await loginWithOidc(app);
+
+    const numericOnlyProjectResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects",
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        name: "12345"
+      }
+    });
+    expect(numericOnlyProjectResponse.statusCode).toBe(201);
+    const numericOnlyProject = numericOnlyProjectResponse.json();
+
+    const numericOnlyTaskResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/projects/${numericOnlyProject.id}/tasks`,
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        title: "Fallback prefix task"
+      }
+    });
+    expect(numericOnlyTaskResponse.statusCode).toBe(201);
+    expect(numericOnlyTaskResponse.json()).toMatchObject({
+      title: "Fallback prefix task"
+    });
+    expect(numericOnlyTaskResponse.json().ticketId).toMatch(/^[A-Z]{4}-1$/);
+
+    const firstCollidingProjectResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects",
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        name: "Bill"
+      }
+    });
+    expect(firstCollidingProjectResponse.statusCode).toBe(201);
+    const firstProject = firstCollidingProjectResponse.json();
+
+    const secondCollidingProjectResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects",
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        name: "Billiards backlog"
+      }
+    });
+    expect(secondCollidingProjectResponse.statusCode).toBe(201);
+    const secondProject = secondCollidingProjectResponse.json();
+
+    const secondProjectTaskResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/projects/${secondProject.id}/tasks`,
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        title: "Different collision candidate"
+      }
+    });
+    expect(secondProjectTaskResponse.statusCode).toBe(201);
+    expect(secondProjectTaskResponse.json()).toMatchObject({
+      ticketId: "BILI-1"
+    });
+
+    const singleLetterProjectResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects",
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        name: "Q"
+      }
+    });
+    expect(singleLetterProjectResponse.statusCode).toBe(201);
+
+    const fallbackAfterNameExhaustionResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects",
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        name: "Q"
+      }
+    });
+    expect(fallbackAfterNameExhaustionResponse.statusCode).toBe(201);
+    const fallbackAfterNameExhaustionProject = fallbackAfterNameExhaustionResponse.json();
+
+    const fallbackAfterNameExhaustionTaskResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/projects/${fallbackAfterNameExhaustionProject.id}/tasks`,
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        title: "Fallback after collision"
+      }
+    });
+    expect(fallbackAfterNameExhaustionTaskResponse.statusCode).toBe(201);
+    expect(fallbackAfterNameExhaustionTaskResponse.json().ticketId).toMatch(/^[A-Z]{4}-1$/);
+
+    const firstProjectTaskResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/projects/${firstProject.id}/tasks`,
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        title: "Original collision candidate"
+      }
+    });
+    expect(firstProjectTaskResponse.statusCode).toBe(201);
+    expect(firstProjectTaskResponse.json()).toMatchObject({
+      ticketId: "BILL-1"
+    });
   });
 
   it("supports one-level subtasks and promotes them when a parent is deleted", async () => {
@@ -847,6 +1097,9 @@ describe("projects and tasks API", () => {
         .tags.items.anyOf[1]
     ).toEqual({
       $ref: "#/components/schemas/TaskTagInput"
+    });
+    expect(openApi.components.schemas.Task.properties.ticketId).toEqual({
+      type: "string"
     });
     expect(openApi.paths["/api/v1/projects/{projectId}/tasks"].post.responses["201"]).toEqual({
       content: {

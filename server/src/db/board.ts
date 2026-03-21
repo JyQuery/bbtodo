@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, max, ne } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, max, ne, or } from "drizzle-orm";
 
 import {
   type DatabaseClient,
@@ -6,6 +6,7 @@ import {
   defaultTaskTagColor,
   type LaneRecord,
   lanes,
+  type ProjectRecord,
   projects,
   type TaskRecord,
   type TaskRecordWithTags,
@@ -16,6 +17,7 @@ import {
   type TaskTagInput,
   taskTags
 } from "./schema.js";
+import { resolveProjectTicketPrefix } from "../services/ticket-prefix.js";
 
 function normalizeTaskTagLabel(tag: string) {
   const normalized = tag.trim().replace(/\s+/g, " ");
@@ -68,6 +70,22 @@ function normalizeTaskTags(tags: TaskTagInput[] | undefined) {
   });
 
   return normalizedTags;
+}
+
+function requireProjectTicketPrefix(project: Pick<ProjectRecord, "id" | "ticketPrefix">) {
+  if (!project.ticketPrefix) {
+    throw new Error(`Project ${project.id} is missing a ticket prefix.`);
+  }
+
+  return project.ticketPrefix;
+}
+
+function requireTaskTicketNumber(task: Pick<TaskRecord, "id" | "ticketNumber">) {
+  if (task.ticketNumber === null) {
+    throw new Error(`Task ${task.id} is missing a ticket number.`);
+  }
+
+  return task.ticketNumber;
 }
 
 function listTaskTagMap(db: DatabaseClient, taskIds: string[]) {
@@ -611,18 +629,170 @@ export function listProjectsForUser(db: DatabaseClient, userId: string) {
   }));
 }
 
+export function backfillTicketIds(db: DatabaseClient) {
+  db.transaction((tx) => {
+    const allProjects = tx
+      .select()
+      .from(projects)
+      .orderBy(asc(projects.userId), asc(projects.createdAt), asc(projects.id))
+      .all();
+    const projectsByUser = new Map<string, ProjectRecord[]>();
+
+    allProjects.forEach((project) => {
+      const userProjects = projectsByUser.get(project.userId) ?? [];
+      userProjects.push(project);
+      projectsByUser.set(project.userId, userProjects);
+    });
+
+    projectsByUser.forEach((userProjects, userId) => {
+      const usedPrefixes = new Set<string>();
+
+      userProjects.forEach((project) => {
+        if (!project.ticketPrefix) {
+          return;
+        }
+
+        if (usedPrefixes.has(project.ticketPrefix)) {
+          throw new Error(
+            `User ${userId} has duplicate ticket prefix ${project.ticketPrefix} on project ${project.id}.`
+          );
+        }
+
+        usedPrefixes.add(project.ticketPrefix);
+      });
+
+      userProjects.forEach((project) => {
+        if (project.ticketPrefix) {
+          return;
+        }
+
+        const prefix = resolveProjectTicketPrefix(project.name, usedPrefixes);
+
+        tx
+          .update(projects)
+          .set({
+            ticketPrefix: prefix
+          })
+          .where(eq(projects.id, project.id))
+          .run();
+
+        project.ticketPrefix = prefix;
+        usedPrefixes.add(prefix);
+      });
+    });
+
+    allProjects.forEach((project) => {
+      const projectTicketPrefix = requireProjectTicketPrefix(project);
+      const projectTasks = tx
+        .select()
+        .from(tasks)
+        .where(eq(tasks.projectId, project.id))
+        .orderBy(asc(tasks.createdAt), asc(tasks.id))
+        .all();
+      const usedTicketNumbers = new Set<number>();
+      let highestTicketNumber = 0;
+      let nextAvailableTicketNumber = 1;
+
+      projectTasks.forEach((task) => {
+        if (task.ticketNumber === null) {
+          return;
+        }
+
+        if (usedTicketNumbers.has(task.ticketNumber)) {
+          throw new Error(
+            `Project ${project.id} (${projectTicketPrefix}) has duplicate ticket number ${task.ticketNumber}.`
+          );
+        }
+
+        usedTicketNumbers.add(task.ticketNumber);
+        highestTicketNumber = Math.max(highestTicketNumber, task.ticketNumber);
+      });
+
+      projectTasks.forEach((task) => {
+        if (task.ticketNumber !== null) {
+          return;
+        }
+
+        while (usedTicketNumbers.has(nextAvailableTicketNumber)) {
+          nextAvailableTicketNumber += 1;
+        }
+
+        tx
+          .update(tasks)
+          .set({
+            ticketNumber: nextAvailableTicketNumber
+          })
+          .where(eq(tasks.id, task.id))
+          .run();
+
+        task.ticketNumber = nextAvailableTicketNumber;
+        usedTicketNumbers.add(nextAvailableTicketNumber);
+        highestTicketNumber = Math.max(highestTicketNumber, nextAvailableTicketNumber);
+        nextAvailableTicketNumber += 1;
+      });
+
+      const resolvedNextTicketNumber = Math.max(project.nextTicketNumber ?? 1, highestTicketNumber + 1, 1);
+      if (project.nextTicketNumber !== resolvedNextTicketNumber) {
+        tx
+          .update(projects)
+          .set({
+            nextTicketNumber: resolvedNextTicketNumber
+          })
+          .where(eq(projects.id, project.id))
+          .run();
+      }
+    });
+
+    const projectWithMissingTicketData = tx
+      .select({
+        id: projects.id
+      })
+      .from(projects)
+      .where(or(isNull(projects.ticketPrefix), isNull(projects.nextTicketNumber)))
+      .get();
+    if (projectWithMissingTicketData) {
+      throw new Error(`Project ${projectWithMissingTicketData.id} is missing ticket metadata after backfill.`);
+    }
+
+    const taskWithMissingTicketData = tx
+      .select({
+        id: tasks.id
+      })
+      .from(tasks)
+      .where(isNull(tasks.ticketNumber))
+      .get();
+    if (taskWithMissingTicketData) {
+      throw new Error(`Task ${taskWithMissingTicketData.id} is missing ticket metadata after backfill.`);
+    }
+  });
+}
+
 export function createProject(db: DatabaseClient, userId: string, name: string) {
+  const usedPrefixes = new Set(
+    db
+      .select({
+        ticketPrefix: projects.ticketPrefix
+      })
+      .from(projects)
+      .where(eq(projects.userId, userId))
+      .all()
+      .flatMap((project) => (project.ticketPrefix ? [project.ticketPrefix] : []))
+  );
   const now = new Date().toISOString();
   const project = {
     id: crypto.randomUUID(),
     userId,
     name,
+    ticketPrefix: resolveProjectTicketPrefix(name, usedPrefixes),
+    nextTicketNumber: 1,
     createdAt: now,
     updatedAt: now
   };
 
-  db.insert(projects).values(project).run();
-  createProjectLanesFromTemplates(db, project.id, now, defaultLaneTemplates);
+  db.transaction((tx) => {
+    tx.insert(projects).values(project).run();
+    createProjectLanesFromTemplates(tx, project.id, now, defaultLaneTemplates);
+  });
 
   return project;
 }
@@ -960,58 +1130,76 @@ export function createTask(
     tags?: TaskTagInput[];
   }
 ) {
-  const project = getOwnedProject(db, input.userId, input.projectId);
-  if (!project) {
-    return {
-      status: "project_not_found" as const
-    };
-  }
+  return db.transaction((tx) => {
+    const project = getOwnedProject(tx, input.userId, input.projectId);
+    if (!project) {
+      return {
+        status: "project_not_found" as const
+      };
+    }
 
-  const placement = resolveTaskPlacement(db, {
-    laneId: input.laneId,
-    parentTaskId: input.parentTaskId,
-    projectId: input.projectId
+    const ticketNumber = project.nextTicketNumber;
+    if (ticketNumber === null) {
+      throw new Error(`Project ${project.id} is missing nextTicketNumber.`);
+    }
+    requireProjectTicketPrefix(project);
+
+    const placement = resolveTaskPlacement(tx, {
+      laneId: input.laneId,
+      parentTaskId: input.parentTaskId,
+      projectId: input.projectId
+    });
+    if (placement.status !== "ok") {
+      return {
+        status: placement.status
+      };
+    }
+
+    const parentTaskId = placement.parentTask?.id ?? null;
+    const lastPosition = listSiblingTaskIds(tx, {
+      laneId: placement.lane.id,
+      parentTaskId,
+      projectId: input.projectId
+    }).length;
+
+    const now = new Date().toISOString();
+    const task = {
+      id: crypto.randomUUID(),
+      projectId: input.projectId,
+      laneId: placement.lane.id,
+      parentTaskId,
+      title: input.title,
+      body: input.body ?? "",
+      ticketNumber,
+      position: lastPosition,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    tx.insert(tasks).values(task).run();
+    replaceTaskTags(tx, task.id, input.tags ?? []);
+    syncTaskTagColorsForUser(tx, input.userId, input.tags);
+    tx
+      .update(projects)
+      .set({
+        nextTicketNumber: ticketNumber + 1,
+        updatedAt: now
+      })
+      .where(eq(projects.id, input.projectId))
+      .run();
+
+    const createdTask = getTaskWithTags(tx, task.id);
+    if (!createdTask) {
+      throw new Error(`Failed to load created task ${task.id}.`);
+    }
+
+    requireTaskTicketNumber(createdTask);
+
+    return {
+      status: "created" as const,
+      task: createdTask
+    };
   });
-  if (placement.status !== "ok") {
-    return {
-      status: placement.status
-    };
-  }
-
-  const parentTaskId = placement.parentTask?.id ?? null;
-
-  const lastPosition = listSiblingTaskIds(db, {
-    laneId: placement.lane.id,
-    parentTaskId,
-    projectId: input.projectId
-  }).length;
-
-  const now = new Date().toISOString();
-  const task = {
-    id: crypto.randomUUID(),
-    projectId: input.projectId,
-    laneId: placement.lane.id,
-    parentTaskId,
-    title: input.title,
-    body: input.body ?? "",
-    position: lastPosition,
-    createdAt: now,
-    updatedAt: now
-  };
-
-  db.insert(tasks).values(task).run();
-  replaceTaskTags(db, task.id, input.tags ?? []);
-  syncTaskTagColorsForUser(db, input.userId, input.tags);
-  touchProject(db, input.projectId, now);
-  const createdTask = getTaskWithTags(db, task.id);
-  if (!createdTask) {
-    throw new Error(`Failed to load created task ${task.id}.`);
-  }
-
-  return {
-    status: "created" as const,
-    task: createdTask
-  };
 }
 
 export function getOwnedTask(
