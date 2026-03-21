@@ -1168,11 +1168,6 @@ describe("projects and tasks API", () => {
       tasksResponse.json().filter((task: { laneId: string }) => task.laneId === doneLane.id)
     ).toEqual([
       expect.objectContaining({
-        id: doneTaskResponse.json().id,
-        laneId: doneLane.id,
-        position: 0
-      }),
-      expect.objectContaining({
         id: firstQaTaskResponse.json().id,
         laneId: doneLane.id,
         position: 1,
@@ -1182,6 +1177,11 @@ describe("projects and tasks API", () => {
         id: secondQaTaskResponse.json().id,
         laneId: doneLane.id,
         position: 2
+      }),
+      expect.objectContaining({
+        id: doneTaskResponse.json().id,
+        laneId: doneLane.id,
+        position: 0
       })
     ]);
   });
@@ -1231,7 +1231,7 @@ describe("projects and tasks API", () => {
     }
   });
 
-  it("lists Done tasks in updated-at ascending order after moves and updates", async () => {
+  it("lists Done tasks in updated-at descending order after moves and updates", async () => {
     const oidc = createMutableMockOidcProvider({
       subject: "user-1",
       email: "one@example.com",
@@ -1323,7 +1323,7 @@ describe("projects and tasks API", () => {
         .json()
         .filter((task: { laneId: string }) => task.laneId === doneLane.id)
         .map((task: { id: string }) => task.id)
-    ).toEqual([movedTaskResponse.json().id, firstDoneTaskResponse.json().id]);
+    ).toEqual([firstDoneTaskResponse.json().id, movedTaskResponse.json().id]);
   });
 
   it("keeps the remaining protected lanes undeletable", async () => {

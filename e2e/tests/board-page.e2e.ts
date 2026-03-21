@@ -20,6 +20,7 @@ async function beginTaskDrag(page: Page, source: Locator) {
 }
 
 async function hoverDraggedTaskOver(page: Page, target: Locator, targetYRatio = 0.5) {
+  await page.waitForTimeout(80);
   await expect(target).toBeVisible();
   const initialTargetBox = await target.boundingBox();
 
@@ -45,6 +46,8 @@ async function hoverDraggedTaskOver(page: Page, target: Locator, targetYRatio = 
     );
     await page.waitForTimeout(40);
   }
+
+  await page.waitForTimeout(80);
 }
 
 async function finishTaskDrag(page: Page) {
@@ -366,7 +369,7 @@ test("board page reorders tasks and manages lanes", async ({ page }) => {
   await expect(doneColumn.getByText("Review retry settings")).toBeVisible();
 });
 
-test("board page keeps Done ordered by update time and ignores drag reordering", async ({ page }) => {
+test("board page keeps Done ordered by newest update time and ignores drag reordering", async ({ page }) => {
   const tasksWithDoneCards = structuredClone(tasks);
 
   tasksWithDoneCards.push(
@@ -408,17 +411,17 @@ test("board page keeps Done ordered by update time and ignores drag reordering",
   const shippedDocsCard = page.getByTestId("task-card-task-6");
 
   await expect(doneColumn.locator(".task-card__title")).toHaveText([
-    "Archive roadmap",
+    "Ship docs",
     "Remove healthcheck loop",
-    "Ship docs"
+    "Archive roadmap"
   ]);
 
   await dragTaskToTarget(page, taskCardSurface(shippedDocsCard), taskCardSurface(archivedRoadmapCard), 0.2);
 
   await expect(doneColumn.locator(".task-card__title")).toHaveText([
-    "Archive roadmap",
+    "Ship docs",
     "Remove healthcheck loop",
-    "Ship docs"
+    "Archive roadmap"
   ]);
 });
 

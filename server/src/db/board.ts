@@ -217,7 +217,7 @@ function resolveTaskLane(
 function compareTaskRecordsInLane(left: TaskRecord, right: TaskRecord, isDoneLane: boolean) {
   if (isDoneLane) {
     if (left.updatedAt !== right.updatedAt) {
-      return left.updatedAt.localeCompare(right.updatedAt);
+      return left.updatedAt < right.updatedAt ? 1 : -1;
     }
 
     if (left.position !== right.position) {
