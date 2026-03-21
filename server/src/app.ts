@@ -951,7 +951,7 @@ export function buildApp(options: {
         });
       }
 
-      return tasks.map((task) => toTaskResponse(task, { ticketPrefix: project.ticketPrefix }));
+      return tasks.map((task) => toTaskResponse(task, { ticketPrefix: project.ticketPrefix as string }));
     }
   });
 
@@ -1011,7 +1011,7 @@ export function buildApp(options: {
         });
       }
 
-      return reply.status(201).send(toTaskResponse(task.task, { ticketPrefix: project.ticketPrefix }));
+      return reply.status(201).send(toTaskResponse(task.task, { ticketPrefix: project.ticketPrefix as string }));
     }
   });
 
@@ -1075,7 +1075,7 @@ export function buildApp(options: {
         });
       }
 
-      return toTaskResponse(task.task, { ticketPrefix: project.ticketPrefix });
+      return toTaskResponse(task.task, { ticketPrefix: project.ticketPrefix as string });
     }
   });
 

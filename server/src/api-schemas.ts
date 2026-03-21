@@ -200,16 +200,9 @@ export function toProjectResponse(
 export function toTaskResponse(
   task: TaskRecord | TaskRecordWithTags,
   options: {
-    ticketPrefix: string | null;
+    ticketPrefix: string;
   }
 ) {
-  if (!options.ticketPrefix) {
-    throw new Error(`Project ${task.projectId} is missing a ticket prefix.`);
-  }
-  if (task.ticketNumber === null) {
-    throw new Error(`Task ${task.id} is missing a ticket number.`);
-  }
-
   return taskResponseSchema.parse({
     id: task.id,
     projectId: task.projectId,
