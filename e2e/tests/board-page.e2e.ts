@@ -5,6 +5,7 @@ import { laneId, mockAuthenticated, projectsForGrid, tag, tasks } from "./fixtur
 async function beginTaskDrag(page: Page, source: Locator) {
   const taskSurface = source.locator(":scope > .task-card__surface-wrap > .task-card__surface");
   const dragHandle = (await taskSurface.count()) > 0 ? taskSurface : source;
+  const dragOverlay = page.locator(".task-card--drag-overlay");
 
   await expect(dragHandle).toBeVisible();
   const sourceBox = await dragHandle.boundingBox();
@@ -19,7 +20,7 @@ async function beginTaskDrag(page: Page, source: Locator) {
   await page.mouse.move(sourceCenterX + 18, sourceCenterY, { steps: 6 });
   await page.mouse.move(sourceCenterX + 28, sourceCenterY - 2, { steps: 4 });
   await page.mouse.move(sourceCenterX + 32, sourceCenterY - 4, { steps: 2 });
-  await page.waitForTimeout(160);
+  await expect(dragOverlay).toHaveCount(1);
 }
 
 async function hoverDraggedTaskOver(page: Page, target: Locator, targetYRatio = 0.5) {
@@ -91,7 +92,6 @@ async function hoverDraggedTaskDirectlyToTarget(page: Page, target: Locator, tar
 }
 
 async function dropDraggedTaskOnTrashTarget(page: Page, target: Locator) {
-  await page.waitForTimeout(100);
   await expect(target).toBeAttached();
   const targetBox = await target.boundingBox();
 
@@ -102,13 +102,15 @@ async function dropDraggedTaskOnTrashTarget(page: Page, target: Locator) {
     (targetBox?.y ?? 0) + (targetBox?.height ?? 0) / 2,
     { steps: 12 }
   );
-  await page.waitForTimeout(120);
+  await expect(target).toHaveClass(/is-active/);
   await finishTaskDrag(page);
-  await page.waitForTimeout(200);
 }
 
 async function finishTaskDrag(page: Page) {
+  const dragOverlay = page.locator(".task-card--drag-overlay");
+
   await page.mouse.up();
+  await expect(dragOverlay).toHaveCount(0);
 }
 
 async function dragTaskToTarget(page: Page, source: Locator, target: Locator, targetYRatio = 0.5) {
