@@ -1,8 +1,10 @@
 import { type DragEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import {
   closestCorners,
   DndContext,
   DragOverlay,
+  MeasuringStrategy,
   PointerSensor,
   pointerWithin,
   useDroppable,
@@ -28,6 +30,8 @@ import {
 import {
   formatSingleTagInput,
   getTaskInputLabel,
+  isDoneLaneName,
+  isProtectedLaneName,
   itemStyle,
   normalizeTagKey,
   parseSingleTagInput,
@@ -54,14 +58,58 @@ const taskDropAnimation = {
   duration: 220,
   easing: "cubic-bezier(0.22, 1, 0.36, 1)"
 };
+const taskMeasuring = {
+  droppable: {
+    strategy: MeasuringStrategy.Always
+  }
+} as const;
+
+function getTaskTrashDropTargetId(laneId: string) {
+  return `task-trash:${laneId}`;
+}
+
+function getLaneIdFromTaskTrashDropTargetId(dropTargetId: string | number) {
+  const normalizedDropTargetId = String(dropTargetId);
+
+  return normalizedDropTargetId.startsWith("task-trash:")
+    ? normalizedDropTargetId.slice("task-trash:".length)
+    : null;
+}
 
 const taskCollisionDetection: CollisionDetection = (args) => {
   function getCollisionContainer(collisionId: string | number) {
     return args.droppableContainers.find((droppableContainer) => droppableContainer.id === collisionId);
   }
 
+  function getPointerDistanceFromContainer(collisionId: string | number) {
+    const pointer =
+      args.pointerCoordinates ?? {
+        x: args.collisionRect.left + args.collisionRect.width / 2,
+        y: args.collisionRect.top + args.collisionRect.height / 2
+      };
+    const rect = getCollisionContainer(collisionId)?.rect.current;
+    if (!rect) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    return Math.hypot(pointer.x - centerX, pointer.y - centerY);
+  }
+
   const pointerHits = pointerWithin(args);
   if (pointerHits.length > 0) {
+    const trashHits = pointerHits.filter((collision) => {
+      const container = getCollisionContainer(collision.id);
+
+      return container?.data.current?.type === "trash";
+    });
+
+    if (trashHits.length > 0) {
+      return trashHits;
+    }
+
     const nestTargetHits = pointerHits.filter((collision) => {
       const container = getCollisionContainer(collision.id);
 
@@ -69,7 +117,12 @@ const taskCollisionDetection: CollisionDetection = (args) => {
     });
 
     if (nestTargetHits.length > 0) {
-      return nestTargetHits;
+      return nestTargetHits
+        .slice()
+        .sort(
+          (left, right) =>
+            getPointerDistanceFromContainer(left.id) - getPointerDistanceFromContainer(right.id)
+        );
     }
 
     const slotHits = pointerHits.filter((collision) => {
@@ -125,15 +178,37 @@ const taskCollisionDetection: CollisionDetection = (args) => {
   return closestCorners(args);
 };
 
-function compareTasks(left: Task, right: Task) {
+function compareTasksInLane(left: Task, right: Task, isDoneLane: boolean) {
+  if (isDoneLane) {
+    if (left.updatedAt !== right.updatedAt) {
+      return left.updatedAt < right.updatedAt ? 1 : -1;
+    }
+
+    if (left.position !== right.position) {
+      return left.position - right.position;
+    }
+
+    return left.id.localeCompare(right.id);
+  }
+
   if (left.position !== right.position) {
     return left.position - right.position;
   }
 
-  return left.updatedAt < right.updatedAt ? 1 : -1;
+  if (left.updatedAt !== right.updatedAt) {
+    return left.updatedAt < right.updatedAt ? 1 : -1;
+  }
+
+  return left.id.localeCompare(right.id);
 }
 
-function listSiblingTasks(tasks: Task[], laneId: string, parentTaskId: string | null, excludedTaskId?: string) {
+function listSiblingTasks(
+  tasks: Task[],
+  laneId: string,
+  parentTaskId: string | null,
+  isDoneLane: boolean,
+  excludedTaskId?: string
+) {
   return tasks
     .filter(
       (task) =>
@@ -142,7 +217,7 @@ function listSiblingTasks(tasks: Task[], laneId: string, parentTaskId: string | 
         task.parentTaskId === parentTaskId
     )
     .slice()
-    .sort(compareTasks);
+    .sort((left, right) => compareTasksInLane(left, right, isDoneLane));
 }
 
 function buildTopLevelTaskIdsByLane(lanes: BoardLane[], tasks: Task[]) {
@@ -151,36 +226,45 @@ function buildTopLevelTaskIdsByLane(lanes: BoardLane[], tasks: Task[]) {
     string[]
   >;
 
-  tasks
-    .slice()
-    .sort(compareTasks)
-    .forEach((task) => {
-      if (task.parentTaskId !== null || !task.laneId || !(task.laneId in taskIdsByLane)) {
-        return;
-      }
-
-      taskIdsByLane[task.laneId].push(task.id);
-    });
+  lanes.forEach((lane) => {
+    tasks
+      .filter((task) => task.parentTaskId === null && task.laneId === lane.id)
+      .slice()
+      .sort((left, right) => compareTasksInLane(left, right, isDoneLaneName(lane.name)))
+      .forEach((task) => {
+        taskIdsByLane[lane.id].push(task.id);
+      });
+  });
 
   return taskIdsByLane;
 }
 
-function buildSubtaskIdsByParent(tasks: Task[]) {
+function buildSubtaskIdsByParent(tasks: Task[], lanesById: Map<string, BoardLane>) {
   const subtaskIdsByParent = new Map<string, string[]>();
+  const subtasksByParent = new Map<string, Task[]>();
 
   tasks
     .filter((task) => task.parentTaskId !== null)
-    .slice()
-    .sort(compareTasks)
     .forEach((task) => {
       if (!task.parentTaskId) {
         return;
       }
 
-      const childTaskIds = subtaskIdsByParent.get(task.parentTaskId) ?? [];
-      childTaskIds.push(task.id);
-      subtaskIdsByParent.set(task.parentTaskId, childTaskIds);
+      const childTasks = subtasksByParent.get(task.parentTaskId) ?? [];
+      childTasks.push(task);
+      subtasksByParent.set(task.parentTaskId, childTasks);
     });
+
+  subtasksByParent.forEach((childTasks, parentTaskId) => {
+    const laneName = childTasks[0]?.laneId ? lanesById.get(childTasks[0].laneId)?.name ?? "" : "";
+    subtaskIdsByParent.set(
+      parentTaskId,
+      childTasks
+        .slice()
+        .sort((left, right) => compareTasksInLane(left, right, isDoneLaneName(laneName)))
+        .map((task) => task.id)
+    );
+  });
 
   return subtaskIdsByParent;
 }
@@ -249,18 +333,30 @@ function applyTaskMove(
   taskId: string,
   targetLaneId: string,
   targetParentTaskId: string | null,
-  targetIndex: number
+  targetIndex: number,
+  lanesById: Map<string, BoardLane>
 ) {
   const sourceTask = tasks.find((task) => task.id === taskId);
   if (!sourceTask || !sourceTask.laneId) {
     return tasks;
   }
 
-  const sourceSiblings = listSiblingTasks(tasks, sourceTask.laneId, sourceTask.parentTaskId);
+  const sourceSiblings = listSiblingTasks(
+    tasks,
+    sourceTask.laneId,
+    sourceTask.parentTaskId,
+    isDoneLaneName(lanesById.get(sourceTask.laneId)?.name ?? "")
+  );
   const sourceIndex = sourceSiblings.findIndex((task) => task.id === taskId);
   const sameGroup =
     sourceTask.laneId === targetLaneId && sourceTask.parentTaskId === targetParentTaskId;
-  const nextSiblingTasks = listSiblingTasks(tasks, targetLaneId, targetParentTaskId, taskId);
+  const nextSiblingTasks = listSiblingTasks(
+    tasks,
+    targetLaneId,
+    targetParentTaskId,
+    isDoneLaneName(lanesById.get(targetLaneId)?.name ?? ""),
+    taskId
+  );
   const normalizedTargetIndex =
     sameGroup && sourceIndex !== -1 && sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
   const clampedTargetIndex = Math.max(0, Math.min(normalizedTargetIndex, nextSiblingTasks.length));
@@ -273,6 +369,7 @@ function applyTaskMove(
     tasks,
     sourceTask.laneId,
     sourceTask.parentTaskId,
+    isDoneLaneName(lanesById.get(sourceTask.laneId)?.name ?? ""),
     taskId
   );
   const nextTasksInTargetGroup = [...nextSiblingTasks];
@@ -409,24 +506,37 @@ function LaneHeader({
   destinationLanes,
   isDeletePending,
   isDragDisabled,
+  isProtected,
+  isTaskDeletePending,
+  isTaskDragging,
   lane,
+  onCancelTaskDelete,
   onDelete,
+  onConfirmTaskDelete,
   onDragEnd,
-  onDragStart
+  onDragStart,
+  pendingTaskDelete
 }: {
   destinationLanes: BoardLane[];
   isDeletePending: boolean;
   isDragDisabled: boolean;
+  isProtected: boolean;
+  isTaskDeletePending: boolean;
+  isTaskDragging: boolean;
   lane: BoardLane;
+  onCancelTaskDelete: () => void;
   onDelete: (destinationLaneId?: string) => void;
+  onConfirmTaskDelete: (taskId: string) => void;
   onDragEnd: () => void;
   onDragStart: (event: DragEvent<HTMLElement>, laneId: string) => void;
+  pendingTaskDelete: Task | null;
 }) {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const confirmRef = useRef<HTMLDivElement | null>(null);
   const preferredDestinationId = getPreferredLaneDeleteDestination(lane.id, destinationLanes)?.id ?? "";
   const [destinationLaneId, setDestinationLaneId] = useState(preferredDestinationId);
   const requiresDestination = lane.taskCount > 0;
+  const showLaneDeleteAction = !isTaskDragging && !pendingTaskDelete && !isProtected;
 
   useDismissableLayer(isConfirmOpen, confirmRef, () => setIsConfirmOpen(false));
 
@@ -437,6 +547,12 @@ function LaneHeader({
 
     setDestinationLaneId(preferredDestinationId);
   }, [isConfirmOpen, preferredDestinationId]);
+
+  useEffect(() => {
+    if (isTaskDragging || pendingTaskDelete) {
+      setIsConfirmOpen(false);
+    }
+  }, [isTaskDragging, pendingTaskDelete]);
 
   return (
     <div
@@ -451,23 +567,33 @@ function LaneHeader({
         <h2>{lane.name}</h2>
       </div>
       <div className="lane-header__actions" ref={confirmRef}>
-        <button
-          aria-haspopup="dialog"
-          aria-expanded={isConfirmOpen}
-          aria-label={`Delete lane ${lane.name}`}
-          className="icon-button danger-button lane-delete-button"
-          draggable={false}
-          onClick={(event) => {
-            event.stopPropagation();
-            setIsConfirmOpen((current) => !current);
-          }}
-          onDragStart={(event) => event.preventDefault()}
-          onPointerDown={(event) => event.stopPropagation()}
-          type="button"
-        >
-          <TrashIcon />
-        </button>
-        {isConfirmOpen ? (
+        <LaneTaskTrashTarget
+          isDeletePending={isTaskDeletePending}
+          isDraggingTask={isTaskDragging}
+          laneId={lane.id}
+          onCancel={onCancelTaskDelete}
+          onConfirm={onConfirmTaskDelete}
+          pendingTask={pendingTaskDelete}
+        />
+        {showLaneDeleteAction ? (
+          <button
+            aria-haspopup="dialog"
+            aria-expanded={isConfirmOpen}
+            aria-label={`Delete lane ${lane.name}`}
+            className="icon-button danger-button lane-delete-button"
+            draggable={false}
+            onClick={(event) => {
+              event.stopPropagation();
+              setIsConfirmOpen((current) => !current);
+            }}
+            onDragStart={(event) => event.preventDefault()}
+            onPointerDown={(event) => event.stopPropagation()}
+            type="button"
+          >
+            <TrashIcon />
+          </button>
+        ) : null}
+        {showLaneDeleteAction && isConfirmOpen ? (
           <div
             aria-label={`Delete lane ${lane.name}`}
             className="task-delete-popover lane-delete-popover"
@@ -534,8 +660,9 @@ function LaneDropArea({
   children: ReactNode;
   laneId: string;
 }) {
+  const laneDropTargetId = `lane:${laneId}`;
   const { setNodeRef } = useDroppable({
-    id: `lane:${laneId}`,
+    id: laneDropTargetId,
     data: {
       laneId,
       type: "lane"
@@ -560,8 +687,9 @@ function TaskDropSlot({
   parentTaskId: string | null;
   position: number;
 }) {
+  const slotDropTargetId = `slot:${laneId}:${parentTaskId ?? "root"}:${position}`;
   const { isOver, setNodeRef } = useDroppable({
-    id: `slot:${laneId}:${parentTaskId ?? "root"}:${position}`,
+    id: slotDropTargetId,
     data: {
       laneId,
       parentTaskId,
@@ -622,7 +750,6 @@ function TaskCard({
   isDragDisabled,
   isNestTarget,
   laneId,
-  onDelete,
   onOpen,
   onTagSelect,
   showNestTarget,
@@ -636,7 +763,6 @@ function TaskCard({
   isDragDisabled: boolean;
   isNestTarget: boolean;
   laneId: string;
-  onDelete: (taskId: string) => void;
   onOpen: (task: Task) => void;
   onTagSelect: (tag: string) => void;
   showNestTarget: boolean;
@@ -646,9 +772,8 @@ function TaskCard({
   task: Task;
   taskIndex: number;
 }) {
-  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
-  const confirmRef = useRef<HTMLDivElement | null>(null);
   const suppressClickRef = useRef(false);
+  const nestTargetDropTargetId = `nest:${task.id}`;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     disabled: isDragDisabled,
@@ -661,7 +786,7 @@ function TaskCard({
     }
   });
   const { setNodeRef: setNestTargetRef } = useDroppable({
-    id: `nest:${task.id}`,
+    id: nestTargetDropTargetId,
     disabled: !showNestTarget,
     data: {
       laneId,
@@ -670,8 +795,6 @@ function TaskCard({
       type: "nest-target"
     }
   });
-
-  useDismissableLayer(isConfirmOpen, confirmRef, () => setIsConfirmOpen(false));
 
   useEffect(() => {
     if (isDragging) {
@@ -688,66 +811,9 @@ function TaskCard({
     };
   }, [isDragging]);
 
-  const deleteMenu = (
-    <div className="task-card__delete-menu" ref={confirmRef}>
-      <button
-        aria-expanded={isConfirmOpen}
-        aria-label={`Delete task ${task.title}`}
-        className="icon-button danger-button"
-        data-no-dnd="true"
-        onClick={(event) => {
-          event.stopPropagation();
-          setIsConfirmOpen((current) => !current);
-        }}
-        onPointerDown={(event) => event.stopPropagation()}
-        type="button"
-      >
-        <TrashIcon />
-      </button>
-      {isConfirmOpen ? (
-        <div
-          className="task-delete-popover"
-          data-no-dnd="true"
-          onClick={(event) => event.stopPropagation()}
-          onPointerDown={(event) => event.stopPropagation()}
-          role="alertdialog"
-        >
-          <p>Delete this task?</p>
-          <div className="task-delete-popover__actions">
-            <button
-              className="text-button"
-              data-no-dnd="true"
-              onClick={(event) => {
-                event.stopPropagation();
-                setIsConfirmOpen(false);
-              }}
-              onPointerDown={(event) => event.stopPropagation()}
-              type="button"
-            >
-              Cancel
-            </button>
-            <button
-              className="ghost-button danger-button"
-              data-no-dnd="true"
-              onClick={(event) => {
-                event.stopPropagation();
-                setIsConfirmOpen(false);
-                onDelete(task.id);
-              }}
-              onPointerDown={(event) => event.stopPropagation()}
-              type="button"
-            >
-              Delete
-            </button>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-
   return (
     <article
-      className={`task-card${isDragDisabled ? "" : " is-draggable"}${isConfirmOpen ? " is-confirm-open" : ""}${isDragging ? " is-dragging" : ""}${task.parentTaskId ? " task-card--subtask" : ""}${subtasks.length > 0 ? " has-subtasks" : ""}${isNestTarget ? " is-nest-target" : ""}`}
+      className={`task-card${isDragDisabled ? "" : " is-draggable"}${isDragging ? " is-dragging" : ""}${task.parentTaskId ? " task-card--subtask" : ""}${subtasks.length > 0 ? " has-subtasks" : ""}${isNestTarget ? " is-nest-target" : ""}`}
       data-testid={`task-card-${task.id}`}
       ref={setNodeRef}
       style={{
@@ -786,7 +852,6 @@ function TaskCard({
         >
           <div className="task-card__title-row">
             <p className="task-card__title">{task.title}</p>
-            {deleteMenu}
           </div>
           {task.tags.length > 0 ? (
             <div className="task-card__tags">
@@ -822,7 +887,6 @@ function TaskCard({
                   isDragDisabled={isDragDisabled}
                   isNestTarget={false}
                   laneId={laneId}
-                  onDelete={onDelete}
                   onOpen={onOpen}
                   onTagSelect={onTagSelect}
                   showNestTarget={false}
@@ -843,6 +907,86 @@ function TaskCard({
         </div>
       ) : null}
     </article>
+  );
+}
+
+function LaneTaskTrashTarget({
+  isDeletePending,
+  isDraggingTask,
+  laneId,
+  pendingTask,
+  onCancel,
+  onConfirm
+}: {
+  isDeletePending: boolean;
+  isDraggingTask: boolean;
+  laneId: string;
+  pendingTask: Task | null;
+  onCancel: () => void;
+  onConfirm: (taskId: string) => void;
+}) {
+  const confirmRef = useRef<HTMLDivElement | null>(null);
+  const { isOver, setNodeRef } = useDroppable({
+    id: getTaskTrashDropTargetId(laneId),
+    data: {
+      laneId,
+      type: "trash"
+    },
+    disabled: !isDraggingTask
+  });
+
+  useDismissableLayer(Boolean(pendingTask), confirmRef, () => {
+    if (!isDeletePending) {
+      onCancel();
+    }
+  });
+
+  return (
+    <div
+      className={`lane-task-trash-shell${isDraggingTask || pendingTask ? " is-active" : ""}`}
+      ref={confirmRef}
+    >
+      <div
+        className={`lane-header__task-trash${isDraggingTask ? " is-visible" : ""}${isOver ? " is-active" : ""}${pendingTask ? " is-confirm-open" : ""}`}
+        data-testid={`lane-task-trash-target-${laneId}`}
+        ref={setNodeRef}
+        role="presentation"
+        title="Drop to delete"
+      >
+        <span aria-hidden="true" className="lane-header__task-trash-mark">
+          <TrashIcon />
+        </span>
+      </div>
+      {pendingTask ? (
+        <div
+          aria-label={`Delete task ${pendingTask.title}`}
+          className="task-delete-popover lane-task-trash-popover"
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+          role="alertdialog"
+        >
+          <p>Delete {pendingTask.title}?</p>
+          <div className="task-delete-popover__actions">
+            <button
+              className="text-button"
+              disabled={isDeletePending}
+              onClick={onCancel}
+              type="button"
+            >
+              Cancel
+            </button>
+            <button
+              className="ghost-button danger-button"
+              disabled={isDeletePending}
+              onClick={() => onConfirm(pendingTask.id)}
+              type="button"
+            >
+              {isDeletePending ? "Deleting..." : "Delete"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -1323,6 +1467,8 @@ export function BoardPage() {
   const [dropTarget, setDropTarget] = useState<TaskMoveTarget | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [laneName, setLaneName] = useState("");
+  const [pendingDeleteTaskId, setPendingDeleteTaskId] = useState<string | null>(null);
+  const [pendingDeleteTaskLaneId, setPendingDeleteTaskLaneId] = useState<string | null>(null);
   const [taskDragPreviewWidth, setTaskDragPreviewWidth] = useState<number | null>(null);
   const laneDragPreviewRef = useRef<HTMLElement | null>(null);
   const pointerClientYRef = useRef<number | null>(null);
@@ -1355,6 +1501,7 @@ export function BoardPage() {
   const lanes = lanesQuery.data ?? project?.laneSummaries ?? [];
   const tasks = tasksQuery.data ?? [];
   const activeTasks = previewTasks ?? tasks;
+  const lanesById = useMemo(() => new Map(lanes.map((lane) => [lane.id, lane])), [lanes]);
   const draggedLane = draggedLaneId ? lanes.find((lane) => lane.id === draggedLaneId) ?? null : null;
   const editingTask = editingTaskId ? tasks.find((task) => task.id === editingTaskId) ?? null : null;
   const isBoardFiltered = boardSearch.length > 0 || activeTagKey !== null;
@@ -1364,12 +1511,19 @@ export function BoardPage() {
     draggedTaskId
       ? committedTaskMap.get(draggedTaskId) ?? taskMap.get(draggedTaskId) ?? null
       : null;
+  const pendingDeleteTask =
+    pendingDeleteTaskId
+      ? committedTaskMap.get(pendingDeleteTaskId) ?? taskMap.get(pendingDeleteTaskId) ?? null
+      : null;
   const availableTaskTags = taskTagsQuery.data ?? listSuggestedTags(tasks);
   const topLevelTaskIdsByLane = useMemo(
     () => buildTopLevelTaskIdsByLane(lanes, activeTasks),
     [activeTasks, lanes]
   );
-  const subtaskIdsByParent = useMemo(() => buildSubtaskIdsByParent(activeTasks), [activeTasks]);
+  const subtaskIdsByParent = useMemo(
+    () => buildSubtaskIdsByParent(activeTasks, lanesById),
+    [activeTasks, lanesById]
+  );
   const taskSensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -1395,6 +1549,8 @@ export function BoardPage() {
 
   const groupedTasks = lanes.map((lane) => ({
     ...lane,
+    isDoneLane: isDoneLaneName(lane.name),
+    isProtectedLane: isProtectedLaneName(lane.name),
     displayTasks: (topLevelTaskIdsByLane[lane.id] ?? [])
       .map((taskId) => taskMap.get(taskId))
       .filter((task): task is Task => Boolean(task))
@@ -1423,9 +1579,23 @@ export function BoardPage() {
         subtasks: (subtaskIdsByParent.get(task.id) ?? [])
           .map((subtaskId) => taskMap.get(subtaskId))
           .filter((subtask): subtask is Task => Boolean(subtask)),
-        task
-      }))
+      task
+    }))
   }));
+
+  function laneUsesDoneOrdering(laneId: string | null) {
+    return laneId ? isDoneLaneName(lanesById.get(laneId)?.name ?? "") : false;
+  }
+
+  useEffect(() => {
+    if (
+      (pendingDeleteTaskId && !pendingDeleteTask) ||
+      (pendingDeleteTaskLaneId && !lanesById.has(pendingDeleteTaskLaneId))
+    ) {
+      setPendingDeleteTaskId(null);
+      setPendingDeleteTaskLaneId(null);
+    }
+  }, [lanesById, pendingDeleteTask, pendingDeleteTaskId, pendingDeleteTaskLaneId]);
 
   async function invalidateBoardData() {
     await Promise.all([
@@ -1476,7 +1646,7 @@ export function BoardPage() {
 
       await queryClient.cancelQueries({ queryKey: ["tasks", projectId] });
       const previousTasks = queryClient.getQueryData<Task[]>(["tasks", projectId]) ?? tasks;
-      const optimisticTasks = applyTaskMove(previousTasks, taskId, laneId, parentTaskId, position);
+      const optimisticTasks = applyTaskMove(previousTasks, taskId, laneId, parentTaskId, position, lanesById);
 
       queryClient.setQueryData(["tasks", projectId], optimisticTasks);
       return { previousTasks };
@@ -1544,19 +1714,25 @@ export function BoardPage() {
   const deleteTaskMutation = useMutation({
     mutationFn: (taskId: string) => api.deleteTask(projectId ?? "", taskId),
     onSuccess: async () => {
+      setPendingDeleteTaskId(null);
+      setPendingDeleteTaskLaneId(null);
       await invalidateBoardData();
     }
   });
   const isDragDisabled =
     isBoardFiltered ||
     deleteLaneMutation.isPending ||
+    deleteTaskMutation.isPending ||
     moveTaskMutation.isPending ||
     moveLaneMutation.isPending ||
+    pendingDeleteTaskId !== null ||
     saveTaskMutation.isPending ||
     draggedLaneId !== null;
   const isLaneDragDisabled =
     deleteLaneMutation.isPending ||
+    deleteTaskMutation.isPending ||
     moveLaneMutation.isPending ||
+    pendingDeleteTaskId !== null ||
     draggedTaskId !== null;
 
   function updateBoardParams(updater: (params: URLSearchParams) => void) {
@@ -1731,43 +1907,12 @@ export function BoardPage() {
     const activeTaskId = String(event.active.id);
     const source = findTaskLocation(tasks, activeTaskId);
 
-    setDraggedTaskId(activeTaskId);
-    setTaskDragPreviewWidth(event.active.rect.current.initial?.width ?? null);
-    setPreviewTasks(tasks);
-    previewTasksRef.current = tasks;
-    setDropTarget(
-      source
-        ? {
-            kind: "reorder",
-            laneId: source.laneId,
-            parentTaskId: source.parentTaskId,
-            position: source.position
-          }
-        : null
-    );
-  }
-
-  function handleTaskDragOver(event: DragOverEvent) {
-    if (!draggedTaskId || isDragDisabled || !event.over) {
-      return;
-    }
-
-    const activeTaskId = String(event.active.id);
-    const currentPreviewTasks = previewTasks ?? tasks;
-    const currentTopLevelTaskIdsByLane = buildTopLevelTaskIdsByLane(lanes, currentPreviewTasks);
-    const currentSubtaskIdsByParent = buildSubtaskIdsByParent(currentPreviewTasks);
-    const activeTask = currentPreviewTasks.find((task) => task.id === activeTaskId);
-    const sourceTask = tasks.find((task) => task.id === activeTaskId) ?? null;
-    const sourceParentTaskId = sourceTask?.parentTaskId ?? null;
-    const overData = event.over.data.current;
-    if (!overData || !activeTask) {
-      return;
-    }
-
-    function resetPreviewToSource() {
-      const source = findTaskLocation(tasks, activeTaskId);
+    flushSync(() => {
+      setPendingDeleteTaskId(null);
+      setPendingDeleteTaskLaneId(null);
+      setDraggedTaskId(activeTaskId);
+      setTaskDragPreviewWidth(event.active.rect.current.initial?.width ?? null);
       setPreviewTasks(tasks);
-      previewTasksRef.current = tasks;
       setDropTarget(
         source
           ? {
@@ -1778,11 +1923,58 @@ export function BoardPage() {
             }
           : null
       );
+    });
+    previewTasksRef.current = tasks;
+  }
+
+  function handleTaskDragOver(event: DragOverEvent) {
+    if (!draggedTaskId || isDragDisabled || !event.over) {
+      return;
+    }
+
+    const activeTaskId = String(event.active.id);
+    const currentPreviewTasks = previewTasks ?? tasks;
+    const currentTopLevelTaskIdsByLane = buildTopLevelTaskIdsByLane(lanes, currentPreviewTasks);
+    const currentSubtaskIdsByParent = buildSubtaskIdsByParent(currentPreviewTasks, lanesById);
+    const activeTask = currentPreviewTasks.find((task) => task.id === activeTaskId);
+    const sourceTask = tasks.find((task) => task.id === activeTaskId) ?? null;
+    const sourceParentTaskId = sourceTask?.parentTaskId ?? null;
+    const overData = event.over.data.current;
+    if (!overData || !activeTask) {
+      return;
+    }
+
+    function resetPreviewToSource() {
+      const source = findTaskLocation(tasks, activeTaskId);
+      previewTasksRef.current = tasks;
+      flushSync(() => {
+        setPreviewTasks(tasks);
+        setDropTarget(
+          source
+            ? {
+                kind: "reorder",
+                laneId: source.laneId,
+                parentTaskId: source.parentTaskId,
+                position: source.position
+              }
+            : null
+        );
+      });
+    }
+
+    if (overData.type === "trash") {
+      resetPreviewToSource();
+      return;
     }
 
     let nextDropTarget: TaskMoveTarget | null = null;
 
     if (overData.type === "slot") {
+      if (laneUsesDoneOrdering(String(overData.laneId))) {
+        resetPreviewToSource();
+        return;
+      }
+
       const targetParentTaskId =
         typeof overData.parentTaskId === "string" ? String(overData.parentTaskId) : null;
       if (!canTaskJoinParentGroup(currentPreviewTasks, activeTask, targetParentTaskId)) {
@@ -1799,38 +1991,57 @@ export function BoardPage() {
 
     if (overData.type === "lane" && nextDropTarget === null) {
       const targetLaneId = String(overData.laneId);
-      const laneTaskIds = currentTopLevelTaskIdsByLane[targetLaneId] ?? [];
-      if (laneTaskIds.length === 0) {
-        nextDropTarget = {
-          kind: "reorder",
-          laneId: targetLaneId,
-          parentTaskId: null,
-          position: 0
-        };
-      } else {
-        const pointerClientY = pointerClientYRef.current;
-        const translated = event.active.rect.current.translated;
-        const activeHeight = event.active.rect.current.initial?.height ?? 0;
-        const activeCenterY =
-          pointerClientY ??
-          (translated !== null
-            ? translated.top + activeHeight / 2
-            : event.over.rect.top + event.over.rect.height / 2);
-        const relativeCenterY = Math.max(0, activeCenterY - event.over.rect.top);
-        const normalizedIndex = Math.floor(
-          (relativeCenterY / Math.max(event.over.rect.height, 1)) * laneTaskIds.length
-        );
+      if (laneUsesDoneOrdering(targetLaneId)) {
+        if (sourceTask?.laneId === targetLaneId) {
+          resetPreviewToSource();
+          return;
+        }
 
         nextDropTarget = {
           kind: "reorder",
           laneId: targetLaneId,
           parentTaskId: null,
-          position: Math.max(0, Math.min(normalizedIndex, laneTaskIds.length))
+          position: (currentTopLevelTaskIdsByLane[targetLaneId] ?? []).length
         };
+      } else {
+        const laneTaskIds = currentTopLevelTaskIdsByLane[targetLaneId] ?? [];
+        if (laneTaskIds.length === 0) {
+          nextDropTarget = {
+            kind: "reorder",
+            laneId: targetLaneId,
+            parentTaskId: null,
+            position: 0
+          };
+        } else {
+          const pointerClientY = pointerClientYRef.current;
+          const translated = event.active.rect.current.translated;
+          const activeHeight = event.active.rect.current.initial?.height ?? 0;
+          const activeCenterY =
+            pointerClientY ??
+            (translated !== null
+              ? translated.top + activeHeight / 2
+              : event.over.rect.top + event.over.rect.height / 2);
+          const relativeCenterY = Math.max(0, activeCenterY - event.over.rect.top);
+          const normalizedIndex = Math.floor(
+            (relativeCenterY / Math.max(event.over.rect.height, 1)) * laneTaskIds.length
+          );
+
+          nextDropTarget = {
+            kind: "reorder",
+            laneId: targetLaneId,
+            parentTaskId: null,
+            position: Math.max(0, Math.min(normalizedIndex, laneTaskIds.length))
+          };
+        }
       }
     }
 
     if (overData.type === "nest-target" && nextDropTarget === null) {
+      if (laneUsesDoneOrdering(String(overData.laneId))) {
+        resetPreviewToSource();
+        return;
+      }
+
       const overTaskId = String(overData.taskId);
       const overTask = currentPreviewTasks.find((task) => task.id === overTaskId);
       if (sourceParentTaskId === overTaskId) {
@@ -1852,6 +2063,57 @@ export function BoardPage() {
     if (overData.type === "task" && nextDropTarget === null) {
       const targetLaneId = String(overData.laneId);
       const overTaskId = String(overData.taskId);
+      if (overTaskId === activeTaskId) {
+        return;
+      }
+
+      if (activeTask.parentTaskId === overTaskId) {
+        return;
+      }
+
+      if (laneUsesDoneOrdering(targetLaneId)) {
+        if (sourceTask?.laneId === targetLaneId) {
+          resetPreviewToSource();
+          return;
+        }
+
+        nextDropTarget = {
+          kind: "reorder",
+          laneId: targetLaneId,
+          parentTaskId: null,
+          position: (currentTopLevelTaskIdsByLane[targetLaneId] ?? []).length
+        };
+      }
+
+      if (nextDropTarget !== null) {
+        const nextPreviewTasks = applyTaskMove(
+          currentPreviewTasks,
+          activeTaskId,
+          nextDropTarget.laneId,
+          nextDropTarget.parentTaskId,
+          nextDropTarget.position,
+          lanesById
+        );
+        const nextLocation = findTaskLocation(nextPreviewTasks, activeTaskId);
+        if (!nextLocation) {
+          return;
+        }
+
+        previewTasksRef.current = nextPreviewTasks;
+        const resolvedDropTarget = nextDropTarget;
+        flushSync(() => {
+          setPreviewTasks(nextPreviewTasks);
+          setDropTarget({
+            kind: resolvedDropTarget.kind,
+            laneId: nextLocation.laneId,
+            parentTaskId: nextLocation.parentTaskId,
+            position: nextLocation.position,
+            ...(resolvedDropTarget.taskId ? { taskId: resolvedDropTarget.taskId } : {})
+          });
+        });
+        return;
+      }
+
       const overTask = currentPreviewTasks.find((task) => task.id === overTaskId);
       if (sourceParentTaskId === overTaskId) {
         resetPreviewToSource();
@@ -1895,25 +2157,41 @@ export function BoardPage() {
       activeTaskId,
       nextDropTarget.laneId,
       nextDropTarget.parentTaskId,
-      nextDropTarget.position
+      nextDropTarget.position,
+      lanesById
     );
     const nextLocation = findTaskLocation(nextPreviewTasks, activeTaskId);
     if (!nextLocation) {
       return;
     }
 
-    setPreviewTasks(nextPreviewTasks);
     previewTasksRef.current = nextPreviewTasks;
-    setDropTarget({
-      ...nextDropTarget,
-      laneId: nextLocation.laneId,
-      parentTaskId: nextLocation.parentTaskId,
-      position: nextLocation.position
+    const resolvedDropTarget = nextDropTarget;
+    flushSync(() => {
+      setPreviewTasks(nextPreviewTasks);
+      setDropTarget({
+        kind: resolvedDropTarget.kind,
+        laneId: nextLocation.laneId,
+        parentTaskId: nextLocation.parentTaskId,
+        position: nextLocation.position,
+        ...(resolvedDropTarget.taskId ? { taskId: resolvedDropTarget.taskId } : {})
+      });
     });
   }
 
   function handleTaskDragEnd(event: DragEndEvent) {
     const activeTaskId = String(event.active.id);
+    if (event.over?.data.current?.type === "trash") {
+      const dropTargetLaneId =
+        typeof event.over.data.current?.laneId === "string"
+          ? String(event.over.data.current.laneId)
+          : getLaneIdFromTaskTrashDropTargetId(event.over.id);
+      setPendingDeleteTaskId(activeTaskId);
+      setPendingDeleteTaskLaneId(dropTargetLaneId);
+      clearTaskDrag();
+      return;
+    }
+
     const currentPreviewTasks = previewTasksRef.current ?? previewTasks ?? tasks;
     const source = findTaskLocation(tasks, activeTaskId);
     const destination = findTaskLocation(currentPreviewTasks, activeTaskId);
@@ -2083,6 +2361,7 @@ export function BoardPage() {
       {!projectsQuery.isPending && !lanesQuery.isPending && !tasksQuery.isPending && project ? (
         <DndContext
           collisionDetection={taskCollisionDetection}
+          measuring={taskMeasuring}
           onDragCancel={clearTaskDrag}
           onDragEnd={handleTaskDragEnd}
           onDragOver={handleTaskDragOver}
@@ -2130,15 +2409,24 @@ export function BoardPage() {
                       destinationLanes={lanes.filter((candidate) => candidate.id !== lane.id)}
                       isDeletePending={deleteLaneMutation.isPending}
                       isDragDisabled={isLaneDragDisabled}
+                      isProtected={lane.isProtectedLane}
+                      isTaskDeletePending={deleteTaskMutation.isPending}
+                      isTaskDragging={draggedTaskId !== null}
                       lane={lane}
+                      onCancelTaskDelete={() => {
+                        setPendingDeleteTaskId(null);
+                        setPendingDeleteTaskLaneId(null);
+                      }}
                       onDelete={(destinationLaneId) =>
                         deleteLaneMutation.mutate({
                           laneId: lane.id,
                           destinationLaneId
                         })
                       }
+                      onConfirmTaskDelete={(taskId) => deleteTaskMutation.mutate(taskId)}
                       onDragEnd={() => clearLaneDrag()}
                       onDragStart={handleLaneDragStart}
+                      pendingTaskDelete={pendingDeleteTaskLaneId === lane.id ? pendingDeleteTask : null}
                     />
                     <LaneDropArea laneId={lane.id}>
                       <SortableContext
@@ -2189,7 +2477,7 @@ export function BoardPage() {
                           </form>
                         ) : null}
                         <TaskDropSlot
-                          isVisible={Boolean(draggedTaskId)}
+                          isVisible={Boolean(draggedTaskId) && !lane.isDoneLane}
                           laneId={lane.id}
                           parentTaskId={null}
                           position={0}
@@ -2204,21 +2492,21 @@ export function BoardPage() {
                                 dropTarget?.kind === "nest" && dropTarget.taskId === taskGroup.task.id
                               }
                               laneId={lane.id}
-                              onDelete={(taskId) => deleteTaskMutation.mutate(taskId)}
                               onOpen={(taskToEdit) => setEditingTaskId(taskToEdit.id)}
                               onTagSelect={handleTagSelect}
                               showNestTarget={
                                 draggedTask !== null &&
+                                !lane.isDoneLane &&
                                 draggedTask.id !== taskGroup.task.id &&
                                 canTaskNestUnderParent(activeTasks, draggedTask, taskGroup.task.id)
                               }
-                              showSubtaskSlots={Boolean(draggedTaskId)}
+                              showSubtaskSlots={Boolean(draggedTaskId) && !lane.isDoneLane}
                               subtasks={taskGroup.subtasks}
                               task={taskGroup.task}
                               taskIndex={taskIndex}
                             />
                             <TaskDropSlot
-                              isVisible={Boolean(draggedTaskId)}
+                              isVisible={Boolean(draggedTaskId) && !lane.isDoneLane}
                               laneId={lane.id}
                               parentTaskId={null}
                               position={taskIndex + 1}

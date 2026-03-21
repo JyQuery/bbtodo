@@ -28,6 +28,43 @@ export function laneId(projectId: string, suffix: DefaultLaneKey) {
   return `${projectId}-lane-${suffix}`;
 }
 
+function normalizeLaneName(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function isDoneLaneName(value: string) {
+  return normalizeLaneName(value) === "done";
+}
+
+function isProtectedLaneName(value: string) {
+  const normalizedLaneName = normalizeLaneName(value);
+  return normalizedLaneName === "todo" || normalizedLaneName === "done";
+}
+
+function compareTasksInLane(left: Task, right: Task, isDoneLane: boolean) {
+  if (isDoneLane) {
+    if (left.updatedAt !== right.updatedAt) {
+      return left.updatedAt < right.updatedAt ? 1 : -1;
+    }
+
+    if (left.position !== right.position) {
+      return left.position - right.position;
+    }
+
+    return left.id.localeCompare(right.id);
+  }
+
+  if (left.position !== right.position) {
+    return left.position - right.position;
+  }
+
+  if (left.updatedAt !== right.updatedAt) {
+    return left.updatedAt < right.updatedAt ? 1 : -1;
+  }
+
+  return left.id.localeCompare(right.id);
+}
+
 function createDefaultLaneSummaries(
   projectId: string,
   counts: Record<DefaultLaneKey, number>
@@ -256,12 +293,8 @@ export async function mockAuthenticated(
       }));
   }
 
-  function compareTasks(left: Task, right: Task) {
-    if (left.position !== right.position) {
-      return left.position - right.position;
-    }
-
-    return left.updatedAt < right.updatedAt ? 1 : -1;
+  function getLane(projectId: string, laneIdValue: string) {
+    return getProject(projectId)?.laneSummaries.find((lane) => lane.id === laneIdValue) ?? null;
   }
 
   function listSiblingTasks(
@@ -274,21 +307,24 @@ export async function mockAuthenticated(
       .filter(
         (task) =>
           task.projectId === projectId &&
-          task.id !== excludedTaskId &&
-          task.laneId === laneIdValue &&
-          task.parentTaskId === parentTaskId
+        task.id !== excludedTaskId &&
+        task.laneId === laneIdValue &&
+        task.parentTaskId === parentTaskId
       )
-      .sort(compareTasks);
+      .sort((left, right) =>
+        compareTasksInLane(left, right, isDoneLaneName(getLane(projectId, laneIdValue)?.name ?? ""))
+      );
   }
 
-  function listChildTasks(parentTaskId: string) {
-    return taskState
-      .filter((task) => task.parentTaskId === parentTaskId)
-      .sort(compareTasks);
+  function listChildTasks(projectId: string, parentTaskId: string) {
+    const childTasks = taskState.filter((task) => task.projectId === projectId && task.parentTaskId === parentTaskId);
+    const laneName = childTasks[0]?.laneId ? getLane(projectId, childTasks[0].laneId)?.name ?? "" : "";
+
+    return childTasks.sort((left, right) => compareTasksInLane(left, right, isDoneLaneName(laneName)));
   }
 
-  function taskHasChildren(taskId: string) {
-    return taskState.some((task) => task.parentTaskId === taskId);
+  function taskHasChildren(projectId: string, taskId: string) {
+    return taskState.some((task) => task.projectId === projectId && task.parentTaskId === taskId);
   }
 
   function listTasksForBoard(projectId: string) {
@@ -304,7 +340,7 @@ export async function mockAuthenticated(
       .forEach((lane) => {
         listSiblingTasks(projectId, lane.id, null).forEach((task) => {
           orderedTasks.push(task);
-          listChildTasks(task.id).forEach((childTask) => orderedTasks.push(childTask));
+          listChildTasks(projectId, task.id).forEach((childTask) => orderedTasks.push(childTask));
         });
       });
 
@@ -396,7 +432,7 @@ export async function mockAuthenticated(
     });
 
     if (task.parentTaskId === null && sourceLaneId !== targetLaneId) {
-      listChildTasks(task.id).forEach((childTask) => {
+      listChildTasks(task.projectId, task.id).forEach((childTask) => {
         childTask.laneId = targetLaneId;
       });
     }
@@ -436,6 +472,10 @@ export async function mockAuthenticated(
     const lane = project.laneSummaries.find((candidate) => candidate.id === laneIdValue);
     if (!lane) {
       return { status: "lane_not_found" as const };
+    }
+
+    if (isProtectedLaneName(lane.name)) {
+      return { status: "protected_lane" as const };
     }
 
     const remainingLanes = project.laneSummaries
@@ -649,6 +689,11 @@ export async function mockAuthenticated(
         return;
       }
 
+      if (deleted.status === "protected_lane") {
+        await fulfillJson(route, 400, { message: "Todo and Done lanes cannot be deleted." });
+        return;
+      }
+
       if (deleted.status === "destination_required") {
         await fulfillJson(route, 400, { message: "Select a destination lane before deleting this lane." });
         return;
@@ -787,7 +832,7 @@ export async function mockAuthenticated(
         return;
       }
 
-      const childTasks = listChildTasks(removedTask.id);
+        const childTasks = listChildTasks(projectId, removedTask.id);
       if (removedTask.parentTaskId !== null) {
         reindexTaskGroup(projectId, removedTask.laneId, removedTask.parentTaskId);
       } else if (childTasks.length > 0) {
@@ -840,7 +885,7 @@ export async function mockAuthenticated(
 
       if (
         (parentTask && (parentTask.parentTaskId !== null || parentTask.id === task.id)) ||
-        (nextParentTaskId !== null && taskHasChildren(task.id))
+        (nextParentTaskId !== null && taskHasChildren(projectId, task.id))
       ) {
         await fulfillJson(route, 400, { message: "Subtasks can only be added under top-level tasks." });
         return;
