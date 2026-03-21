@@ -2,6 +2,7 @@ import { randomInt } from "node:crypto";
 
 const fallbackTicketPrefixLetters = [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"];
 const fallbackTicketPrefixLength = 4;
+const totalFallbackTicketPrefixCount = fallbackTicketPrefixLetters.length ** fallbackTicketPrefixLength;
 
 export function normalizeProjectTicketPrefixSource(name: string) {
   return name.normalize("NFKD").replace(/[^A-Za-z]/g, "").toUpperCase();
@@ -17,10 +18,9 @@ function createRandomTicketPrefix(length = fallbackTicketPrefixLength) {
   return prefix;
 }
 
-function findAvailableFallbackTicketPrefix(usedPrefixes: Set<string>) {
-  const totalPrefixCount = fallbackTicketPrefixLetters.length ** fallbackTicketPrefixLength;
-  if (usedPrefixes.size >= totalPrefixCount) {
-    return null;
+function findAvailableRandomTicketPrefix(usedPrefixes: Set<string>) {
+  if (usedPrefixes.size >= totalFallbackTicketPrefixCount) {
+    throw new Error("No unique project ticket prefix is available.");
   }
 
   for (let attempt = 0; attempt < 256; attempt += 1) {
@@ -43,7 +43,7 @@ function findAvailableFallbackTicketPrefix(usedPrefixes: Set<string>) {
     }
   }
 
-  return null;
+  throw new Error("No unique project ticket prefix is available.");
 }
 
 export function listProjectTicketPrefixCandidates(name: string) {
@@ -101,37 +101,13 @@ export function listProjectTicketPrefixCandidates(name: string) {
     addCombinations(2);
   }
 
-  return {
-    candidates,
-    normalized,
-    status: "ok" as const
-  };
+  return candidates;
 }
 
 export function resolveProjectTicketPrefix(name: string, usedPrefixes: Set<string>) {
-  const candidates = listProjectTicketPrefixCandidates(name);
-  const prefix = candidates.candidates.find((candidate) => !usedPrefixes.has(candidate));
-  if (prefix) {
-    return {
-      normalized: candidates.normalized,
-      prefix,
-      status: "ok" as const
-    };
-  }
+  const prefixFromName = listProjectTicketPrefixCandidates(name).find(
+    (candidate) => !usedPrefixes.has(candidate)
+  );
 
-  if (candidates.normalized.length === 0) {
-    const fallbackPrefix = findAvailableFallbackTicketPrefix(usedPrefixes);
-    if (fallbackPrefix) {
-      return {
-        normalized: candidates.normalized,
-        prefix: fallbackPrefix,
-        status: "ok" as const
-      };
-    }
-  }
-
-  return {
-    normalized: candidates.normalized,
-    status: "prefix_exhausted" as const
-  };
+  return prefixFromName ?? findAvailableRandomTicketPrefix(usedPrefixes);
 }

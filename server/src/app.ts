@@ -652,8 +652,7 @@ export function buildApp(options: {
       response: {
         201: projectResponseSchema,
         400: errorResponseSchema,
-        401: errorResponseSchema,
-        409: errorResponseSchema
+        401: errorResponseSchema
       },
       tags: ["projects"]
     },
@@ -664,20 +663,13 @@ export function buildApp(options: {
       }
 
       const project = createProject(database.db, user.id, request.body.name.trim());
-      if (project.status === "ticket_prefix_unavailable") {
-        return reply.status(409).send({
-          message: "No unique project ticket prefix is available for that name."
-        });
-      }
 
       const laneSummaries = listLanesForProject(database.db, {
         userId: user.id,
-        projectId: project.project.id
+        projectId: project.id
       });
 
-      return reply
-        .status(201)
-        .send(toProjectResponse(project.project, laneSummaries ?? []));
+      return reply.status(201).send(toProjectResponse(project, laneSummaries ?? []));
     }
   });
 

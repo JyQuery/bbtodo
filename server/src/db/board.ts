@@ -666,23 +666,18 @@ export function backfillTicketIds(db: DatabaseClient) {
           return;
         }
 
-        const prefixResult = resolveProjectTicketPrefix(project.name, usedPrefixes);
-        if (prefixResult.status === "prefix_exhausted") {
-          throw new Error(
-            `No unique ticket prefix is available for project ${project.id} (${project.name}) owned by user ${userId}.`
-          );
-        }
+        const prefix = resolveProjectTicketPrefix(project.name, usedPrefixes);
 
         tx
           .update(projects)
           .set({
-            ticketPrefix: prefixResult.prefix
+            ticketPrefix: prefix
           })
           .where(eq(projects.id, project.id))
           .run();
 
-        project.ticketPrefix = prefixResult.prefix;
-        usedPrefixes.add(prefixResult.prefix);
+        project.ticketPrefix = prefix;
+        usedPrefixes.add(prefix);
       });
     });
 
@@ -783,19 +778,12 @@ export function createProject(db: DatabaseClient, userId: string, name: string) 
       .all()
       .flatMap((project) => (project.ticketPrefix ? [project.ticketPrefix] : []))
   );
-  const prefixResult = resolveProjectTicketPrefix(name, usedPrefixes);
-  if (prefixResult.status === "prefix_exhausted") {
-    return {
-      status: "ticket_prefix_unavailable" as const
-    };
-  }
-
   const now = new Date().toISOString();
   const project = {
     id: crypto.randomUUID(),
     userId,
     name,
-    ticketPrefix: prefixResult.prefix,
+    ticketPrefix: resolveProjectTicketPrefix(name, usedPrefixes),
     nextTicketNumber: 1,
     createdAt: now,
     updatedAt: now
@@ -806,10 +794,7 @@ export function createProject(db: DatabaseClient, userId: string, name: string) 
     createProjectLanesFromTemplates(tx, project.id, now, defaultLaneTemplates);
   });
 
-  return {
-    project,
-    status: "created" as const
-  };
+  return project;
 }
 
 export function updateOwnedProjectName(

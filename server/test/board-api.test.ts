@@ -312,7 +312,7 @@ describe("projects and tasks API", () => {
     });
   });
 
-  it("falls back for non-letter names, resolves collisions, and reports exhausted automatic prefixes", async () => {
+  it("falls back for non-letter names and exhausted name-derived prefixes while resolving collisions", async () => {
     const oidc = createMutableMockOidcProvider({
       subject: "user-1",
       email: "one@example.com",
@@ -409,7 +409,7 @@ describe("projects and tasks API", () => {
     });
     expect(singleLetterProjectResponse.statusCode).toBe(201);
 
-    const exhaustedPrefixResponse = await app.inject({
+    const fallbackAfterNameExhaustionResponse = await app.inject({
       method: "POST",
       url: "/api/v1/projects",
       cookies: {
@@ -419,7 +419,21 @@ describe("projects and tasks API", () => {
         name: "Q"
       }
     });
-    expect(exhaustedPrefixResponse.statusCode).toBe(409);
+    expect(fallbackAfterNameExhaustionResponse.statusCode).toBe(201);
+    const fallbackAfterNameExhaustionProject = fallbackAfterNameExhaustionResponse.json();
+
+    const fallbackAfterNameExhaustionTaskResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/projects/${fallbackAfterNameExhaustionProject.id}/tasks`,
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        title: "Fallback after collision"
+      }
+    });
+    expect(fallbackAfterNameExhaustionTaskResponse.statusCode).toBe(201);
+    expect(fallbackAfterNameExhaustionTaskResponse.json().ticketId).toMatch(/^[A-Z]{4}-1$/);
 
     const firstProjectTaskResponse = await app.inject({
       method: "POST",

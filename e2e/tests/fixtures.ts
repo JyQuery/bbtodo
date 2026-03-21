@@ -111,8 +111,7 @@ function createDefaultLaneSummaries(
 }
 
 function resolveProjectTicketPrefix(name: string, usedPrefixes: Set<string>) {
-  const result = resolveProjectTicketPrefixFromService(name, usedPrefixes);
-  return result.status === "ok" ? result.prefix : null;
+  return resolveProjectTicketPrefixFromService(name, usedPrefixes);
 }
 
 function parseTicketNumber(ticketId: string) {
@@ -305,9 +304,6 @@ export async function mockAuthenticated(
         }
 
         const resolvedPrefix = resolveProjectTicketPrefix(project.name, usedPrefixes);
-        if (!resolvedPrefix) {
-          throw new Error(`Expected a ticket prefix for project ${project.id}.`);
-        }
 
         projectTicketPrefixes.set(project.id, resolvedPrefix);
         usedPrefixes.add(resolvedPrefix);
@@ -655,10 +651,6 @@ export async function mockAuthenticated(
         const createdProjectId = `project-${nextProjectId++}`;
         const projectName = body?.title ?? body?.name ?? "Untitled board";
         const resolvedPrefix = resolveProjectTicketPrefix(projectName, new Set(projectTicketPrefixes.values()));
-        if (!resolvedPrefix) {
-          await fulfillJson(route, 409, { message: "No unique project ticket prefix is available for that name." });
-          return;
-        }
 
         const createdProject: Project = {
           createdAt: "2026-03-18T08:00:00.000Z",
