@@ -580,51 +580,6 @@ h3 {
   transform: translateY(1px) scale(0.98);
 }
 
-.subnav__task-trash-host {
-  display: flex;
-  align-items: center;
-  flex: 0 0 auto;
-  min-width: 0;
-}
-
-.subnav__task-trash-shell {
-  position: relative;
-}
-
-.subnav__task-trash {
-  border-color: color-mix(in srgb, var(--danger) 24%, var(--line-strong));
-  background: color-mix(in srgb, var(--surface-muted) 88%, var(--surface-strong));
-}
-
-.subnav__task-trash .ui-icon {
-  width: 0.95rem;
-  height: 0.95rem;
-}
-
-.subnav__task-trash-mark {
-  background: linear-gradient(
-    145deg,
-    color-mix(in srgb, var(--danger) 78%, white 22%) 0%,
-    color-mix(in srgb, var(--danger) 92%, black 8%) 100%
-  );
-}
-
-.subnav__task-trash.is-active,
-.subnav__task-trash.is-confirm-open {
-  border-color: color-mix(in srgb, var(--danger) 46%, var(--line-strong));
-  background: color-mix(in srgb, var(--danger) 10%, var(--surface-strong));
-  color: var(--danger);
-  box-shadow:
-    inset 0 1px 0 var(--surface-highlight-strong),
-    0 18px 34px -28px rgba(159, 61, 51, 0.34);
-}
-
-.subnav__task-trash-popover {
-  top: calc(100% + 0.65rem);
-  right: 0;
-  left: auto;
-}
-
 .subnav__search {
   display: grid;
   gap: 0.35rem;
@@ -1821,13 +1776,87 @@ textarea:focus {
   top: 0;
   right: 0;
   z-index: 5;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 0.4rem;
   flex: 0 0 auto;
+  min-width: 2rem;
+  min-height: 2rem;
 }
 
 .lane-delete-button,
+.lane-header__task-trash,
 .lane-header__action-spacer {
   width: 2rem;
   height: 2rem;
+}
+
+.lane-task-trash-shell {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 2rem;
+  height: 2rem;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.lane-task-trash-shell.is-active {
+  pointer-events: auto;
+}
+
+.lane-header__task-trash {
+  display: inline-grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 1px dashed color-mix(in srgb, var(--danger) 24%, var(--line-strong));
+  background: color-mix(in srgb, var(--surface-muted) 88%, var(--surface-strong));
+  color: color-mix(in srgb, var(--danger) 72%, var(--ink-soft));
+  box-shadow:
+    inset 0 1px 0 var(--surface-highlight-strong),
+    0 12px 26px -24px rgba(159, 61, 51, 0.28);
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transform: scale(0.92);
+  transition:
+    opacity 180ms var(--ease),
+    transform 220ms var(--ease),
+    border-color 220ms var(--ease),
+    background-color 220ms var(--ease),
+    color 220ms var(--ease),
+    box-shadow 220ms var(--ease);
+}
+
+.lane-header__task-trash.is-visible,
+.lane-header__task-trash.is-confirm-open {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+  transform: scale(1);
+}
+
+.lane-header__task-trash .ui-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.lane-header__task-trash-mark {
+  display: inline-grid;
+  place-items: center;
+}
+
+.lane-header__task-trash.is-active,
+.lane-header__task-trash.is-confirm-open {
+  border-color: color-mix(in srgb, var(--danger) 46%, var(--line-strong));
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface-strong));
+  color: var(--danger);
+  box-shadow:
+    inset 0 1px 0 var(--surface-highlight-strong),
+    0 18px 34px -28px rgba(159, 61, 51, 0.34);
 }
 
 .lane-header__action-spacer {
@@ -1836,6 +1865,12 @@ textarea:focus {
 
 .lane-delete-popover {
   min-width: 15rem;
+}
+
+.lane-task-trash-popover {
+  top: calc(100% + 0.65rem);
+  right: 0;
+  left: auto;
 }
 
 .lane-delete-popover__field {

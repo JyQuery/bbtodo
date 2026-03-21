@@ -12,7 +12,7 @@ import {
 
 import { api, type TaskTag, type User } from "../api";
 import { getTaskTagStyle } from "../app/tag-colors";
-import { boardTaskTrashHostId, themeOptions } from "../app/constants";
+import { themeOptions } from "../app/constants";
 import {
   formatSingleTagInput,
   getAvatarLetter,
@@ -443,7 +443,6 @@ export function AppShell({ user }: { user: User }) {
                       ) : null}
                     </div>
                   ) : null}
-                  {boardMatch ? <div className="subnav__task-trash-host" id={boardTaskTrashHostId} /> : null}
                 </div>
               ) : null}
             </nav>

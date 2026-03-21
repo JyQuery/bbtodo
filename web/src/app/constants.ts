@@ -1,7 +1,6 @@
 import type { UserTheme } from "../api";
 
 export const defaultLaneLabels = ["Todo", "In Progress", "In review", "Done"] as const;
-export const boardTaskTrashHostId = "board-task-trash-host";
 
 export const themeOptions: Array<{
   id: UserTheme;

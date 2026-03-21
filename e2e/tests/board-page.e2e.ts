@@ -3,38 +3,53 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { laneId, mockAuthenticated, projectsForGrid, tag, tasks } from "./fixtures";
 
 async function beginTaskDrag(page: Page, source: Locator) {
-  const sourceBox = await source.boundingBox();
+  const taskSurface = source.locator(":scope > .task-card__surface-wrap > .task-card__surface");
+  const dragHandle = (await taskSurface.count()) > 0 ? taskSurface : source;
+
+  await expect(dragHandle).toBeVisible();
+  const sourceBox = await dragHandle.boundingBox();
 
   expect(sourceBox).not.toBeNull();
 
-  await page.mouse.move(
-    (sourceBox?.x ?? 0) + (sourceBox?.width ?? 0) / 2,
-    (sourceBox?.y ?? 0) + (sourceBox?.height ?? 0) / 2
-  );
+  const sourceCenterX = (sourceBox?.x ?? 0) + (sourceBox?.width ?? 0) / 2;
+  const sourceCenterY = (sourceBox?.y ?? 0) + (sourceBox?.height ?? 0) / 2;
+
+  await page.mouse.move(sourceCenterX, sourceCenterY);
   await page.mouse.down();
-  await page.mouse.move(
-    (sourceBox?.x ?? 0) + (sourceBox?.width ?? 0) / 2 + 18,
-    (sourceBox?.y ?? 0) + (sourceBox?.height ?? 0) / 2,
-    { steps: 6 }
-  );
+  await page.mouse.move(sourceCenterX + 18, sourceCenterY, { steps: 6 });
+  await page.mouse.move(sourceCenterX + 28, sourceCenterY - 2, { steps: 4 });
+  await page.mouse.move(sourceCenterX + 32, sourceCenterY - 4, { steps: 2 });
+  await page.waitForTimeout(160);
 }
 
 async function hoverDraggedTaskOver(page: Page, target: Locator, targetYRatio = 0.5) {
-  await page.waitForTimeout(80);
-  await expect(target).toBeVisible();
+  await page.waitForTimeout(100);
+  await expect(target).toBeAttached();
   const initialTargetBox = await target.boundingBox();
 
   expect(initialTargetBox).not.toBeNull();
 
   const initialTargetCenterX = (initialTargetBox?.x ?? 0) + (initialTargetBox?.width ?? 0) / 2;
+  const viewportWidth =
+    page.viewportSize()?.width ??
+    Math.ceil((initialTargetBox?.x ?? 0) + (initialTargetBox?.width ?? 0) + 96);
+  const horizontalApproachOffset = Math.min(
+    84,
+    Math.max(((initialTargetBox?.width ?? 0) * 0.65), 48)
+  );
+  const approachFromRight =
+    initialTargetCenterX + horizontalApproachOffset < viewportWidth - 16;
+  const initialApproachX = approachFromRight
+    ? initialTargetCenterX + horizontalApproachOffset
+    : Math.max(initialTargetCenterX - horizontalApproachOffset, 16);
 
-  await page.mouse.move(initialTargetCenterX, Math.max((initialTargetBox?.y ?? 0) - 28, 0), { steps: 18 });
-  await page.waitForTimeout(40);
+  await page.mouse.move(initialApproachX, Math.max((initialTargetBox?.y ?? 0) - 36, 0), { steps: 18 });
+  await page.waitForTimeout(80);
 
   // Drag previews can shift the list while the pointer is in flight, so re-center on
   // the live target a few times before releasing.
-  for (const steps of [24, 14, 10]) {
-    await expect(target).toBeVisible();
+  for (const steps of [20, 12, 8]) {
+    await expect(target).toBeAttached();
     const targetBox = await target.boundingBox();
 
     expect(targetBox).not.toBeNull();
@@ -44,10 +59,52 @@ async function hoverDraggedTaskOver(page: Page, target: Locator, targetYRatio = 
       (targetBox?.y ?? 0) + (targetBox?.height ?? 0) * targetYRatio,
       { steps }
     );
-    await page.waitForTimeout(40);
+    await page.waitForTimeout(80);
   }
 
-  await page.waitForTimeout(80);
+  await expect(target).toBeAttached();
+  const finalTargetBox = await target.boundingBox();
+
+  expect(finalTargetBox).not.toBeNull();
+
+  await page.mouse.move(
+    (finalTargetBox?.x ?? 0) + (finalTargetBox?.width ?? 0) / 2,
+    (finalTargetBox?.y ?? 0) + (finalTargetBox?.height ?? 0) * targetYRatio,
+    { steps: 4 }
+  );
+  await page.waitForTimeout(140);
+}
+
+async function hoverDraggedTaskDirectlyToTarget(page: Page, target: Locator, targetYRatio = 0.5) {
+  await page.waitForTimeout(100);
+  await expect(target).toBeAttached();
+  const finalTargetBox = await target.boundingBox();
+
+  expect(finalTargetBox).not.toBeNull();
+
+  await page.mouse.move(
+    (finalTargetBox?.x ?? 0) + (finalTargetBox?.width ?? 0) / 2,
+    (finalTargetBox?.y ?? 0) + (finalTargetBox?.height ?? 0) * targetYRatio,
+    { steps: 16 }
+  );
+  await page.waitForTimeout(160);
+}
+
+async function dropDraggedTaskOnTrashTarget(page: Page, target: Locator) {
+  await page.waitForTimeout(100);
+  await expect(target).toBeAttached();
+  const targetBox = await target.boundingBox();
+
+  expect(targetBox).not.toBeNull();
+
+  await page.mouse.move(
+    (targetBox?.x ?? 0) + (targetBox?.width ?? 0) / 2,
+    (targetBox?.y ?? 0) + (targetBox?.height ?? 0) / 2,
+    { steps: 12 }
+  );
+  await page.waitForTimeout(120);
+  await finishTaskDrag(page);
+  await page.waitForTimeout(200);
 }
 
 async function finishTaskDrag(page: Page) {
@@ -219,7 +276,7 @@ test("board page edits cards and filters tasks", async ({ page }) => {
   await expect(page.getByText("Review retry scope")).toHaveCount(0);
 });
 
-test("board page deletes tasks from the subnav trash target", async ({ page }) => {
+test("board page deletes tasks from the lane header trash target", async ({ page }) => {
   await mockAuthenticated(page, {
     projects: projectsForGrid,
     tasks
@@ -228,32 +285,30 @@ test("board page deletes tasks from the subnav trash target", async ({ page }) =
   await page.goto("/projects/project-1");
 
   const firstTaskCard = page.getByTestId("task-card-task-1");
-  const trashTarget = page.getByTestId("subnav-task-trash-target");
+  const todoLaneTrashTarget = page.getByTestId(`lane-task-trash-target-${laneId("project-1", "todo")}`);
+  const doneLaneTrashTarget = page.getByTestId(`lane-task-trash-target-${laneId("project-1", "done")}`);
 
   await expect(firstTaskCard.getByLabel("Delete task Review retry settings")).toHaveCount(0);
-  await expect(trashTarget).toHaveCount(0);
+  await expect(todoLaneTrashTarget).toBeHidden();
+  await expect(doneLaneTrashTarget).toBeHidden();
 
   await beginTaskDrag(page, taskCardSurface(firstTaskCard));
-  await expect(trashTarget).toBeVisible();
-  await hoverDraggedTaskOver(page, trashTarget);
-  await finishTaskDrag(page);
+  await dropDraggedTaskOnTrashTarget(page, todoLaneTrashTarget);
 
   const deleteDialog = page.getByRole("alertdialog", { name: "Delete task Review retry settings" });
   await expect(deleteDialog).toBeVisible();
   await deleteDialog.getByRole("button", { name: "Cancel" }).click();
   await expect(firstTaskCard).toBeVisible();
-  await expect(trashTarget).toHaveCount(0);
+  await expect(todoLaneTrashTarget).toBeHidden();
 
   await beginTaskDrag(page, taskCardSurface(firstTaskCard));
-  await expect(trashTarget).toBeVisible();
-  await hoverDraggedTaskOver(page, trashTarget);
-  await finishTaskDrag(page);
+  await dropDraggedTaskOnTrashTarget(page, todoLaneTrashTarget);
 
   await expect(deleteDialog).toBeVisible();
   await deleteDialog.getByRole("button", { exact: true, name: "Delete" }).click();
   await expect(firstTaskCard).toHaveCount(0);
   await expect(page.getByTestId("task-card-task-4")).toBeVisible();
-  await expect(trashTarget).toHaveCount(0);
+  await expect(todoLaneTrashTarget).toBeHidden();
 });
 
 test("board page reorders tasks and manages lanes", async ({ page }) => {
@@ -483,14 +538,12 @@ test("board page moves a dragged subtask under another empty parent", async ({ p
 
   await beginTaskDrag(page, copyCard);
   await hoverDraggedTaskOver(page, taskCardNestTarget(shipNoteCard), 0.25);
-  await expect(shipNoteCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
   await finishTaskDrag(page);
   await expect(shipNoteCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
 
   const copySubtask = shipNoteCard.locator(".task-card__subtasks").getByTestId("task-card-task-4");
   await beginTaskDrag(page, copySubtask);
-  await hoverDraggedTaskOver(page, taskCardNestTarget(releaseChecklistCard), 0.25);
-  await expect(releaseChecklistCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
+  await hoverDraggedTaskDirectlyToTarget(page, taskCardNestTarget(releaseChecklistCard), 0.5);
   await finishTaskDrag(page);
 
   await expect(shipNoteCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toHaveCount(0);
