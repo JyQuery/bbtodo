@@ -2572,7 +2572,7 @@ export function BoardPage() {
                   </button>
                   <button
                     aria-label={`Create lane after ${lane.name}`}
-                    className="ghost-button board-lane-gap-mobile"
+                    className="board-lane-gap-mobile"
                     data-testid={`create-lane-mobile-after-${lane.id}`}
                     onClick={(event) => {
                       event.preventDefault();
@@ -2582,7 +2582,6 @@ export function BoardPage() {
                     type="button"
                   >
                     <PlusIcon className="board-lane-gap-mobile__icon" />
-                    <span>Create lane</span>
                   </button>
                 </div>
               );

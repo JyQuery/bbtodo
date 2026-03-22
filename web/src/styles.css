@@ -1848,18 +1848,17 @@ textarea:focus {
   height: 2rem;
 }
 
-.lane-add-task-button {
+.icon-button.lane-add-task-button {
   color: var(--accent-strong);
-  border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
-  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface-input));
-  box-shadow: inset 0 1px 0 var(--surface-highlight);
+  border: none;
+  background: transparent;
+  box-shadow: none;
 }
 
-.lane-add-task-button:hover,
-.lane-add-task-button:focus-visible {
+.icon-button.lane-add-task-button:hover,
+.icon-button.lane-add-task-button:focus-visible {
   color: var(--accent);
-  background: color-mix(in srgb, var(--accent-soft) 75%, var(--surface-input));
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: transparent;
 }
 
 .lane-task-trash-shell {
@@ -2016,19 +2015,38 @@ textarea:focus {
 
 .board-lane-gap-mobile {
   display: none;
-  width: 100%;
-  justify-content: center;
-  gap: 0.55rem;
-  margin-top: 0.7rem;
-  border-style: dashed;
-  border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  min-height: 0;
+  margin: 0.7rem auto 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-popover);
+  color: var(--ink-soft);
+  box-shadow:
+    inset 0 1px 0 var(--surface-highlight),
+    0 10px 22px -18px rgba(18, 34, 36, 0.28);
+  transition:
+    transform 220ms var(--ease),
+    border-color 220ms var(--ease),
+    color 220ms var(--ease);
+}
+
+.board-lane-gap-mobile:hover,
+.board-lane-gap-mobile:focus-visible {
   color: var(--accent-strong);
-  background: color-mix(in srgb, var(--accent-soft) 38%, var(--surface-input));
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.board-lane-gap-mobile:active {
+  transform: scale(0.96);
 }
 
 .board-lane-gap-mobile__icon {
-  width: 1rem;
-  height: 1rem;
+  width: 0.95rem;
+  height: 0.95rem;
 }
 
 .task-drop-slot {
@@ -3186,7 +3204,7 @@ textarea:focus {
   }
 
   .board-lane-gap-mobile {
-    display: inline-flex;
+    display: inline-grid;
   }
 
   .task-card__actions,

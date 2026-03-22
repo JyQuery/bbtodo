@@ -772,6 +772,10 @@ test("board page adds tasks from the lane header action and keeps the double-cli
   const composer = page.getByTestId(`lane-composer-${todoLaneId}`);
 
   await expect(addTaskButton).toBeVisible();
+  const addTaskButtonBorderWidth = await addTaskButton.evaluate(
+    (element) => window.getComputedStyle(element).borderTopWidth
+  );
+  expect(addTaskButtonBorderWidth).toBe("0px");
   await addTaskButton.click();
   await expect(composer).toBeVisible();
 
@@ -916,6 +920,7 @@ test.describe("mobile board page", () => {
     const mobileCreateLaneButton = page.getByTestId(`create-lane-mobile-after-${todoLaneId}`);
 
     await expect(mobileCreateLaneButton).toBeVisible();
+    await expect(mobileCreateLaneButton.locator("span")).toHaveCount(0);
     await mobileCreateLaneButton.click();
 
     const laneDialog = page.getByRole("dialog", { name: "Create Lane" });
