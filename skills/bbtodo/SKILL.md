@@ -20,6 +20,10 @@ Example:
 Copy-Item .\skills\bbtodo\scripts\.env.example .\skills\bbtodo\scripts\.env
 ```
 
+```bash
+cp ./skills/bbtodo/scripts/.env.example ./skills/bbtodo/scripts/.env
+```
+
 Then edit `.\skills\bbtodo\scripts\.env`:
 
 ```dotenv
@@ -58,6 +62,13 @@ python .\skills\bbtodo\scripts\bbtodo.py start `
   --body $body
 ```
 
+```bash
+body=$'- Goal: tighten lane-delete behavior.\n- Plan:\n  - inspect the board workflow\n  - implement the fix\n  - verify the regression stays covered'
+python ./skills/bbtodo/scripts/bbtodo.py start \
+  --title "Fix lane delete flow" \
+  --body "$body"
+```
+
 ## Move Through The Lanes
 
 - Run `begin-work` when active implementation or verification starts. That moves the tracked task into `In Progress`.
@@ -70,6 +81,10 @@ Examples:
 python .\skills\bbtodo\scripts\bbtodo.py begin-work
 ```
 
+```bash
+python ./skills/bbtodo/scripts/bbtodo.py begin-work
+```
+
 ```powershell
 $note = @"
 - Result: fixed the lane delete flow.
@@ -78,11 +93,21 @@ $note = @"
 python .\skills\bbtodo\scripts\bbtodo.py finish --append-note $note
 ```
 
+```bash
+note=$'- Result: fixed the lane delete flow.\n- Verification: targeted smoke test plus CLI status check.'
+python ./skills/bbtodo/scripts/bbtodo.py finish --append-note "$note"
+```
+
 ```powershell
 $details = @"
 - Follow-up: one more edge case from review.
 "@
 python .\skills\bbtodo\scripts\bbtodo.py resume-current --details $details
+```
+
+```bash
+details=$'- Follow-up: one more edge case from review.'
+python ./skills/bbtodo/scripts/bbtodo.py resume-current --details "$details"
 ```
 
 ## Recovery
