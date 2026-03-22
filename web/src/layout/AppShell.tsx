@@ -25,6 +25,7 @@ import { useDismissableLayer } from "../hooks/useDismissableLayer";
 const mobileTopbarMediaQuery = "(max-width: 860px)";
 const mobileTopbarHideOffset = 72;
 const mobileTopbarScrollThreshold = 10;
+const mobileTopbarScrollCooldownMs = 280;
 type LegacyMediaQueryList = MediaQueryList & {
   addListener?: (listener: (event: MediaQueryListEvent) => void) => void;
   removeListener?: (listener: (event: MediaQueryListEvent) => void) => void;
@@ -47,6 +48,8 @@ export function AppShell({ user }: { user: User }) {
   const tagFilterRef = useRef<HTMLDivElement | null>(null);
   const tagFilterInputRef = useRef<HTMLInputElement | null>(null);
   const lastScrollYRef = useRef(0);
+  const mobileTopbarCooldownUntilRef = useRef(0);
+  const isMobileTopbarHiddenRef = useRef(false);
   const isMobileViewportRef = useRef(false);
   const projectsQuery = useQuery({
     queryKey: ["projects"],
@@ -159,6 +162,10 @@ export function AppShell({ user }: { user: User }) {
   }, [boardMatch]);
 
   useEffect(() => {
+    isMobileTopbarHiddenRef.current = isMobileTopbarHidden;
+  }, [isMobileTopbarHidden]);
+
+  useEffect(() => {
     if (typeof window === "undefined") {
       return undefined;
     }
@@ -170,9 +177,23 @@ export function AppShell({ user }: { user: User }) {
     const syncViewportState = () => {
       isMobileViewportRef.current = mediaQuery.matches;
       lastScrollYRef.current = window.scrollY;
+      mobileTopbarCooldownUntilRef.current = 0;
       if (!mediaQuery.matches) {
+        isMobileTopbarHiddenRef.current = false;
         setIsMobileTopbarHidden(false);
       }
+    };
+
+    const setMobileTopbarHiddenState = (nextHidden: boolean, currentScrollY: number) => {
+      if (isMobileTopbarHiddenRef.current === nextHidden) {
+        lastScrollYRef.current = currentScrollY;
+        return;
+      }
+
+      isMobileTopbarHiddenRef.current = nextHidden;
+      mobileTopbarCooldownUntilRef.current = window.performance.now() + mobileTopbarScrollCooldownMs;
+      lastScrollYRef.current = currentScrollY;
+      setIsMobileTopbarHidden(nextHidden);
     };
 
     const updateTopbarVisibility = () => {
@@ -186,15 +207,23 @@ export function AppShell({ user }: { user: User }) {
         return;
       }
 
+      // Collapsing the sticky shell can nudge scroll position on mobile browsers,
+      // so ignore the synthetic scroll events right after our own visibility toggle.
+      if (window.performance.now() < mobileTopbarCooldownUntilRef.current) {
+        lastScrollYRef.current = currentScrollY;
+        return;
+      }
+
       if (currentScrollY <= mobileTopbarScrollThreshold) {
-        setIsMobileTopbarHidden(false);
+        setMobileTopbarHiddenState(false, currentScrollY);
       } else if (
         currentScrollY > mobileTopbarHideOffset &&
-        scrollDelta > mobileTopbarScrollThreshold
+        scrollDelta > mobileTopbarScrollThreshold &&
+        !isMobileTopbarHiddenRef.current
       ) {
-        setIsMobileTopbarHidden(true);
-      } else if (scrollDelta < -mobileTopbarScrollThreshold) {
-        setIsMobileTopbarHidden(false);
+        setMobileTopbarHiddenState(true, currentScrollY);
+      } else if (scrollDelta < -mobileTopbarScrollThreshold && isMobileTopbarHiddenRef.current) {
+        setMobileTopbarHiddenState(false, currentScrollY);
       }
 
       lastScrollYRef.current = currentScrollY;
@@ -235,6 +264,8 @@ export function AppShell({ user }: { user: User }) {
 
   useEffect(() => {
     setIsMobileTopbarHidden(false);
+    isMobileTopbarHiddenRef.current = false;
+    mobileTopbarCooldownUntilRef.current = 0;
     if (typeof window !== "undefined") {
       lastScrollYRef.current = window.scrollY;
     }
@@ -243,6 +274,8 @@ export function AppShell({ user }: { user: User }) {
   useEffect(() => {
     if (isMenuOpen || isProjectSwitcherOpen || isTagFilterOpen) {
       setIsMobileTopbarHidden(false);
+      isMobileTopbarHiddenRef.current = false;
+      mobileTopbarCooldownUntilRef.current = 0;
       if (typeof window !== "undefined") {
         lastScrollYRef.current = window.scrollY;
       }

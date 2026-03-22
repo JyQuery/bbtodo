@@ -939,6 +939,8 @@ test.describe("mobile board page", () => {
     await page.evaluate(() => window.scrollTo({ top: 420, behavior: "auto" }));
     await expect.poll(async () => page.evaluate(() => window.scrollY)).toBeGreaterThan(300);
     await expect(topbarShell).toHaveClass(/is-mobile-hidden/);
+    await page.waitForTimeout(350);
+    await expect(topbarShell).toHaveClass(/is-mobile-hidden/);
 
     await page.evaluate(() => window.scrollTo({ top: 48, behavior: "auto" }));
     await expect.poll(async () => page.evaluate(() => window.scrollY)).toBeLessThanOrEqual(60);
