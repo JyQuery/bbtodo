@@ -787,6 +787,69 @@ test("board page creates lanes from the gap between columns", async ({ page }) =
   ]);
 });
 
+test("board page keeps a tall lane gap marker in the first screen", async ({ page }) => {
+  const projectsWithTallTodo = structuredClone(projectsForGrid);
+  const tasksWithTallTodo = structuredClone(tasks);
+  const billingCleanupProject = projectsWithTallTodo.find((project) => project.id === "project-1");
+  if (!billingCleanupProject) {
+    throw new Error("Expected project-1 test fixture to exist");
+  }
+
+  const todoLaneSummary = billingCleanupProject.laneSummaries.find(
+    (laneSummary) => laneSummary.id === laneId("project-1", "todo")
+  );
+  if (!todoLaneSummary) {
+    throw new Error("Expected the Todo lane summary to exist");
+  }
+
+  for (let taskIndex = 0; taskIndex < 18; taskIndex += 1) {
+    tasksWithTallTodo.push({
+      body: "",
+      createdAt: `2026-03-18T09:${String(taskIndex).padStart(2, "0")}:00.000Z`,
+      id: `task-tall-${taskIndex + 1}`,
+      laneId: laneId("project-1", "todo"),
+      parentTaskId: null,
+      position: tasks.length + taskIndex,
+      projectId: "project-1",
+      ticketId: `BILL-${taskIndex + 10}`,
+      tags: [],
+      title: `Tall backlog ${taskIndex + 1}`,
+      updatedAt: `2026-03-18T09:${String(taskIndex).padStart(2, "0")}:30.000Z`
+    });
+  }
+
+  todoLaneSummary.taskCount = tasksWithTallTodo.filter(
+    (task) => task.projectId === "project-1" && task.laneId === laneId("project-1", "todo")
+  ).length;
+
+  await mockAuthenticated(page, {
+    projects: projectsWithTallTodo,
+    tasks: tasksWithTallTodo
+  });
+
+  await page.goto("/projects/project-1");
+
+  const createLaneGap = page.getByTestId(`create-lane-gap-after-${laneId("project-1", "todo")}`);
+  const createLaneGapMarker = createLaneGap.locator(".board-lane-gap__marker");
+  await createLaneGap.hover({ position: { x: 4, y: 16 } });
+  await expect(createLaneGapMarker).toBeVisible();
+
+  const gapBox = await createLaneGap.boundingBox();
+  const markerBox = await createLaneGapMarker.boundingBox();
+  const viewportHeight = page.viewportSize()?.height ?? 0;
+
+  expect(gapBox).not.toBeNull();
+  expect(markerBox).not.toBeNull();
+  expect(viewportHeight).toBeGreaterThan(0);
+
+  const gapHeight = gapBox?.height ?? 0;
+  const markerCenterY = (markerBox?.y ?? 0) + (markerBox?.height ?? 0) / 2;
+  const expectedMarkerCenterY = (gapBox?.y ?? 0) + Math.min(gapHeight / 2, viewportHeight / 2);
+
+  expect(gapHeight).toBeGreaterThan(viewportHeight);
+  expect(Math.abs(markerCenterY - expectedMarkerCenterY)).toBeLessThanOrEqual(12);
+});
+
 test("board page switcher renames and creates projects while guarding protected lanes", async ({ page }) => {
   await mockAuthenticated(page, {
     nextProjectId: 7,

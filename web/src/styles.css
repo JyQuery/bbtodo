@@ -1955,7 +1955,7 @@ textarea:focus {
 
 .board-lane-gap__marker {
   position: absolute;
-  top: 50%;
+  top: min(50%, calc(50vh - 0.475rem));
   left: 50%;
   display: inline-grid;
   place-items: center;
