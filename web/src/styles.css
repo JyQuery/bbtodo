@@ -1764,6 +1764,14 @@ textarea:focus {
     color 220ms var(--ease);
 }
 
+.board-column__header.has-add-task-action {
+  padding-right: 5rem;
+}
+
+.board-column__header.has-add-task-action.has-lane-delete-action {
+  padding-right: 7.2rem;
+}
+
 .board-column__header.is-draggable {
   cursor: grab;
   user-select: none;
@@ -1832,11 +1840,26 @@ textarea:focus {
   transform: translate(-50%, -50%);
 }
 
+.lane-add-task-button,
 .lane-delete-button,
 .lane-header__task-trash,
 .lane-header__action-spacer {
   width: 2rem;
   height: 2rem;
+}
+
+.lane-add-task-button {
+  color: var(--accent-strong);
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface-input));
+  box-shadow: inset 0 1px 0 var(--surface-highlight);
+}
+
+.lane-add-task-button:hover,
+.lane-add-task-button:focus-visible {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 75%, var(--surface-input));
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
 }
 
 .lane-task-trash-shell {
@@ -1989,6 +2012,23 @@ textarea:focus {
 
 .board-lane-gap:focus-visible {
   outline: none;
+}
+
+.board-lane-gap-mobile {
+  display: none;
+  width: 100%;
+  justify-content: center;
+  gap: 0.55rem;
+  margin-top: 0.7rem;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent-soft) 38%, var(--surface-input));
+}
+
+.board-lane-gap-mobile__icon {
+  width: 1rem;
+  height: 1rem;
 }
 
 .task-drop-slot {
@@ -3136,6 +3176,19 @@ textarea:focus {
     min-height: auto;
   }
 
+  .board-column-shell {
+    display: grid;
+    gap: 0.8rem;
+  }
+
+  .board-lane-gap {
+    display: none;
+  }
+
+  .board-lane-gap-mobile {
+    display: inline-flex;
+  }
+
   .task-card__actions,
   .token-row,
   .token-row__meta {
@@ -3165,8 +3218,24 @@ textarea:focus {
 
   .token-row,
   .token-row--skeleton {
+    display: grid;
     grid-template-columns: 1fr;
     gap: 0.8rem;
+  }
+
+  .topbar__label,
+  .eyebrow,
+  .label-chip,
+  .field__label,
+  .field__hint,
+  .task-card__ticket-id,
+  .task-card__timestamp,
+  .token-row__timestamp,
+  .task-tag,
+  .lane-delete-popover__field span,
+  .micro-button,
+  .text-button {
+    font-size: 0.875rem;
   }
 
   .hero-panel,
@@ -3177,10 +3246,60 @@ textarea:focus {
   .dialog-panel,
   .token-list,
   .token-reveal {
-    padding: 1.05rem;
+    padding: 1.15rem;
   }
 
   .metric-pill {
     min-height: auto;
+  }
+
+  .board-column {
+    gap: 0.9rem;
+  }
+
+  .board-column__header {
+    min-height: 2.75rem;
+    padding-left: 0.55rem;
+  }
+
+  .board-column__header.has-add-task-action {
+    padding-right: 5.6rem;
+  }
+
+  .board-column__header.has-add-task-action.has-lane-delete-action {
+    padding-right: 8.25rem;
+  }
+
+  .board-column__content {
+    gap: 0.75rem;
+  }
+
+  .task-card {
+    gap: 0.5rem;
+    padding: 0.8rem;
+  }
+
+  .lane-add-task-button,
+  .lane-delete-button,
+  .lane-header__task-trash,
+  .lane-header__action-spacer,
+  .icon-button {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  .lane-task-trash-shell {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  .lane-composer {
+    gap: 1rem;
+    padding: 1rem;
+  }
+
+  .lane-composer__actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
   }
 }
