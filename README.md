@@ -2,23 +2,12 @@
 
 `bbtodo` is a minimal kanban with:
 
-- multiple projects
-- flexible lanes
-- only OIDC login
-- personal API tokens
-- React frontend, Fastify server, and SQLite
-
-## Use The Repo-Local AI Skill
-
-This repo includes a repo-local Codex skill at `./skills/bbtodo/SKILL.md`.
-
-Tell your AI agents to use that skill explicitly each time. Do not assume they will discover or invoke it automatically on their own.
-
-If you keep an `AGENTS.md` in the repo, a good default instruction is:
-
-```md
-Always use `$bbtodo` at `./skills/bbtodo/SKILL.md` for BBTodo work tracking: create a task before substantial work, move it to In Progress when active work starts, and move it to In review when the work is ready.
-```
+- Multi-project
+- Flexible lanes
+- OIDC-only
+- Personal API tokens
+- For both humans and AI agents
+- Built with a React frontend, Fastify backend, and SQLite storage
 
 ## Run the project
 
@@ -36,3 +25,18 @@ docker compose up -d
 ```
 
 The app is available at `http://localhost:8080` by default.
+
+
+## Skills for AI Agents.
+
+The skill is located at `./skills/bbtodo/SKILL.md`.
+
+As a human, copy the `./skills/bbtodo/scripts/.env.example` to `./skills/bbtodo/scripts/.env` and edit it the base url and API token.
+
+Then tell your AI agent to use it whenever they work. If you have an `AGENTS.md` file, you can include a default instruction such as:
+
+```md
+Always use `$bbtodo` at `./skills/bbtodo/SKILL.md` for work tracking: create a task before substantial work, move it to In Progress when active work starts, and move it to In review when the work is ready.
+```
+
+You can also ask your AI agent to do the above steps for you.
