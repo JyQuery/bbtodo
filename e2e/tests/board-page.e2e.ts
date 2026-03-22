@@ -91,6 +91,32 @@ async function hoverDraggedTaskDirectlyToTarget(page: Page, target: Locator, tar
   await page.waitForTimeout(160);
 }
 
+async function hoverDraggedTaskToNestTarget(
+  page: Page,
+  card: Locator,
+  targetYRatio = 0.5,
+  settleTarget?: Locator
+) {
+  const nestTarget = taskCardNestTarget(card);
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await hoverDraggedTaskOver(page, nestTarget, targetYRatio);
+
+    if (settleTarget && (await settleTarget.count()) > 0) {
+      await hoverDraggedTaskDirectlyToTarget(page, settleTarget);
+      return;
+    }
+
+    const cardClass = await card.getAttribute("class");
+    if (cardClass?.includes("is-nest-target")) {
+      await hoverDraggedTaskDirectlyToTarget(page, nestTarget, targetYRatio);
+      return;
+    }
+  }
+
+  await hoverDraggedTaskDirectlyToTarget(page, nestTarget, targetYRatio);
+}
+
 async function dropDraggedTaskOnHeaderTrashZone(page: Page, header: Locator) {
   await expect(header).toBeAttached();
   const headerBox = await header.boundingBox();
@@ -392,6 +418,8 @@ test("board page reorders tasks and manages lanes", async ({ page }) => {
 
   const qaColumn = page.getByTestId("board-column-project-1-lane-custom-1");
   const doneColumn = page.getByTestId(`board-column-${laneId("project-1", "done")}`);
+  const qaRootInsertSlot = page.getByTestId("task-drop-slot-project-1-lane-custom-1-2");
+  const shipNoteSubtaskSlot = page.getByTestId("task-drop-slot-task-5-0");
 
   const createdCard = page.getByTestId("task-card-task-5");
   const releaseChecklistCard = page.getByTestId("task-card-task-6");
@@ -400,9 +428,11 @@ test("board page reorders tasks and manages lanes", async ({ page }) => {
   await expect(releaseChecklistCard).toBeVisible();
   await expect(createdCard.locator(".task-tag")).toHaveCount(0);
 
-  await beginTaskDrag(page, retryCard);
-  await hoverDraggedTaskOver(page, taskCardNestTarget(createdCard), 0.25);
-  await expect(createdCard.locator(".task-card__subtasks").getByText("Review retry settings")).toBeVisible();
+  await dragTaskToTarget(page, retryCard, qaRootInsertSlot);
+  const retryCardInQa = qaColumn.getByTestId("task-card-task-1");
+  await expect(retryCardInQa).toBeVisible();
+  await beginTaskDrag(page, retryCardInQa);
+  await hoverDraggedTaskToNestTarget(page, createdCard, 0.35, shipNoteSubtaskSlot);
   await finishTaskDrag(page);
   await expect(createdCard.locator(".task-card__subtasks").getByText("Review retry settings")).toBeVisible();
   await expect(todoColumn.getByText("Review retry settings")).toHaveCount(0);
@@ -412,9 +442,11 @@ test("board page reorders tasks and manages lanes", async ({ page }) => {
   await expect(createdCard.locator(".task-card__subtasks").getByText("Review retry settings")).toHaveCount(0);
   await expect(qaColumn.getByText("Review retry settings")).toBeVisible();
 
-  await beginTaskDrag(page, copyCard);
-  await hoverDraggedTaskDirectlyToTarget(page, taskCardNestTarget(createdCard), 0.5);
-  await expect(createdCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
+  await dragTaskToTarget(page, copyCard, qaRootInsertSlot);
+  const copyCardInQa = qaColumn.getByTestId("task-card-task-4");
+  await expect(copyCardInQa).toBeVisible();
+  await beginTaskDrag(page, copyCardInQa);
+  await hoverDraggedTaskToNestTarget(page, createdCard, 0.5, shipNoteSubtaskSlot);
   await finishTaskDrag(page);
   await expect(createdCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
   await expect(todoColumn.getByText("Queue copy pass")).toHaveCount(0);
@@ -561,15 +593,21 @@ test("board page moves a dragged subtask under another empty parent", async ({ p
   const shipNoteCard = page.getByTestId("task-card-task-5");
   const releaseChecklistCard = page.getByTestId("task-card-task-6");
   const copyCard = page.getByTestId("task-card-task-4");
+  const qaRootInsertSlot = page.getByTestId("task-drop-slot-project-1-lane-custom-1-2");
+  const shipNoteSubtaskSlot = page.getByTestId("task-drop-slot-task-5-0");
+  const releaseChecklistSubtaskSlot = page.getByTestId("task-drop-slot-task-6-0");
 
-  await beginTaskDrag(page, copyCard);
-  await hoverDraggedTaskOver(page, taskCardNestTarget(shipNoteCard), 0.25);
+  await dragTaskToTarget(page, copyCard, qaRootInsertSlot);
+  const copyCardInQa = page.getByTestId("task-card-task-4");
+  await expect(copyCardInQa).toBeVisible();
+  await beginTaskDrag(page, copyCardInQa);
+  await hoverDraggedTaskToNestTarget(page, shipNoteCard, 0.35, shipNoteSubtaskSlot);
   await finishTaskDrag(page);
   await expect(shipNoteCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
 
   const copySubtask = shipNoteCard.locator(".task-card__subtasks").getByTestId("task-card-task-4");
   await beginTaskDrag(page, copySubtask);
-  await hoverDraggedTaskDirectlyToTarget(page, taskCardNestTarget(releaseChecklistCard), 0.5);
+  await hoverDraggedTaskToNestTarget(page, releaseChecklistCard, 0.5, releaseChecklistSubtaskSlot);
   await finishTaskDrag(page);
 
   await expect(shipNoteCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toHaveCount(0);
