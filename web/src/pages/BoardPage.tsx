@@ -509,6 +509,7 @@ function LaneHeader({
   isProtected,
   isTaskDeletePending,
   isTaskDragging,
+  isTaskTrashVisible,
   lane,
   onCancelTaskDelete,
   onDelete,
@@ -523,6 +524,7 @@ function LaneHeader({
   isProtected: boolean;
   isTaskDeletePending: boolean;
   isTaskDragging: boolean;
+  isTaskTrashVisible: boolean;
   lane: BoardLane;
   onCancelTaskDelete: () => void;
   onDelete: (destinationLaneId?: string) => void;
@@ -539,14 +541,14 @@ function LaneHeader({
       laneId: lane.id,
       type: "trash"
     },
-    disabled: !isTaskDragging
+    disabled: !isTaskTrashVisible
   });
   const preferredDestinationId = getPreferredLaneDeleteDestination(lane.id, destinationLanes)?.id ?? "";
   const [destinationLaneId, setDestinationLaneId] = useState(preferredDestinationId);
   const requiresDestination = lane.taskCount > 0;
   const showLaneDeleteAction = !isTaskDragging && !pendingTaskDelete && !isProtected;
-  const showTaskTrashState = isTaskDragging || pendingTaskDelete !== null;
-  const isTaskTrashActive = isTaskTrashOver || pendingTaskDelete !== null;
+  const showTaskTrashState = isTaskTrashVisible || pendingTaskDelete !== null;
+  const isTaskTrashActive = (isTaskTrashVisible && isTaskTrashOver) || pendingTaskDelete !== null;
 
   useDismissableLayer(isConfirmOpen, confirmRef, () => setIsConfirmOpen(false));
 
@@ -581,7 +583,7 @@ function LaneHeader({
         <LaneTaskTrashTarget
           isDeletePending={isTaskDeletePending}
           isDropActive={isTaskTrashActive}
-          isDraggingTask={isTaskDragging}
+          isVisible={showTaskTrashState}
           laneId={lane.id}
           onCancel={onCancelTaskDelete}
           onConfirm={onConfirmTaskDelete}
@@ -925,7 +927,7 @@ function TaskCard({
 function LaneTaskTrashTarget({
   isDeletePending,
   isDropActive,
-  isDraggingTask,
+  isVisible,
   laneId,
   pendingTask,
   onCancel,
@@ -933,7 +935,7 @@ function LaneTaskTrashTarget({
 }: {
   isDeletePending: boolean;
   isDropActive: boolean;
-  isDraggingTask: boolean;
+  isVisible: boolean;
   laneId: string;
   pendingTask: Task | null;
   onCancel: () => void;
@@ -949,11 +951,11 @@ function LaneTaskTrashTarget({
 
   return (
     <div
-      className={`lane-task-trash-shell${isDraggingTask || pendingTask ? " is-active" : ""}`}
+      className={`lane-task-trash-shell${isVisible || pendingTask ? " is-active" : ""}`}
       ref={confirmRef}
     >
       <div
-        className={`lane-header__task-trash${isDraggingTask ? " is-visible" : ""}${isDropActive ? " is-active" : ""}${pendingTask ? " is-confirm-open" : ""}`}
+        className={`lane-header__task-trash${isVisible ? " is-visible" : ""}${isDropActive ? " is-active" : ""}${pendingTask ? " is-confirm-open" : ""}`}
         data-testid={`lane-task-trash-target-${laneId}`}
         role="presentation"
         title="Drop to delete"
@@ -2417,6 +2419,7 @@ export function BoardPage() {
                       isProtected={lane.isProtectedLane}
                       isTaskDeletePending={deleteTaskMutation.isPending}
                       isTaskDragging={draggedTaskId !== null}
+                      isTaskTrashVisible={draggedTask?.laneId === lane.id}
                       lane={lane}
                       onCancelTaskDelete={() => {
                         setPendingDeleteTaskId(null);

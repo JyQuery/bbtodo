@@ -329,7 +329,9 @@ test("board page deletes tasks from the lane header trash target", async ({ page
     "[BILL-1] Review retry settings"
   );
   await expect(todoLaneHeader).toHaveClass(/is-task-trash-visible/);
-  await expect(doneLaneHeader).toHaveClass(/is-task-trash-visible/);
+  await expect(doneLaneHeader).not.toHaveClass(/is-task-trash-visible/);
+  await expect(todoLaneTrashTarget).toBeVisible();
+  await expect(doneLaneTrashTarget).toBeHidden();
   await expect(todoLaneTrashTarget).toHaveCSS("border-top-width", "0px");
   const todoHeaderBox = await todoLaneHeader.boundingBox();
   const todoTrashBox = await todoLaneTrashTarget.boundingBox();
