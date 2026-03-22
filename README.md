@@ -8,6 +8,18 @@
 - personal API tokens
 - React frontend, Fastify server, and SQLite
 
+## Use The Repo-Local AI Skill
+
+This repo includes a repo-local Codex skill at `./skills/bbtodo/SKILL.md`.
+
+Tell your AI agents to use that skill explicitly each time. Do not assume they will discover or invoke it automatically on their own.
+
+If you keep an `AGENTS.md` in the repo, a good default instruction is:
+
+```md
+Always use `$bbtodo` at `./skills/bbtodo/SKILL.md` for BBTodo work tracking: create a task before substantial work, move it to In Progress when active work starts, and move it to In review when the work is ready.
+```
+
 ## Run the project
 
 ```bash
