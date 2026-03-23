@@ -18,7 +18,7 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
-import { Navigate, useParams, useSearchParams } from "react-router-dom";
+import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { CSS } from "@dnd-kit/utilities";
 
 import { api, type BoardLane, type Task, type TaskTag, type TaskTagColor } from "../api";
@@ -63,6 +63,17 @@ const taskMeasuring = {
     strategy: MeasuringStrategy.Always
   }
 } as const;
+
+function buildBoardPath(projectId: string, ticketId?: string) {
+  return ticketId
+    ? `/projects/${projectId}/${encodeURIComponent(ticketId)}`
+    : `/projects/${projectId}`;
+}
+
+function toSearchString(searchParams: URLSearchParams) {
+  const serializedParams = searchParams.toString();
+  return serializedParams ? `?${serializedParams}` : "";
+}
 
 function getTaskTrashDropTargetId(laneId: string) {
   return `task-trash:${laneId}`;
@@ -1479,7 +1490,8 @@ function TaskEditorDialog({
 }
 
 export function BoardPage() {
-  const { projectId } = useParams();
+  const { projectId, ticketId } = useParams();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [composerLaneId, setComposerLaneId] = useState<string | null>(null);
@@ -1493,7 +1505,6 @@ export function BoardPage() {
     position: number;
   } | null>(null);
   const [dropTarget, setDropTarget] = useState<TaskMoveTarget | null>(null);
-  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [laneName, setLaneName] = useState("");
   const [pendingDeleteTaskId, setPendingDeleteTaskId] = useState<string | null>(null);
   const [pendingDeleteTaskLaneId, setPendingDeleteTaskLaneId] = useState<string | null>(null);
@@ -1531,7 +1542,7 @@ export function BoardPage() {
   const activeTasks = previewTasks ?? tasks;
   const lanesById = useMemo(() => new Map(lanes.map((lane) => [lane.id, lane])), [lanes]);
   const draggedLane = draggedLaneId ? lanes.find((lane) => lane.id === draggedLaneId) ?? null : null;
-  const editingTask = editingTaskId ? tasks.find((task) => task.id === editingTaskId) ?? null : null;
+  const editingTask = ticketId ? tasks.find((task) => task.ticketId === ticketId) ?? null : null;
   const isBoardFiltered = boardSearch.length > 0 || activeTagKey !== null;
   const committedTaskMap = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
   const taskMap = useMemo(() => new Map(activeTasks.map((task) => [task.id, task])), [activeTasks]);
@@ -1795,8 +1806,33 @@ export function BoardPage() {
     setDraftTitle("");
   }
 
+  function openTaskDialog(task: Task) {
+    if (!projectId) {
+      return;
+    }
+
+    navigate(
+      {
+        pathname: buildBoardPath(projectId, task.ticketId),
+        search: toSearchString(searchParams)
+      },
+      { replace: true }
+    );
+    saveTaskMutation.reset();
+  }
+
   function closeTaskDialog() {
-    setEditingTaskId(null);
+    if (!projectId) {
+      return;
+    }
+
+    navigate(
+      {
+        pathname: buildBoardPath(projectId),
+        search: toSearchString(searchParams)
+      },
+      { replace: true }
+    );
     saveTaskMutation.reset();
   }
 
@@ -2279,12 +2315,36 @@ export function BoardPage() {
   }, []);
 
   useEffect(() => {
-    if (!editingTaskId || editingTask || tasksQuery.isPending) {
+    if (
+      !ticketId ||
+      editingTask ||
+      projectsQuery.isPending ||
+      tasksQuery.isPending ||
+      tasksQuery.error ||
+      !projectId ||
+      !project
+    ) {
       return;
     }
 
-    setEditingTaskId(null);
-  }, [editingTask, editingTaskId, tasksQuery.isPending]);
+    navigate(
+      {
+        pathname: buildBoardPath(projectId),
+        search: toSearchString(searchParams)
+      },
+      { replace: true }
+    );
+  }, [
+    editingTask,
+    navigate,
+    project,
+    projectId,
+    projectsQuery.isPending,
+    searchParams,
+    tasksQuery.error,
+    tasksQuery.isPending,
+    ticketId
+  ]);
 
   if (!projectId) {
     return <Navigate replace to="/" />;
@@ -2524,7 +2584,7 @@ export function BoardPage() {
                                 dropTarget?.kind === "nest" && dropTarget.taskId === taskGroup.task.id
                               }
                               laneId={lane.id}
-                              onOpen={(taskToEdit) => setEditingTaskId(taskToEdit.id)}
+                              onOpen={openTaskDialog}
                               onTagSelect={handleTagSelect}
                               showNestTarget={
                                 draggedTask !== null &&

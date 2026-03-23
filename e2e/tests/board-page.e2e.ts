@@ -272,6 +272,7 @@ test("board page edits cards and filters tasks", async ({ page }) => {
   await page.getByLabel("Open account menu").click();
 
   await firstTaskCard.click();
+  await expect(page).toHaveURL(/\/projects\/project-1\/BILL-1$/);
 
   const editDialog = page.getByRole("dialog", { name: "Edit Card" });
   const sourceTab = editDialog.getByRole("tab", { name: "Markdown source" });
@@ -333,6 +334,7 @@ test("board page edits cards and filters tasks", async ({ page }) => {
   await expect(recoloredBackendSuggestion).toHaveCSS("background-color", "rgb(255, 241, 217)");
   await editDialog.getByLabel("Close edit task dialog").click();
   await expect(editDialog).toHaveCount(0);
+  await expect(page).toHaveURL(/\/projects\/project-1$/);
 
   await page.getByLabel("Search cards").fill("callback");
   await expect(page.getByText("Review retry scope")).toBeVisible();
@@ -367,6 +369,27 @@ test("board page edits cards and filters tasks", async ({ page }) => {
   await expect(routedOpsTagFilterChip).toBeVisible();
   await expect(page.getByText("Remove healthcheck loop")).toBeVisible();
   await expect(page.getByText("Review retry scope")).toHaveCount(0);
+});
+
+test("board page opens a task dialog from a ticket deep link", async ({ page }) => {
+  await mockAuthenticated(page, {
+    projects: projectsForGrid,
+    tasks
+  });
+
+  await page.goto("/projects/project-1/BILL-2?q=callback");
+
+  const editDialog = page.getByRole("dialog", { name: "Edit Card" });
+
+  await expect(editDialog).toBeVisible();
+  await expect(page).toHaveURL(/\/projects\/project-1\/BILL-2\?q=callback$/);
+  await expect(editDialog.getByLabel("Title")).toHaveValue("Tighten callback logging");
+  await expect(page.getByLabel("Search cards")).toHaveValue("callback");
+
+  await editDialog.getByLabel("Close edit task dialog").click();
+
+  await expect(editDialog).toHaveCount(0);
+  await expect(page).toHaveURL(/\/projects\/project-1\?q=callback$/);
 });
 
 test("board page deletes tasks from the lane header trash target", async ({ page }) => {
