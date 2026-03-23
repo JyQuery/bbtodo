@@ -1342,7 +1342,7 @@ function TaskEditorDialog({
         role="dialog"
       >
         <div className="dialog-header">
-          <h2 id="edit-task-title">Edit Card</h2>
+          <h2 id="edit-task-title">{`Edit ${task.ticketId}`}</h2>
           <button
             aria-label="Close edit task dialog"
             className="icon-button"
@@ -1489,6 +1489,35 @@ function TaskEditorDialog({
   );
 }
 
+function ToastNotice({
+  message,
+  onDismiss,
+  title
+}: {
+  message: string;
+  onDismiss: () => void;
+  title: string;
+}) {
+  return (
+    <div aria-live="polite" className="toast-stack">
+      <div className="toast-notice" data-testid="board-toast" role="status">
+        <div className="toast-notice__copy">
+          <strong>{title}</strong>
+          <p>{message}</p>
+        </div>
+        <button
+          aria-label="Dismiss notification"
+          className="icon-button toast-notice__dismiss"
+          onClick={onDismiss}
+          type="button"
+        >
+          <CloseIcon />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function BoardPage() {
   const { projectId, ticketId } = useParams();
   const navigate = useNavigate();
@@ -1509,6 +1538,7 @@ export function BoardPage() {
   const [pendingDeleteTaskId, setPendingDeleteTaskId] = useState<string | null>(null);
   const [pendingDeleteTaskLaneId, setPendingDeleteTaskLaneId] = useState<string | null>(null);
   const [taskDragPreviewWidth, setTaskDragPreviewWidth] = useState<number | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const laneDragPreviewRef = useRef<HTMLElement | null>(null);
   const pointerClientYRef = useRef<number | null>(null);
   const previewTasksRef = useRef<Task[] | null>(null);
@@ -2315,6 +2345,20 @@ export function BoardPage() {
   }, []);
 
   useEffect(() => {
+    if (!toastMessage) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setToastMessage(null);
+    }, 4000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [toastMessage]);
+
+  useEffect(() => {
     if (
       !ticketId ||
       editingTask ||
@@ -2327,6 +2371,7 @@ export function BoardPage() {
       return;
     }
 
+    setToastMessage(`Ticket ${ticketId} does not exist.`);
     navigate(
       {
         pathname: buildBoardPath(projectId),
@@ -2353,6 +2398,13 @@ export function BoardPage() {
   return (
     <main className="page-shell page-shell--board">
       <title>{project ? `${project.name} | BBTodo` : "Board | BBTodo"}</title>
+      {toastMessage ? (
+        <ToastNotice
+          message={toastMessage}
+          onDismiss={() => setToastMessage(null)}
+          title="Ticket not found"
+        />
+      ) : null}
       {isCreateLaneDialogOpen ? (
         <div className="dialog-scrim" onClick={() => closeCreateLaneDialog()}>
           <section

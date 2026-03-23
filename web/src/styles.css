@@ -2926,6 +2926,50 @@ textarea:focus {
   color: #7b281f;
 }
 
+.toast-stack {
+  position: fixed;
+  top: 1.35rem;
+  right: 1.35rem;
+  z-index: 30;
+  width: min(24rem, calc(100vw - 2rem));
+}
+
+.toast-notice {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.9rem;
+  padding: 1rem 1.05rem;
+  border: 1px solid color-mix(in srgb, var(--danger) 22%, var(--line));
+  border-radius: 1.2rem;
+  background: color-mix(in srgb, var(--surface-popover) 88%, rgba(159, 61, 51, 0.12));
+  box-shadow:
+    inset 0 1px 0 var(--surface-highlight-strong),
+    0 20px 38px -26px rgba(18, 34, 36, 0.42);
+  animation: rise-in 320ms var(--ease) both;
+}
+
+.toast-notice__copy {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.toast-notice__copy strong {
+  color: var(--danger);
+  font-size: 0.88rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.toast-notice__copy p {
+  color: var(--ink);
+  line-height: 1.45;
+}
+
+.toast-notice__dismiss {
+  flex-shrink: 0;
+}
+
 .status-ping {
   position: relative;
   width: 0.85rem;
@@ -3103,6 +3147,15 @@ textarea:focus {
 
   .hero-panel--landing {
     min-height: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .toast-stack {
+    top: 1rem;
+    right: 1rem;
+    left: 1rem;
+    width: auto;
   }
 }
 

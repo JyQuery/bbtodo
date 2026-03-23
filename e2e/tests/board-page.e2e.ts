@@ -274,7 +274,7 @@ test("board page edits cards and filters tasks", async ({ page }) => {
   await firstTaskCard.click();
   await expect(page).toHaveURL(/\/projects\/project-1\/BILL-1$/);
 
-  const editDialog = page.getByRole("dialog", { name: "Edit Card" });
+  const editDialog = page.getByRole("dialog", { name: /Edit BILL-/ });
   const sourceTab = editDialog.getByRole("tab", { name: "Markdown source" });
   const previewTab = editDialog.getByRole("tab", { name: "Rendered preview" });
   const tagInput = editDialog.getByLabel("Task tags");
@@ -282,6 +282,7 @@ test("board page edits cards and filters tasks", async ({ page }) => {
   const updatedMeta = editDialog.locator(".task-editor__meta-item", { hasText: "Updated" });
 
   await expect(editDialog).toBeVisible();
+  await expect(editDialog.getByRole("heading", { name: "Edit BILL-1" })).toBeVisible();
   await expect(createdMeta).toContainText("Created");
   await expect(createdMeta.locator("time")).toHaveAttribute("datetime", "2026-03-18T07:00:00.000Z");
   await expect(createdMeta.locator("time")).toHaveText("2026-03-18T07:00:00.000Z");
@@ -379,10 +380,11 @@ test("board page opens a task dialog from a ticket deep link", async ({ page }) 
 
   await page.goto("/projects/project-1/BILL-2?q=callback");
 
-  const editDialog = page.getByRole("dialog", { name: "Edit Card" });
+  const editDialog = page.getByRole("dialog", { name: "Edit BILL-2" });
 
   await expect(editDialog).toBeVisible();
   await expect(page).toHaveURL(/\/projects\/project-1\/BILL-2\?q=callback$/);
+  await expect(editDialog.getByRole("heading", { name: "Edit BILL-2" })).toBeVisible();
   await expect(editDialog.getByLabel("Title")).toHaveValue("Tighten callback logging");
   await expect(page.getByLabel("Search cards")).toHaveValue("callback");
 
@@ -390,6 +392,24 @@ test("board page opens a task dialog from a ticket deep link", async ({ page }) 
 
   await expect(editDialog).toHaveCount(0);
   await expect(page).toHaveURL(/\/projects\/project-1\?q=callback$/);
+});
+
+test("board page shows a toast when a ticket deep link misses", async ({ page }) => {
+  await mockAuthenticated(page, {
+    projects: projectsForGrid,
+    tasks
+  });
+
+  await page.goto("/projects/project-1/BILL-99?q=callback");
+
+  const toast = page.getByTestId("board-toast");
+
+  await expect(page).toHaveURL(/\/projects\/project-1\?q=callback$/);
+  await expect(toast).toBeVisible();
+  await expect(toast).toContainText("Ticket not found");
+  await expect(toast).toContainText("Ticket BILL-99 does not exist.");
+  await expect(page.getByRole("dialog", { name: /Edit BILL-/ })).toHaveCount(0);
+  await expect(page.getByLabel("Search cards")).toHaveValue("callback");
 });
 
 test("board page deletes tasks from the lane header trash target", async ({ page }) => {
