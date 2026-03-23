@@ -2443,6 +2443,14 @@ textarea:focus {
   gap: 1.1rem;
 }
 
+.task-editor__footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
 .task-editor__meta {
   display: flex;
   flex-wrap: wrap;
@@ -2452,6 +2460,10 @@ textarea:focus {
   border: 1px solid var(--line);
   border-radius: 1rem;
   background: var(--surface-muted);
+}
+
+.task-editor__meta--footer {
+  flex: 1 1 24rem;
 }
 
 .task-editor__meta-item {
@@ -2486,6 +2498,11 @@ textarea:focus {
   grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
   align-items: start;
+}
+
+.task-editor__actions {
+  margin-left: auto;
+  flex: 0 0 auto;
 }
 
 .field--editor {

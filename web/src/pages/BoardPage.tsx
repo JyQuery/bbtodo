@@ -1357,20 +1357,6 @@ function TaskEditorDialog({
             <CloseIcon />
           </button>
         </div>
-        <dl aria-label="Card timing" className="task-editor__meta">
-          <div className="task-editor__meta-item">
-            <dt>Created</dt>
-            <dd>
-              <time dateTime={task.createdAt}>{task.createdAt}</time>
-            </dd>
-          </div>
-          <div className="task-editor__meta-item">
-            <dt>Updated</dt>
-            <dd>
-              <time dateTime={task.updatedAt}>{task.updatedAt}</time>
-            </dd>
-          </div>
-        </dl>
         <form
           className="dialog-form task-editor"
           onSubmit={(event) => {
@@ -1480,13 +1466,29 @@ function TaskEditorDialog({
             ) : null}
           </div>
           {error ? <ErrorBanner error={error} /> : null}
-          <div className="dialog-actions">
-            <button className="text-button" onClick={onClose} type="button">
-              Cancel
-            </button>
-            <button className="primary-button" disabled={isPending || title.trim().length === 0} type="submit">
-              {isPending ? "Saving..." : "Save card"}
-            </button>
+          <div className="task-editor__footer">
+            <dl aria-label="Card timing" className="task-editor__meta task-editor__meta--footer">
+              <div className="task-editor__meta-item">
+                <dt>Created</dt>
+                <dd>
+                  <time dateTime={task.createdAt}>{task.createdAt}</time>
+                </dd>
+              </div>
+              <div className="task-editor__meta-item">
+                <dt>Updated</dt>
+                <dd>
+                  <time dateTime={task.updatedAt}>{task.updatedAt}</time>
+                </dd>
+              </div>
+            </dl>
+            <div className="dialog-actions task-editor__actions">
+              <button className="text-button" onClick={onClose} type="button">
+                Cancel
+              </button>
+              <button className="primary-button" disabled={isPending || title.trim().length === 0} type="submit">
+                {isPending ? "Saving..." : "Save card"}
+              </button>
+            </div>
           </div>
         </form>
       </section>
