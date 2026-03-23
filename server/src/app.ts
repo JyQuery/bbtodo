@@ -2,6 +2,8 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 
 import cookie from "@fastify/cookie";
+import jwt from "@fastify/jwt";
+import oauthPlugin from "@fastify/oauth2";
 import staticFiles from "@fastify/static";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
@@ -23,7 +25,14 @@ import {
 } from "./controllers/controller-support.js";
 import { registerBoardController } from "./controllers/board-controller.js";
 import { SQLITE_DATABASE_PATH, createDatabase } from "./db.js";
-import { createOidcProvider, type OidcProvider } from "./oidc.js";
+import {
+  OIDC_OAUTH_NAMESPACE,
+  OIDC_STATE_COOKIE,
+  OIDC_VERIFIER_COOKIE,
+  createJwksSecretResolver,
+  resolveOidcDiscoveryDocument,
+  type OidcAuthTestingOptions
+} from "./oidc.js";
 
 function isSecureCookie(clientUrl: string) {
   return new URL(clientUrl).protocol === "https:";
@@ -80,14 +89,15 @@ async function resolveClientAssetPath(root: string, pathname: string) {
 export function buildApp(options: {
   config: AppConfig;
   clientDistPath?: string;
-  oidcProvider?: OidcProvider;
+  authTesting?: OidcAuthTestingOptions;
+  oidcProvider?: OidcAuthTestingOptions;
   sqlitePath?: string;
 }) {
   const app = Fastify({
     logger: true
   });
   const database = createDatabase(options.sqlitePath ?? SQLITE_DATABASE_PATH);
-  const oidcProvider = options.oidcProvider ?? createOidcProvider(options.config);
+  const authTesting = options.authTesting ?? options.oidcProvider;
   const secureCookie = isSecureCookie(options.config.clientUrl);
   const clientDistPath = options.clientDistPath
     ? path.resolve(options.clientDistPath)
@@ -95,6 +105,65 @@ export function buildApp(options: {
 
   app.register(cookie, {
     secret: options.config.sessionSecret
+  });
+  if (authTesting) {
+    app.decorate("oidcTestControls", authTesting);
+  }
+  app.register(async (authApp) => {
+    if (authTesting?.oauth2Namespace) {
+      authApp.decorate(OIDC_OAUTH_NAMESPACE, authTesting.oauth2Namespace);
+    } else {
+      await authApp.register(oauthPlugin, {
+        callbackUri: `${options.config.clientUrl}/auth/callback`,
+        cookie: {
+          httpOnly: true,
+          path: "/auth",
+          sameSite: "lax",
+          secure: secureCookie
+        },
+        credentials: {
+          client: {
+            id: options.config.oidcClientId,
+            secret: options.config.oidcClientSecret
+          }
+        },
+        discovery: {
+          issuer: options.config.oidcIssuer
+        },
+        name: OIDC_OAUTH_NAMESPACE,
+        pkce: "S256",
+        redirectStateCookieName: OIDC_STATE_COOKIE,
+        scope: options.config.oidcScopes.split(/\s+/).filter(Boolean),
+        verifierCookieName: OIDC_VERIFIER_COOKIE
+      });
+    }
+
+    if (authTesting?.jwtVerifier) {
+      authApp.decorate("jwt", authTesting.jwtVerifier as never);
+    } else {
+      const discoveryDocument =
+        authTesting?.discoveryDocument ??
+        (await resolveOidcDiscoveryDocument(options.config.oidcIssuer));
+      await authApp.register(jwt as never, {
+        decode: {
+          complete: true
+        },
+        secret: createJwksSecretResolver({
+          clientSecret: options.config.oidcClientSecret,
+          jwksUri: discoveryDocument.jwksUri
+        }),
+        verify: {
+          allowedAud: options.config.oidcClientId,
+          allowedIss: discoveryDocument.issuer
+        }
+      } as never);
+    }
+
+    registerAuthController(withZodTypeProvider(authApp), {
+      config: options.config,
+      database: database.db,
+      secureCookie
+    });
   });
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
@@ -172,12 +241,6 @@ export function buildApp(options: {
       } as const)
     });
 
-    registerAuthController(typedApp, {
-      config: options.config,
-      database: database.db,
-      oidcProvider,
-      secureCookie
-    });
     registerApiTokensController(typedApp, {
       database: database.db
     });

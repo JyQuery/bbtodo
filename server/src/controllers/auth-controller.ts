@@ -1,3 +1,4 @@
+import type { FastifyReply } from "fastify";
 import { z } from "zod";
 
 import {
@@ -14,14 +15,22 @@ import {
   upsertUser,
   type DatabaseClient
 } from "../db.js";
-import { authFlowStateSchema, type OidcProvider } from "../oidc.js";
 import {
-  AUTH_FLOW_COOKIE,
+  OIDC_NONCE_COOKIE,
+  OIDC_OAUTH_NAMESPACE,
+  OIDC_STATE_COOKIE,
+  OIDC_VERIFIER_COOKIE,
+  buildAuthenticatedIdentity,
+  buildAuthorizationRedirectUrl,
+  createOidcNonce,
+  type JwtVerifier,
+  type OidcOAuth2Namespace
+} from "../oidc.js";
+import {
   SESSION_COOKIE,
   SESSION_TTL_MS,
   apiDocsSecurity,
-  getSignedSessionId,
-  parseSignedCookie,
+  getSignedCookieValue,
   requireApiUser,
   type TypedApp
 } from "./controller-support.js";
@@ -37,11 +46,28 @@ export function registerAuthController(
   options: {
     config: AppConfig;
     database: DatabaseClient;
-    oidcProvider: OidcProvider;
     secureCookie: boolean;
   }
 ) {
-  const { config, database, oidcProvider, secureCookie } = options;
+  const { config, database, secureCookie } = options;
+  const authApp = app as TypedApp & {
+    [OIDC_OAUTH_NAMESPACE]: OidcOAuth2Namespace;
+    jwt: JwtVerifier;
+  };
+
+  function clearOidcCookies(reply: {
+    clearCookie: FastifyReply["clearCookie"];
+  }) {
+    reply.clearCookie(OIDC_NONCE_COOKIE, {
+      path: "/auth"
+    });
+    reply.clearCookie(OIDC_STATE_COOKIE, {
+      path: "/auth"
+    });
+    reply.clearCookie(OIDC_VERIFIER_COOKIE, {
+      path: "/auth"
+    });
+  }
 
   app.route({
     method: "GET",
@@ -52,9 +78,9 @@ export function registerAuthController(
       },
       tags: ["auth"]
     },
-    handler: async (_request, reply) => {
-      const loginRequest = await oidcProvider.createLoginRequest();
-      reply.setCookie(AUTH_FLOW_COOKIE, JSON.stringify(loginRequest.flowState), {
+    handler: async (request, reply) => {
+      const nonce = createOidcNonce();
+      reply.setCookie(OIDC_NONCE_COOKIE, nonce, {
         httpOnly: true,
         maxAge: 10 * 60,
         path: "/auth",
@@ -63,7 +89,11 @@ export function registerAuthController(
         signed: true
       });
 
-      return reply.redirect(loginRequest.redirectUrl);
+      const authorizationUri = await authApp[OIDC_OAUTH_NAMESPACE].generateAuthorizationUri(
+        request,
+        reply
+      );
+      return reply.redirect(buildAuthorizationRedirectUrl(authorizationUri, nonce));
     }
   });
 
@@ -79,20 +109,63 @@ export function registerAuthController(
       tags: ["auth"]
     },
     handler: async (request, reply) => {
-      const flowState = parseSignedCookie(
-        app,
-        request.cookies[AUTH_FLOW_COOKIE],
-        authFlowStateSchema
-      );
+      const nonce = getSignedCookieValue(app, request.cookies[OIDC_NONCE_COOKIE]);
 
-      if (!flowState) {
+      if (!nonce) {
         return reply.status(400).send({
-          message: "Missing or invalid OIDC flow cookie."
+          message: "Missing or invalid OIDC nonce cookie."
         });
       }
 
-      const callbackUrl = new URL(request.raw.url ?? request.url, config.clientUrl);
-      const identity = await oidcProvider.completeLogin(callbackUrl, flowState);
+      let tokenResponse:
+        | Awaited<
+            ReturnType<OidcOAuth2Namespace["getAccessTokenFromAuthorizationCodeFlow"]>
+          >
+        | undefined;
+      try {
+        tokenResponse = await authApp[
+          OIDC_OAUTH_NAMESPACE
+        ].getAccessTokenFromAuthorizationCodeFlow(request, reply);
+      } catch {
+        clearOidcCookies(reply);
+        return reply.status(400).send({
+          message: "OIDC code exchange failed."
+        });
+      }
+
+      const idToken = tokenResponse.token.id_token;
+      if (!idToken) {
+        clearOidcCookies(reply);
+        return reply.status(400).send({
+          message: "OIDC provider did not return an id_token."
+        });
+      }
+
+      let verifiedClaims: unknown;
+      try {
+        verifiedClaims = await authApp.jwt.verify(idToken);
+      } catch {
+        clearOidcCookies(reply);
+        return reply.status(400).send({
+          message: "OIDC id_token validation failed."
+        });
+      }
+
+      let identity;
+      try {
+        identity = buildAuthenticatedIdentity(config, verifiedClaims, nonce);
+      } catch (error) {
+        clearOidcCookies(reply);
+        return reply.status(400).send({
+          message:
+            error instanceof z.ZodError
+              ? error.issues[0]?.message ?? "OIDC identity claims were invalid."
+              : error instanceof Error
+              ? error.message
+              : "OIDC identity claims were invalid."
+        });
+      }
+
       const user = await upsertUser(database, identity);
       const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
       const session = createSession(database, {
@@ -100,9 +173,7 @@ export function registerAuthController(
         expiresAt
       });
 
-      reply.clearCookie(AUTH_FLOW_COOKIE, {
-        path: "/auth"
-      });
+      clearOidcCookies(reply);
       reply.setCookie(SESSION_COOKIE, session.id, {
         expires: new Date(expiresAt),
         httpOnly: true,
@@ -126,7 +197,7 @@ export function registerAuthController(
       tags: ["auth"]
     },
     handler: async (request, reply) => {
-      const sessionId = getSignedSessionId(app, request.cookies[SESSION_COOKIE]);
+      const sessionId = getSignedCookieValue(app, request.cookies[SESSION_COOKIE]);
       if (sessionId) {
         deleteSession(database, sessionId);
       }
