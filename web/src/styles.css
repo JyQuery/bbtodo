@@ -28,7 +28,7 @@
   --brand-start: #3a8c88;
   --brand-end: #235e5b;
   --scrim: rgba(16, 32, 34, 0.22);
-  --task-font: "Space Grotesk", "Outfit", "Segoe UI Variable Display", "Segoe UI", sans-serif;
+  --task-font: "Open Sans", "Outfit", "Segoe UI Variable Display", "Segoe UI", sans-serif;
   --radius-xl: 2rem;
   --radius-lg: 1.5rem;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
