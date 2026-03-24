@@ -151,7 +151,8 @@ export function registerAuthController(
           jwtVerifier: authApp.jwt,
           jwksSecretResolver: authApp.oidcJwksSecretResolver
         });
-      } catch {
+      } catch (error) {
+        app.log.warn({ err: error }, "OIDC id_token validation failed.");
         clearOidcCookies(reply);
         return reply.status(400).send({
           message: "OIDC id_token validation failed."

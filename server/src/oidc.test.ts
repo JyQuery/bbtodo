@@ -5,6 +5,7 @@ import Fastify from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  buildAuthenticatedIdentity,
   createJwksSecretResolver,
   resolveOidcDiscoveryDocument,
   verifyOidcIdToken
@@ -170,9 +171,7 @@ describe("OIDC helpers", () => {
         metadataServer.issuerUrl
       );
       expect(discoveryDocument).toEqual({
-        issuer: metadataServer.issuerUrl.endsWith("/")
-          ? metadataServer.issuerUrl
-          : `${metadataServer.issuerUrl}/`,
+        issuer: metadataServer.issuerUrl,
         jwksUri: `${metadataServer.issuerUrl}/.well-known/jwks.json`
       });
 
@@ -450,4 +449,32 @@ describe("OIDC helpers", () => {
     },
     15_000
   );
+
+  it("accepts issuer claims without a trailing slash when config includes one", () => {
+    expect(
+      buildAuthenticatedIdentity(
+        {
+          clientUrl: "http://localhost:8080",
+          oidcClientId: "bbtodo-test",
+          oidcClientSecret: "top-secret",
+          oidcIssuer: "https://issuer.example.com/",
+          oidcScopes: "openid profile email",
+          sessionSecret: "12345678901234567890123456789012"
+        },
+        {
+          aud: "bbtodo-test",
+          email: "jwks@example.com",
+          iss: "https://issuer.example.com",
+          name: "Issuer Match",
+          nonce: "expected-nonce",
+          sub: "issuer-match-user"
+        },
+        "expected-nonce"
+      )
+    ).toMatchObject({
+      email: "jwks@example.com",
+      issuer: "https://issuer.example.com/",
+      subject: "issuer-match-user"
+    });
+  });
 });

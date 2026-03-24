@@ -120,7 +120,7 @@ export async function resolveOidcDiscoveryDocument(
 
   const parsed = oidcDiscoverySchema.parse(await response.json());
   return {
-    issuer: normalizeIssuer(parsed.issuer),
+    issuer: parsed.issuer,
     jwksUri: parsed.jwks_uri
   };
 }
