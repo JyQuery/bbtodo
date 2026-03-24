@@ -50,3 +50,14 @@ Always use `$bbtodo` at `./skills/bbtodo/SKILL.md` for work tracking: create a t
 When a human asks the agent to start working on an existing ticket such as `BBTO-45`, tell the agent to run `start --ticket-id BBTO-45` so it fetches the task title and description from BBTodo before attaching tracking metadata.
 
 You can also ask your AI agent to do the above steps for you.
+
+### Use cases
+
+1. Use the AI agent to plan and implement a new task. 
+
+The task log will automatically be saved to the task card.
+
+
+2. Create a task card outlining your ideas.
+
+In the AI agent, run /plan <ticket-id>, the agent will use the task card as the starting point.
