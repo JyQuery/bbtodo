@@ -49,6 +49,48 @@ export function CloseIcon({ className }: { className?: string }) {
   );
 }
 
+export function ExpandIcon({ className }: { className?: string }) {
+  return (
+    <SvgIcon className={className}>
+      <path
+        d="M8.25 4.75h-3.5v3.5M15.75 4.75h3.5v3.5M8.25 19.25h-3.5v-3.5M15.75 19.25h3.5v-3.5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.7"
+      />
+      <path
+        d="m9 9-4.25-4.25M15 9l4.25-4.25M9 15l-4.25 4.25M15 15l4.25 4.25"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.7"
+      />
+    </SvgIcon>
+  );
+}
+
+export function ContractIcon({ className }: { className?: string }) {
+  return (
+    <SvgIcon className={className}>
+      <path
+        d="M7.75 7.75h8.5v8.5h-8.5Z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.7"
+      />
+      <path
+        d="M9.25 4.75h-1.5A3 3 0 0 0 4.75 7.75v1.5M14.75 4.75h1.5a3 3 0 0 1 3 3v1.5M9.25 19.25h-1.5a3 3 0 0 1-3-3v-1.5M14.75 19.25h1.5a3 3 0 0 0 3-3v-1.5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.7"
+      />
+    </SvgIcon>
+  );
+}
+
 export function PencilIcon({ className }: { className?: string }) {
   return (
     <SvgIcon className={className}>

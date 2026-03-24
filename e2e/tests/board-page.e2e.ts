@@ -276,9 +276,14 @@ test("board page edits cards and filters tasks", async ({ page }) => {
   await expect(page).toHaveURL(/\/projects\/project-1\/BILL-1$/);
 
   const editDialog = page.getByRole("dialog", { name: /Edit BILL-/ });
+  const dialogPanel = page.locator(".dialog-panel--task-editor");
   const sourceTab = editDialog.getByRole("tab", { name: "Markdown source" });
   const previewTab = editDialog.getByRole("tab", { name: "Rendered preview" });
   const viewTabs = editDialog.locator(".task-editor__view-tabs");
+  const bodyField = editDialog.locator(".field--editor");
+  const bodyFieldLabel = editDialog.locator(".task-editor__field-label");
+  const bodyTextarea = editDialog.getByLabel("Task body");
+  const fullscreenButton = editDialog.getByRole("button", { name: "Enter full screen" });
   const tagInput = editDialog.getByLabel("Task tags");
   const taskEditorFooter = editDialog.locator(".task-editor__footer");
   const createdMeta = editDialog.locator(".task-editor__meta-item", { hasText: "Created" });
@@ -289,19 +294,36 @@ test("board page edits cards and filters tasks", async ({ page }) => {
   await expect(editDialog.getByRole("heading", { name: "Edit BILL-1" })).toBeVisible();
   await expect(taskEditorFooter.locator(".task-editor__meta")).toBeVisible();
   await expect(taskEditorFooter.locator(".dialog-actions")).toBeVisible();
+  await expect(taskEditorFooter.getByRole("button", { name: "Cancel" })).toBeVisible();
+  await expect(taskEditorFooter.getByRole("button", { name: "Save card" })).toBeVisible();
   await expect(viewTabs).toHaveCSS("border-top-width", "0px");
   await expect(sourceTab).toHaveCSS("border-top-width", "0px");
   await expect(previewTab).toHaveCSS("border-top-width", "0px");
+  await expect(bodyField).toHaveCSS("row-gap", "8px");
   await expect(createdMeta).toContainText("Created");
   await expect(createdMeta.locator("time")).toHaveAttribute("datetime", "2026-03-18T07:00:00.000Z");
   await expect(createdMeta.locator("time")).toHaveText("2026-03-18T07:00:00.000Z");
   await expect(updatedMeta).toContainText("Updated");
   await expect(updatedMeta.locator("time")).toHaveAttribute("datetime", "2026-03-18T07:10:00.000Z");
   await expect(updatedMeta.locator("time")).toHaveText("2026-03-18T07:10:00.000Z");
+  const bodyLabelBox = await bodyFieldLabel.boundingBox();
+  const viewTabsBox = await viewTabs.boundingBox();
   const footerMetaBox = await taskEditorFooter.locator(".task-editor__meta").boundingBox();
+  const initialDialogBox = await dialogPanel.boundingBox();
+  const initialTextareaBox = await bodyTextarea.boundingBox();
   const saveButtonBox = await saveButton.boundingBox();
+  expect(bodyLabelBox).not.toBeNull();
+  expect(viewTabsBox).not.toBeNull();
   expect(footerMetaBox).not.toBeNull();
+  expect(initialDialogBox).not.toBeNull();
+  expect(initialTextareaBox).not.toBeNull();
   expect(saveButtonBox).not.toBeNull();
+  expect(
+    Math.abs(
+      ((bodyLabelBox?.y ?? 0) + (bodyLabelBox?.height ?? 0) / 2) -
+        ((viewTabsBox?.y ?? 0) + (viewTabsBox?.height ?? 0) / 2)
+    )
+  ).toBeLessThanOrEqual(2);
   expect(Math.abs((footerMetaBox?.y ?? 0) - (saveButtonBox?.y ?? 0))).toBeLessThanOrEqual(32);
   expect((footerMetaBox?.x ?? 0)).toBeLessThan((saveButtonBox?.x ?? 0));
   await expect(editDialog.getByLabel("Title")).toHaveValue("Review retry settings");
@@ -312,6 +334,14 @@ test("board page edits cards and filters tasks", async ({ page }) => {
   await expect(editDialog.getByLabel("Task body")).toHaveValue("Callback logs mention **retry** scope.");
   await expect(sourceTab).toHaveAttribute("aria-selected", "true");
   await expect(previewTab).toHaveAttribute("aria-selected", "false");
+  await fullscreenButton.click();
+  await expect(editDialog.getByRole("button", { name: "Exit full screen" })).toBeVisible();
+  const fullscreenDialogBox = await dialogPanel.boundingBox();
+  const fullscreenTextareaBox = await bodyTextarea.boundingBox();
+  expect(fullscreenDialogBox).not.toBeNull();
+  expect(fullscreenTextareaBox).not.toBeNull();
+  expect((fullscreenDialogBox?.width ?? 0)).toBeGreaterThan((initialDialogBox?.width ?? 0) + 120);
+  expect((fullscreenTextareaBox?.width ?? 0)).toBeGreaterThan((initialTextareaBox?.width ?? 0) + 120);
 
   await editDialog.getByRole("button", { name: "Edit color for tag backend" }).click();
   await editDialog.getByRole("button", { name: "Set backend color to Amber" }).click();
