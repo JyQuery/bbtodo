@@ -2542,6 +2542,16 @@ textarea:focus {
   flex: 0 0 auto;
 }
 
+.task-editor__close-button {
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--ink-soft) 72%, var(--surface-strong)) 0%,
+    color-mix(in srgb, var(--ink) 64%, var(--ink-soft)) 100%
+  );
+  color: var(--surface-strong);
+  box-shadow: 0 16px 34px -18px color-mix(in srgb, var(--ink) 46%, transparent);
+}
+
 .task-editor__save-status {
   display: inline-flex;
   align-items: center;

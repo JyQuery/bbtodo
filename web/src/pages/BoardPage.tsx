@@ -1950,7 +1950,7 @@ function TaskEditorDialog({
                 <span>{saveStatusMessage}</span>
               </div>
               <div className="dialog-actions task-editor__actions">
-                <button className="text-button" onClick={() => requestCloseRef.current()} type="button">
+                <button className="primary-button task-editor__close-button" onClick={() => requestCloseRef.current()} type="button">
                   Close
                 </button>
                 <button className="primary-button" disabled={saveStatus === "saving" || title.trim().length === 0} type="submit">

@@ -289,6 +289,7 @@ test("board page autosaves cards and filters tasks", async ({ page }) => {
   const footerActions = editDialog.locator(".task-editor__footer-actions");
   const createdMeta = editDialog.locator(".task-editor__meta-item", { hasText: "Created" });
   const updatedMeta = editDialog.locator(".task-editor__meta-item", { hasText: "Updated" });
+  const closeButton = editDialog.getByRole("button", { exact: true, name: "Close" });
   const saveButton = editDialog.getByRole("button", { name: "Save card" });
   const saveStatus = editDialog.getByTestId("task-editor-save-status");
 
@@ -298,7 +299,7 @@ test("board page autosaves cards and filters tasks", async ({ page }) => {
   await expect(footerActions).toBeVisible();
   await expect(footerActions.locator(".dialog-actions")).toBeVisible();
   await expect(footerActions.getByTestId("task-editor-save-status")).toBeVisible();
-  await expect(taskEditorFooter.getByRole("button", { name: "Close" })).toBeVisible();
+  await expect(closeButton).toBeVisible();
   await expect(taskEditorFooter.getByRole("button", { name: "Save card" })).toBeVisible();
   await expect(saveStatus).toHaveText("All changes saved");
   await expect(viewTabs).toHaveCSS("border-top-width", "0px");
@@ -316,6 +317,12 @@ test("board page autosaves cards and filters tasks", async ({ page }) => {
   const footerMetaBox = await taskEditorFooter.locator(".task-editor__meta").boundingBox();
   const initialDialogBox = await dialogPanel.boundingBox();
   const initialTextareaBox = await bodyTextarea.boundingBox();
+  const closeButtonBackground = await closeButton.evaluate(
+    (element) => window.getComputedStyle(element).backgroundImage
+  );
+  const saveButtonBackground = await saveButton.evaluate(
+    (element) => window.getComputedStyle(element).backgroundImage
+  );
   const saveStatusBox = await saveStatus.boundingBox();
   const saveButtonBox = await saveButton.boundingBox();
   expect(bodyLabelBox).not.toBeNull();
@@ -323,6 +330,9 @@ test("board page autosaves cards and filters tasks", async ({ page }) => {
   expect(footerMetaBox).not.toBeNull();
   expect(initialDialogBox).not.toBeNull();
   expect(initialTextareaBox).not.toBeNull();
+  expect(closeButtonBackground).toContain("linear-gradient");
+  expect(saveButtonBackground).toContain("linear-gradient");
+  expect(closeButtonBackground).not.toBe(saveButtonBackground);
   expect(saveStatusBox).not.toBeNull();
   expect(saveButtonBox).not.toBeNull();
   expect(
@@ -378,7 +388,7 @@ test("board page autosaves cards and filters tasks", async ({ page }) => {
   await expect(saveStatus).toHaveText("Unsaved changes");
   await expect(saveButton).toHaveText("Save card");
   await expect(saveStatus).toHaveText("All changes saved");
-  await taskEditorFooter.getByRole("button", { name: "Close" }).click();
+  await closeButton.click();
 
   await expect(editDialog).toHaveCount(0);
   await expect(firstTaskCard.locator(".task-card__title")).toHaveText("[BILL-1] Review retry scope");
