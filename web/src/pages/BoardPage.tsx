@@ -37,7 +37,16 @@ import {
   parseSingleTagInput,
   parseTagInput
 } from "../app/utils";
-import { BoardSkeleton, CloseIcon, EmptyState, ErrorBanner, PlusIcon, TrashIcon } from "../components/ui";
+import {
+  BoardSkeleton,
+  CloseIcon,
+  ContractIcon,
+  EmptyState,
+  ErrorBanner,
+  ExpandIcon,
+  PlusIcon,
+  TrashIcon
+} from "../components/ui";
 import { useDismissableLayer } from "../hooks/useDismissableLayer";
 
 type TaskEditorView = "preview" | "source";
@@ -1327,6 +1336,7 @@ function TaskEditorDialog({
   const [tagInputColor, setTagInputColor] = useState<TaskTagColor>(() => getRandomTaskTagColor());
   const [tagInputValue, setTagInputValue] = useState("");
   const [activeView, setActiveView] = useState<TaskEditorView>("source");
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
     setTitle(task.title);
@@ -1335,6 +1345,7 @@ function TaskEditorDialog({
     setTagInputColor(getRandomTaskTagColor());
     setTagInputValue("");
     setActiveView("source");
+    setIsFullscreen(false);
   }, [task.body, task.id, task.tags, task.title]);
 
   return (
@@ -1342,20 +1353,31 @@ function TaskEditorDialog({
       <section
         aria-labelledby="edit-task-title"
         aria-modal="true"
-        className="dialog-panel dialog-panel--task-editor"
+        className={`dialog-panel dialog-panel--task-editor${isFullscreen ? " is-fullscreen" : ""}`}
         onClick={(event) => event.stopPropagation()}
         role="dialog"
       >
         <div className="dialog-header">
           <h2 id="edit-task-title">{`Edit ${task.ticketId}`}</h2>
-          <button
-            aria-label="Close edit task dialog"
-            className="icon-button"
-            onClick={onClose}
-            type="button"
-          >
-            <CloseIcon />
-          </button>
+          <div className="dialog-header__actions">
+            <button
+              aria-label={isFullscreen ? "Exit full screen" : "Enter full screen"}
+              aria-pressed={isFullscreen}
+              className="icon-button"
+              onClick={() => setIsFullscreen((current) => !current)}
+              type="button"
+            >
+              {isFullscreen ? <ContractIcon /> : <ExpandIcon />}
+            </button>
+            <button
+              aria-label="Close edit task dialog"
+              className="icon-button"
+              onClick={onClose}
+              type="button"
+            >
+              <CloseIcon />
+            </button>
+          </div>
         </div>
         <form
           className="dialog-form task-editor"
@@ -1394,7 +1416,7 @@ function TaskEditorDialog({
             />
             <div className="field field--editor">
               <div className="task-editor__field-header">
-                <span className="field__label">Body</span>
+                <span className="field__label task-editor__field-label">Body</span>
                 <div
                   aria-label="Markdown editor view"
                   className="task-editor__view-tabs"
@@ -1443,27 +1465,27 @@ function TaskEditorDialog({
                   />
                 </div>
               ) : null}
-            </div>
-            {activeView === "preview" ? (
-              <div
-                aria-labelledby="task-markdown-preview-tab"
-                className="task-editor__preview-inline"
-                id="task-markdown-preview-panel"
-                role="tabpanel"
-              >
+              {activeView === "preview" ? (
                 <div
-                  className="markdown-preview"
-                  data-testid="task-markdown-preview"
-                  id="task-markdown-preview"
+                  aria-labelledby="task-markdown-preview-tab"
+                  className="task-editor__preview-inline"
+                  id="task-markdown-preview-panel"
+                  role="tabpanel"
                 >
-                  {body.trim() ? (
-                    <ReactMarkdown>{body}</ReactMarkdown>
-                  ) : (
-                    <p className="markdown-preview__empty">Nothing to preview yet.</p>
-                  )}
+                  <div
+                    className="markdown-preview"
+                    data-testid="task-markdown-preview"
+                    id="task-markdown-preview"
+                  >
+                    {body.trim() ? (
+                      <ReactMarkdown>{body}</ReactMarkdown>
+                    ) : (
+                      <p className="markdown-preview__empty">Nothing to preview yet.</p>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
           </div>
           {error ? <ErrorBanner error={error} /> : null}
           <div className="task-editor__footer">
