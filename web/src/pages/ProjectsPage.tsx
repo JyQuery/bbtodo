@@ -15,7 +15,7 @@ function ProjectCard({
 }: {
   index: number;
   onDelete: (projectId: string) => void;
-  onOpen: (projectId: string) => void;
+  onOpen: (projectTicketPrefix: string) => void;
   project: Project;
 }) {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
@@ -27,11 +27,11 @@ function ProjectCard({
     <article
       className={`project-card${isConfirmOpen ? " is-confirm-open" : ""}`}
       data-testid={`project-card-${project.id}`}
-      onClick={() => onOpen(project.id)}
+      onClick={() => onOpen(project.ticketPrefix)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          onOpen(project.id);
+          onOpen(project.ticketPrefix);
         }
       }}
       role="link"
@@ -142,7 +142,7 @@ export function ProjectsPage() {
               key={project.id}
               index={index}
               onDelete={(projectId) => deleteProjectMutation.mutate(projectId)}
-              onOpen={(projectId) => navigate(`/projects/${projectId}`)}
+              onOpen={(projectTicketPrefix) => navigate(`/projects/${projectTicketPrefix}`)}
               project={project}
             />
           ))}
