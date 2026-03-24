@@ -23,8 +23,10 @@ import {
   buildAuthenticatedIdentity,
   buildAuthorizationRedirectUrl,
   createOidcNonce,
+  type JwksSecretResolver,
   type JwtVerifier,
-  type OidcOAuth2Namespace
+  type OidcOAuth2Namespace,
+  verifyOidcIdToken
 } from "../oidc.js";
 import {
   SESSION_COOKIE,
@@ -53,6 +55,7 @@ export function registerAuthController(
   const authApp = app as TypedApp & {
     [OIDC_OAUTH_NAMESPACE]: OidcOAuth2Namespace;
     jwt: JwtVerifier;
+    oidcJwksSecretResolver?: JwksSecretResolver;
   };
 
   function clearOidcCookies(reply: {
@@ -143,7 +146,11 @@ export function registerAuthController(
 
       let verifiedClaims: unknown;
       try {
-        verifiedClaims = await authApp.jwt.verify(idToken);
+        verifiedClaims = await verifyOidcIdToken({
+          idToken,
+          jwtVerifier: authApp.jwt,
+          jwksSecretResolver: authApp.oidcJwksSecretResolver
+        });
       } catch {
         clearOidcCookies(reply);
         return reply.status(400).send({
