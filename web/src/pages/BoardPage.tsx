@@ -41,10 +41,10 @@ import {
   BoardSkeleton,
   CloseIcon,
   ContractIcon,
-  EmptyState,
   ErrorBanner,
   ExpandIcon,
   PlusIcon,
+  ToastNotice,
   TrashIcon
 } from "../components/ui";
 import { useDismissableLayer } from "../hooks/useDismissableLayer";
@@ -1967,41 +1967,6 @@ function TaskEditorDialog({
   );
 }
 
-function ToastNotice({
-  message,
-  onDismiss,
-  title,
-  tone
-}: {
-  message: string;
-  onDismiss: () => void;
-  title: string;
-  tone: BoardToast["tone"];
-}) {
-  return (
-    <div aria-live="polite" className="toast-stack">
-      <div
-        className={`toast-notice toast-notice--${tone}`}
-        data-testid="board-toast"
-        role="status"
-      >
-        <div className="toast-notice__copy">
-          <strong>{title}</strong>
-          <p>{message}</p>
-        </div>
-        <button
-          aria-label="Dismiss notification"
-          className="icon-button toast-notice__dismiss"
-          onClick={onDismiss}
-          type="button"
-        >
-          <CloseIcon />
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export function BoardPage() {
   const { projectTicketPrefix, ticketId } = useParams();
   const navigate = useNavigate();
@@ -2946,6 +2911,22 @@ export function BoardPage() {
     return <Navigate replace to="/" />;
   }
 
+  if (isMissingBoard) {
+    return (
+      <Navigate
+        replace
+        state={{
+          toast: {
+            message: `Board ${projectTicketPrefix} does not exist.`,
+            title: "Board not found",
+            tone: "danger"
+          }
+        }}
+        to="/"
+      />
+    );
+  }
+
   return (
     <main className="page-shell page-shell--board">
       <title>{project ? `${project.name} | BBTodo` : "Board | BBTodo"}</title>
@@ -3043,15 +3024,7 @@ export function BoardPage() {
         <BoardSkeleton />
       ) : null}
 
-      {!isProjectLoading && isMissingBoard ? (
-        <EmptyState
-          copy="The project may have been removed. Head back to the project list and open another board."
-          eyebrow="Missing board"
-          title="That board is no longer available."
-        />
-      ) : null}
-
-      {!isMissingBoard && !isProjectLoading && !lanesQuery.isPending && !tasksQuery.isPending && project ? (
+      {!isProjectLoading && !lanesQuery.isPending && !tasksQuery.isPending && project ? (
         <DndContext
           collisionDetection={taskCollisionDetection}
           measuring={taskMeasuring}

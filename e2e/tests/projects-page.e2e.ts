@@ -127,3 +127,17 @@ test("project cards open on click and delete through a confirmation popover", as
   await expect(projectCard).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "No boards yet." })).toBeVisible();
 });
+
+test("missing board routes return to projects with a toast", async ({ page }) => {
+  await mockAuthenticated(page);
+
+  await page.goto("/projects/NOPE");
+
+  const toast = page.getByTestId("toast-notice");
+
+  await expect(page).toHaveURL("/");
+  await expect(page.locator(".subnav__current-value")).toHaveText("All projects");
+  await expect(toast).toBeVisible();
+  await expect(toast).toContainText("Board not found");
+  await expect(toast).toContainText("Board NOPE does not exist.");
+});

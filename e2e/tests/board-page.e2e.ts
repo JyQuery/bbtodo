@@ -532,7 +532,7 @@ test("board page shows a toast when a ticket deep link misses", async ({ page })
 
   await page.goto(`${billingBoardPath}/BILL-99?q=callback`);
 
-  const toast = page.getByTestId("board-toast");
+  const toast = page.getByTestId("toast-notice");
 
   await expect(page).toHaveURL(/\/projects\/BILL\?q=callback$/);
   await expect(toast).toBeVisible();
@@ -542,7 +542,7 @@ test("board page shows a toast when a ticket deep link misses", async ({ page })
   await expect(page.getByLabel("Search cards")).toHaveValue("callback");
 });
 
-test("board page shows the missing board state for an invalid ticket prefix route", async ({ page }) => {
+test("board page redirects home with a toast when the board route is invalid", async ({ page }) => {
   await mockAuthenticated(page, {
     projects: projectsForGrid,
     tasks
@@ -550,9 +550,13 @@ test("board page shows the missing board state for an invalid ticket prefix rout
 
   await page.goto("/projects/project-1");
 
-  await expect(page.getByRole("heading", { name: "That board is no longer available." })).toBeVisible();
-  await expect(page.getByText("The project may have been removed.")).toBeVisible();
-  await expect(page.getByTestId("board-grid")).toHaveCount(0);
+  const toast = page.getByTestId("toast-notice");
+
+  await expect(page).toHaveURL("/");
+  await expect(page.locator(".subnav__current-value")).toHaveText("All projects");
+  await expect(toast).toBeVisible();
+  await expect(toast).toContainText("Board not found");
+  await expect(toast).toContainText("Board project-1 does not exist.");
 });
 
 test("board page deletes tasks from the lane header trash target", async ({ page }) => {
@@ -609,7 +613,7 @@ test("board page deletes tasks from the lane header trash target", async ({ page
   await expect(firstTaskCard).toHaveCount(0);
   await expect(page.getByTestId("task-card-task-4")).toBeVisible();
   await expect(todoLaneTrashTarget).toBeHidden();
-  const taskDeleteToast = page.getByTestId("board-toast");
+  const taskDeleteToast = page.getByTestId("toast-notice");
   await expect(taskDeleteToast).toBeVisible();
   await expect(taskDeleteToast).toContainText("Task deleted");
   await expect(taskDeleteToast).toContainText("Review retry settings (BILL-1) was deleted.");
@@ -734,7 +738,7 @@ test("board page reorders tasks and manages lanes", async ({ page }) => {
   await expect(createdCardInDone).toBeVisible();
   await expect(createdCardInDone.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
   await expect(doneColumn.getByText("Review retry settings")).toBeVisible();
-  const laneDeleteToast = page.getByTestId("board-toast");
+  const laneDeleteToast = page.getByTestId("toast-notice");
   await expect(laneDeleteToast).toBeVisible();
   await expect(laneDeleteToast).toContainText("Lane deleted");
   await expect(laneDeleteToast).toContainText("Ready for QA was deleted. Cards moved to Done.");
