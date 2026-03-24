@@ -2,6 +2,11 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { buildApp } from "../app.js";
 import {
+  OIDC_NONCE_COOKIE,
+  OIDC_STATE_COOKIE,
+  OIDC_VERIFIER_COOKIE
+} from "../oidc.js";
+import {
   createMutableMockOidcProvider,
   loginWithOidc,
   testConfig
@@ -40,6 +45,43 @@ describe("auth routes", () => {
     expect(response.statusCode).toBe(401);
   });
 
+  it("starts login with plugin cookies and a nonce-bearing redirect", async () => {
+    const oidc = createMutableMockOidcProvider({
+      subject: "user-123",
+      email: "hello@example.com",
+      displayName: "bbtodo Tester"
+    });
+    const app = buildApp({
+      config: testConfig,
+      oidcProvider: oidc.provider,
+      sqlitePath: ":memory:"
+    });
+    createdApps.push(app);
+
+    const loginResponse = await app.inject({
+      method: "GET",
+      url: "/auth/login"
+    });
+
+    expect(loginResponse.statusCode).toBe(302);
+    expect(
+      loginResponse.cookies.map((cookie) => cookie.name).sort()
+    ).toEqual([
+      OIDC_NONCE_COOKIE,
+      OIDC_STATE_COOKIE,
+      OIDC_VERIFIER_COOKIE
+    ]);
+
+    const redirectUrl = new URL(loginResponse.headers.location ?? "");
+    expect(redirectUrl.origin + redirectUrl.pathname).toBe(
+      "https://issuer.example.com/authorize"
+    );
+    expect(redirectUrl.searchParams.get("state")).toBe("test-state");
+    expect(redirectUrl.searchParams.get("nonce")).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    );
+  });
+
   it("creates a session after the OIDC callback and clears it on logout", async () => {
     const oidc = createMutableMockOidcProvider({
       subject: "user-123",
@@ -55,10 +97,6 @@ describe("auth routes", () => {
 
     const session = await loginWithOidc(app);
 
-    expect(session.loginResponse.statusCode).toBe(302);
-    expect(session.loginResponse.headers.location).toBe(
-      "https://issuer.example.com/authorize?state=test-state"
-    );
     expect(session.callbackResponse.statusCode).toBe(302);
     expect(session.callbackResponse.headers.location).toBe("/");
 
@@ -96,6 +134,176 @@ describe("auth routes", () => {
     });
 
     expect(afterLogoutResponse.statusCode).toBe(401);
+    expect(afterLogoutResponse.cookies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "bbtodo_session",
+          value: ""
+        })
+      ])
+    );
+  });
+
+  it("rejects callbacks when the provider omits id_token", async () => {
+    const oidc = createMutableMockOidcProvider({
+      subject: "missing-token",
+      email: "missing@example.com",
+      displayName: "Missing Token"
+    });
+    oidc.setMissingIdToken(true);
+
+    const app = buildApp({
+      config: testConfig,
+      oidcProvider: oidc.provider,
+      sqlitePath: ":memory:"
+    });
+    createdApps.push(app);
+
+    const loginResponse = await app.inject({
+      method: "GET",
+      url: "/auth/login"
+    });
+    const redirectUrl = new URL(loginResponse.headers.location ?? "");
+    (app as ReturnType<typeof buildApp> & {
+      oidcTestControls?: { onAuthorizationNonce?: (nonce: string) => void };
+    }).oidcTestControls?.onAuthorizationNonce?.(
+      redirectUrl.searchParams.get("nonce") ?? ""
+    );
+
+    const callbackResponse = await app.inject({
+      method: "GET",
+      url: `/auth/callback?code=auth-code&state=test-state&iss=${encodeURIComponent(testConfig.oidcIssuer)}`,
+      cookies: Object.fromEntries(
+        loginResponse.cookies.map((cookie) => [cookie.name, cookie.value])
+      )
+    });
+
+    expect(callbackResponse.statusCode).toBe(400);
+    expect(callbackResponse.json()).toEqual({
+      message: "OIDC provider did not return an id_token."
+    });
+  });
+
+  it("rejects callbacks when JWT verification fails", async () => {
+    const oidc = createMutableMockOidcProvider({
+      subject: "bad-signature",
+      email: "bad@example.com",
+      displayName: "Bad Signature"
+    });
+    oidc.setVerifierError(new Error("signature verification failed"));
+
+    const app = buildApp({
+      config: testConfig,
+      oidcProvider: oidc.provider,
+      sqlitePath: ":memory:"
+    });
+    createdApps.push(app);
+
+    const loginResponse = await app.inject({
+      method: "GET",
+      url: "/auth/login"
+    });
+    const redirectUrl = new URL(loginResponse.headers.location ?? "");
+    (app as ReturnType<typeof buildApp> & {
+      oidcTestControls?: { onAuthorizationNonce?: (nonce: string) => void };
+    }).oidcTestControls?.onAuthorizationNonce?.(
+      redirectUrl.searchParams.get("nonce") ?? ""
+    );
+
+    const callbackResponse = await app.inject({
+      method: "GET",
+      url: `/auth/callback?code=auth-code&state=test-state&iss=${encodeURIComponent(testConfig.oidcIssuer)}`,
+      cookies: Object.fromEntries(
+        loginResponse.cookies.map((cookie) => [cookie.name, cookie.value])
+      )
+    });
+
+    expect(callbackResponse.statusCode).toBe(400);
+    expect(callbackResponse.json()).toEqual({
+      message: "OIDC id_token validation failed."
+    });
+  });
+
+  it("rejects callbacks with invalid issuer, audience, subject, or nonce claims", async () => {
+    const testCases: Array<{
+      expectedMessage: string;
+      overrides: Record<string, unknown>;
+    }> = [
+      {
+        expectedMessage:
+          "OIDC id_token issuer did not match the configured issuer.",
+        overrides: {
+          iss: "https://wrong-issuer.example.com/"
+        }
+      },
+      {
+        expectedMessage:
+          "OIDC id_token audience did not include the configured client.",
+        overrides: {
+          aud: "another-client"
+        }
+      },
+      {
+        expectedMessage:
+          "OIDC id_token azp claim did not match the configured client.",
+        overrides: {
+          aud: [testConfig.oidcClientId, "other-audience"],
+          azp: "different-client"
+        }
+      },
+      {
+        expectedMessage: "OIDC id_token nonce did not match the login request.",
+        overrides: {
+          nonce: "unexpected-nonce"
+        }
+      },
+      {
+        expectedMessage: "Invalid input: expected string, received undefined",
+        overrides: {
+          sub: undefined
+        }
+      }
+    ];
+
+    for (const testCase of testCases) {
+      const oidc = createMutableMockOidcProvider({
+        subject: "claims-user",
+        email: "claims@example.com",
+        displayName: "Claims User"
+      });
+      oidc.setClaimsOverrides(testCase.overrides);
+
+      const app = buildApp({
+        config: testConfig,
+        oidcProvider: oidc.provider,
+        sqlitePath: ":memory:"
+      });
+      createdApps.push(app);
+
+      const loginResponse = await app.inject({
+        method: "GET",
+        url: "/auth/login"
+      });
+      const redirectUrl = new URL(loginResponse.headers.location ?? "");
+      (app as ReturnType<typeof buildApp> & {
+        oidcTestControls?: { onAuthorizationNonce?: (nonce: string) => void };
+      }).oidcTestControls?.onAuthorizationNonce?.(
+        redirectUrl.searchParams.get("nonce") ?? ""
+      );
+
+      const callbackResponse = await app.inject({
+        method: "GET",
+        url: `/auth/callback?code=auth-code&state=test-state&iss=${encodeURIComponent(testConfig.oidcIssuer)}`,
+        cookies: Object.fromEntries(
+          loginResponse.cookies.map((cookie) => [cookie.name, cookie.value])
+        )
+      });
+
+      expect(callbackResponse.statusCode).toBe(400);
+      expect(callbackResponse.json()).toEqual({
+        message: testCase.expectedMessage
+      });
+    }
   });
 
   it("stores the selected theme as a user preference", async () => {

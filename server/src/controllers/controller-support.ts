@@ -1,6 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { z } from "zod";
 
 import {
   getUserForApiToken,
@@ -9,7 +8,6 @@ import {
   type UserRecord
 } from "../db.js";
 
-export const AUTH_FLOW_COOKIE = "bbtodo_oidc";
 export const SESSION_COOKIE = "bbtodo_session";
 export const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -28,10 +26,9 @@ export type TypedApp = ReturnType<typeof withZodTypeProvider>;
 type AuthRequest = Pick<FastifyRequest, "headers" | "cookies">;
 type AuthReply = Pick<FastifyReply, "clearCookie" | "status" | "send">;
 
-export function parseSignedCookie<TSchema extends z.ZodTypeAny>(
+export function getSignedCookieValue(
   app: FastifyInstance,
-  rawCookieValue: string | undefined,
-  schema: TSchema
+  rawCookieValue: string | undefined
 ) {
   if (!rawCookieValue) {
     return null;
@@ -42,16 +39,7 @@ export function parseSignedCookie<TSchema extends z.ZodTypeAny>(
     return null;
   }
 
-  return schema.parse(JSON.parse(unsigned.value));
-}
-
-export function getSignedSessionId(app: FastifyInstance, rawCookieValue: string | undefined) {
-  if (!rawCookieValue) {
-    return null;
-  }
-
-  const unsigned = app.unsignCookie(rawCookieValue);
-  return unsigned.valid ? unsigned.value : null;
+  return unsigned.value;
 }
 
 export interface ApiAuthContext {
@@ -87,7 +75,7 @@ export function getApiAuthContext(
     } satisfies ApiAuthContext;
   }
 
-  const sessionId = getSignedSessionId(app, request.cookies[SESSION_COOKIE]);
+  const sessionId = getSignedCookieValue(app, request.cookies[SESSION_COOKIE]);
   if (!sessionId) {
     reply.status(401).send({
       message: "Authentication required."

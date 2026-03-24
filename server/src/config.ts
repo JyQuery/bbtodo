@@ -5,7 +5,7 @@ const configSchema = z.object({
   sessionSecret: z.string().min(32),
   oidcIssuer: z.url(),
   oidcClientId: z.string().min(1),
-  oidcClientSecret: z.string().min(1).optional(),
+  oidcClientSecret: z.string().min(1),
   oidcScopes: z.string().min(1).default("openid profile email")
 });
 
