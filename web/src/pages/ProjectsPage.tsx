@@ -200,10 +200,7 @@ export function ProjectsPage() {
         />
       ) : null}
 
-      {!projectsQuery.isPending &&
-      projects.length > 0 &&
-      visibleProjects.length === 0 &&
-      !exactTicketIdSearch ? (
+      {!projectsQuery.isPending && projects.length > 0 && visibleProjects.length === 0 ? (
         <EmptyState
           copy="Try a different board name or ticket prefix."
           eyebrow="No matches"

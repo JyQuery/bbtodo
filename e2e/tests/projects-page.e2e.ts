@@ -201,6 +201,24 @@ test("projects search opens an exact ticket id", async ({ page }) => {
   await expect(page.getByTestId("task-card-task-1")).toHaveCount(0);
 });
 
+test("projects search shows no matches for an exact ticket id with no matching board prefix", async ({
+  page
+}) => {
+  await mockAuthenticated(page, {
+    projects: projectsForGrid,
+    tasks
+  });
+
+  await page.goto("/");
+
+  await page.getByLabel("Search boards").fill("MISS-1");
+
+  await expect(page).toHaveURL(/\/\?q=MISS-1$/);
+  await expect(page.getByRole("heading", { name: 'No boards match "MISS-1".' })).toBeVisible();
+  await expect(page.getByText("Try a different board name or ticket prefix.")).toBeVisible();
+  await expect(page.getByTestId("project-card-project-1")).toHaveCount(0);
+});
+
 test("missing board routes return to projects with a toast", async ({ page }) => {
   await mockAuthenticated(page);
 
