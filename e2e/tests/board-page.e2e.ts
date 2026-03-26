@@ -601,7 +601,7 @@ test("board page moves a card to another project from the editor and keeps the d
 
   await movePopover.getByRole("button", { name: "Move card" }).click();
 
-  await expect(page).toHaveURL(/\/projects\/ROAD\/ROAD-1\?q=ROAD-1$/);
+  await expect(page).toHaveURL(/\/projects\/ROAD\/ROAD-1$/);
   const moveToast = page.getByTestId("toast-notice");
   await expect(moveToast).toBeVisible();
   await expect(moveToast).toContainText("Card moved");
@@ -610,10 +610,10 @@ test("board page moves a card to another project from the editor and keeps the d
   await expect(editDialog).toBeVisible();
   await expect(editDialog.getByRole("heading", { name: "Edit ROAD-1" })).toBeVisible();
   await expect(editDialog.getByLabel("Title")).toHaveValue("Tighten callback logging");
-  await expect(page.getByLabel("Search cards")).toHaveValue("ROAD-1");
+  await expect(page.getByLabel("Search cards")).toHaveValue("");
 
   await editDialog.getByLabel("Close edit task dialog").click();
-  await expect(page).toHaveURL(/\/projects\/ROAD\?q=ROAD-1$/);
+  await expect(page).toHaveURL(/\/projects\/ROAD$/);
   await expect(page.getByTestId("task-card-task-2").locator(".task-card__title")).toHaveText(
     "[ROAD-1] Tighten callback logging"
   );
@@ -683,7 +683,7 @@ test("board page previews Todo fallback when moving a card to a project without 
 
   await movePopover.getByRole("button", { name: "Move card" }).click();
 
-  await expect(page).toHaveURL(/\/projects\/ROAD\/ROAD-1\?q=ROAD-1$/);
+  await expect(page).toHaveURL(/\/projects\/ROAD\/ROAD-1$/);
   const moveToast = page.getByTestId("toast-notice");
   await expect(moveToast).toBeVisible();
   await expect(moveToast).toContainText("Card moved");

@@ -2568,12 +2568,12 @@ export function BoardPage() {
       pendingMoveNavigationTicketIdRef.current = updatedTask.ticketId;
       await primeBoardData(destinationProjectTicketPrefix, updatedTask.projectId);
 
-      const nextParams = new URLSearchParams();
-      nextParams.set("q", updatedTask.ticketId);
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("q");
       navigate(
         {
           pathname: buildBoardPath(destinationProjectTicketPrefix, updatedTask.ticketId),
-          search: `?${nextParams.toString()}`
+          search: toSearchString(nextParams)
         },
         { replace: true }
       );
