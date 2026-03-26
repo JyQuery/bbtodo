@@ -12,6 +12,7 @@ test("login page shows sign-in and docs actions", async ({ page }) => {
   await expect(page).toHaveTitle("BBTodo");
   await expect(page.getByRole("heading", { name: "BBTodo" })).toBeVisible();
   await expect(heroBrandPill).toHaveText("BB");
+  await expect(heroBrandPill).toHaveCSS("font-family", /"IBM Plex Mono"|IBM Plex Mono/);
   await expect
     .poll(() => heroBrandPill.evaluate((element) => getComputedStyle(element).backgroundImage))
     .toContain("rgb(84, 143, 208)");

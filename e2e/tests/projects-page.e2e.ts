@@ -43,6 +43,7 @@ test("projects page lists boards, filters project cards, and opens them from the
 
   await expect(page).toHaveTitle("Projects | BBTodo");
   await expect(brandPill).toHaveText("BB");
+  await expect(brandPill).toHaveCSS("font-family", /"IBM Plex Mono"|IBM Plex Mono/);
   await expect
     .poll(() => brandPill.evaluate((element) => getComputedStyle(element).backgroundImage))
     .toContain("rgb(84, 143, 208)");
