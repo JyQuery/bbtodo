@@ -1,4 +1,12 @@
-import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import {
+  startTransition,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent
+} from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Link,
@@ -200,12 +208,20 @@ export function AppShell({ user }: { user: User }) {
       }
     });
 
-    const exactTicketId = parseExactTicketId(trimmedValue);
-    if (!exactTicketId) {
-      navSearchLookupRequestRef.current += 1;
+    navSearchLookupRequestRef.current += 1;
+  }
+
+  function handleNavSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter") {
       return;
     }
 
+    const exactTicketId = parseExactTicketId(event.currentTarget.value);
+    if (!exactTicketId) {
+      return;
+    }
+
+    event.preventDefault();
     void lookupTicketAndNavigate(exactTicketId);
   }
 
@@ -363,6 +379,7 @@ export function AppShell({ user }: { user: User }) {
                     <input
                       aria-label={navSearchLabel}
                       onChange={(event) => updateNavSearch(event.target.value)}
+                      onKeyDown={handleNavSearchKeyDown}
                       placeholder={navSearchLabel}
                       type="search"
                       value={navSearch}

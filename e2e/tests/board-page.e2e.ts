@@ -547,9 +547,15 @@ test("board page search opens an exact ticket id across boards", async ({ page }
 
   await page.goto(billingBoardPath);
 
-  await page.getByLabel("Search cards").fill("road-1");
+  const searchInput = page.getByLabel("Search cards");
+  await searchInput.fill("road-1");
 
   const editDialog = page.getByRole("dialog", { name: "Edit ROAD-1" });
+
+  await expect(page).toHaveURL(/\/projects\/BILL\?q=road-1$/);
+  await expect(editDialog).toHaveCount(0);
+
+  await searchInput.press("Enter");
 
   await expect(page).toHaveURL(/\/projects\/ROAD\/ROAD-1\?q=ROAD-1$/);
   await expect(editDialog).toBeVisible();
