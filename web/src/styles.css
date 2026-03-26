@@ -2627,6 +2627,67 @@ textarea:focus {
   gap: 0.45rem;
 }
 
+.task-editor__move-project-list {
+  display: grid;
+  gap: 0.4rem;
+  max-height: 15rem;
+  overflow: auto;
+}
+
+.task-editor__move-project-option {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.9rem;
+  padding: 0.72rem 0.88rem;
+  border: 1px solid color-mix(in srgb, var(--line) 92%, transparent);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--surface-muted) 92%, var(--surface-strong));
+  color: var(--ink);
+  text-align: left;
+  box-shadow: inset 0 1px 0 var(--surface-highlight);
+}
+
+.task-editor__move-project-option:hover {
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 32%, var(--surface-strong));
+}
+
+.task-editor__move-project-option.is-active {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 52%, var(--surface-strong));
+  box-shadow:
+    inset 0 1px 0 var(--surface-highlight-strong),
+    0 14px 26px -24px color-mix(in srgb, var(--accent-strong) 36%, transparent);
+}
+
+.task-editor__move-project-copy {
+  display: grid;
+  gap: 0.14rem;
+  min-width: 0;
+}
+
+.task-editor__move-project-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.94rem;
+  font-weight: 700;
+}
+
+.task-editor__move-project-meta {
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.task-editor__move-project-empty {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
 .task-editor__move-popover .task-delete-popover__actions {
   justify-content: flex-end;
   flex-wrap: wrap;

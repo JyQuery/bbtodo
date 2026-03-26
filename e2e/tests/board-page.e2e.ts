@@ -561,14 +561,14 @@ test("board page moves a card to another project from the editor and keeps the d
   expect(movePopoverFont).toContain("Open Sans");
   const movePopoverBounds = await movePopover.evaluate((element) => {
     const popoverRect = element.getBoundingClientRect();
-    const select = element.querySelector('select[aria-label="Destination board"]');
+    const input = element.querySelector('input[aria-label="Destination board"]');
     const actions = element.querySelector(".task-delete-popover__actions");
 
-    if (!(select instanceof HTMLElement) || !(actions instanceof HTMLElement)) {
+    if (!(input instanceof HTMLElement) || !(actions instanceof HTMLElement)) {
       throw new Error("Expected move popover content to exist");
     }
 
-    const selectRect = select.getBoundingClientRect();
+    const inputRect = input.getBoundingClientRect();
     const actionsRect = actions.getBoundingClientRect();
 
     return {
@@ -580,22 +580,23 @@ test("board page moves a card to another project from the editor and keeps the d
       popoverLeft: popoverRect.left,
       popoverRight: popoverRect.right,
       popoverTop: popoverRect.top,
-      selectBottom: selectRect.bottom,
-      selectLeft: selectRect.left,
-      selectRight: selectRect.right,
-      selectTop: selectRect.top
+      inputBottom: inputRect.bottom,
+      inputLeft: inputRect.left,
+      inputRight: inputRect.right,
+      inputTop: inputRect.top
     };
   });
-  expect(movePopoverBounds.selectTop).toBeGreaterThanOrEqual(movePopoverBounds.popoverTop - 1);
-  expect(movePopoverBounds.selectLeft).toBeGreaterThanOrEqual(movePopoverBounds.popoverLeft - 1);
-  expect(movePopoverBounds.selectRight).toBeLessThanOrEqual(movePopoverBounds.popoverRight + 1);
-  expect(movePopoverBounds.selectBottom).toBeLessThanOrEqual(movePopoverBounds.popoverBottom + 1);
+  expect(movePopoverBounds.inputTop).toBeGreaterThanOrEqual(movePopoverBounds.popoverTop - 1);
+  expect(movePopoverBounds.inputLeft).toBeGreaterThanOrEqual(movePopoverBounds.popoverLeft - 1);
+  expect(movePopoverBounds.inputRight).toBeLessThanOrEqual(movePopoverBounds.popoverRight + 1);
+  expect(movePopoverBounds.inputBottom).toBeLessThanOrEqual(movePopoverBounds.popoverBottom + 1);
   expect(movePopoverBounds.actionsTop).toBeGreaterThanOrEqual(movePopoverBounds.popoverTop - 1);
   expect(movePopoverBounds.actionsLeft).toBeGreaterThanOrEqual(movePopoverBounds.popoverLeft - 1);
   expect(movePopoverBounds.actionsRight).toBeLessThanOrEqual(movePopoverBounds.popoverRight + 1);
   expect(movePopoverBounds.actionsBottom).toBeLessThanOrEqual(movePopoverBounds.popoverBottom + 1);
 
-  await movePopover.getByLabel("Destination board").selectOption("project-2");
+  await movePopover.getByLabel("Destination board").fill("road");
+  await movePopover.getByTestId("move-card-project-option-project-2").click();
   await expect(movePopover.getByTestId("move-card-lane-preview")).toHaveText("In Progress");
   await expect(movePopover.getByTestId("move-card-summary")).toHaveCount(0);
 
@@ -677,7 +678,8 @@ test("board page previews Todo fallback when moving a card to a project without 
 
   const movePopover = editDialog.getByTestId("move-card-popover");
   await expect(movePopover).toBeVisible();
-  await movePopover.getByLabel("Destination board").selectOption("project-2");
+  await movePopover.getByLabel("Destination board").fill("road");
+  await movePopover.getByTestId("move-card-project-option-project-2").click();
   await expect(movePopover.getByTestId("move-card-lane-preview")).toHaveText("Todo");
   await expect(movePopover.getByTestId("move-card-summary")).toHaveCount(0);
 
@@ -695,6 +697,87 @@ test("board page previews Todo fallback when moving a card to a project without 
   await expect(page.getByTestId(`board-column-${laneId("project-2", "todo")}`)).toContainText(
     "[ROAD-1] Review retry settings"
   );
+});
+
+test("board page move picker shows five boards by default and searches the rest", async ({
+  page
+}) => {
+  const projectsWithManyBoards = structuredClone(projectsForGrid);
+  for (const [index, projectConfig] of [
+    { id: "project-3", name: "Backlog prep", ticketPrefix: "BPRE" },
+    { id: "project-4", name: "Client ops", ticketPrefix: "COPS" },
+    { id: "project-5", name: "Design system", ticketPrefix: "DSGN" },
+    { id: "project-6", name: "Fulfillment sweep", ticketPrefix: "FLFM" },
+    { id: "project-7", name: "Growth experiments", ticketPrefix: "GWTH" },
+    { id: "project-8", name: "Incident coordination", ticketPrefix: "IDCT" }
+  ].entries()) {
+    projectsWithManyBoards.push({
+      createdAt: `2026-03-17T1${index}:00:00.000Z`,
+      id: projectConfig.id,
+      laneSummaries: [
+        {
+          createdAt: "2026-03-17T09:00:00.000Z",
+          id: laneId(projectConfig.id, "todo"),
+          name: "Todo",
+          position: 0,
+          projectId: projectConfig.id,
+          taskCount: 0,
+          updatedAt: "2026-03-18T07:30:00.000Z"
+        },
+        {
+          createdAt: "2026-03-17T09:00:00.000Z",
+          id: laneId(projectConfig.id, "in_progress"),
+          name: "In Progress",
+          position: 1,
+          projectId: projectConfig.id,
+          taskCount: 0,
+          updatedAt: "2026-03-18T07:30:00.000Z"
+        },
+        {
+          createdAt: "2026-03-17T09:00:00.000Z",
+          id: laneId(projectConfig.id, "in_review"),
+          name: "In review",
+          position: 2,
+          projectId: projectConfig.id,
+          taskCount: 0,
+          updatedAt: "2026-03-18T07:30:00.000Z"
+        },
+        {
+          createdAt: "2026-03-17T09:00:00.000Z",
+          id: laneId(projectConfig.id, "done"),
+          name: "Done",
+          position: 3,
+          projectId: projectConfig.id,
+          taskCount: 0,
+          updatedAt: "2026-03-18T07:30:00.000Z"
+        }
+      ],
+      name: projectConfig.name,
+      ticketPrefix: projectConfig.ticketPrefix,
+      updatedAt: "2026-03-18T08:10:00.000Z"
+    });
+  }
+
+  await mockAuthenticated(page, {
+    projects: projectsWithManyBoards,
+    tasks
+  });
+
+  await page.goto(`${billingBoardPath}/BILL-2`);
+
+  const editDialog = page.getByRole("dialog");
+  await expect(editDialog).toBeVisible();
+  await editDialog.getByRole("button", { exact: true, name: "Move" }).click();
+
+  const movePopover = editDialog.getByTestId("move-card-popover");
+  await expect(movePopover).toBeVisible();
+  await expect(movePopover.getByTestId("move-card-project-list").locator("button")).toHaveCount(5);
+  await expect(movePopover.getByTestId("move-card-project-option-project-8")).toHaveCount(0);
+
+  await movePopover.getByLabel("Destination board").fill("incident");
+  await expect(movePopover.getByTestId("move-card-project-list").locator("button")).toHaveCount(1);
+  await movePopover.getByTestId("move-card-project-option-project-8").click();
+  await expect(movePopover.getByTestId("move-card-lane-preview")).toHaveText("In Progress");
 });
 
 test("board page search opens an exact ticket id across boards", async ({ page }) => {

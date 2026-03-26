@@ -1498,6 +1498,7 @@ function TaskEditorDialog({
   const [activeView, setActiveView] = useState<TaskEditorView>("source");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMovePopoverOpen, setIsMovePopoverOpen] = useState(false);
+  const [moveProjectQuery, setMoveProjectQuery] = useState("");
   const [persistedTask, setPersistedTask] = useState(task);
   const [destinationProjectId, setDestinationProjectId] = useState("");
   const [moveError, setMoveError] = useState<unknown>(null);
@@ -1512,7 +1513,7 @@ function TaskEditorDialog({
   const requestCloseRef = useRef<() => void>(() => {});
   const saveLoopPromiseRef = useRef<Promise<void> | null>(null);
   const movePopoverRef = useRef<HTMLDivElement | null>(null);
-  const moveProjectSelectRef = useRef<HTMLSelectElement | null>(null);
+  const moveProjectInputRef = useRef<HTMLInputElement | null>(null);
 
   const bodyRef = useRef(body);
   const persistedTaskRef = useRef(persistedTask);
@@ -1536,12 +1537,35 @@ function TaskEditorDialog({
       : null;
   const destinationLaneName = destinationLanePreview?.lane.name ?? "Select a board first";
   const noDestinationCopy = "Create another board to move this card.";
+  const normalizedMoveProjectQuery = moveProjectQuery.trim().toLowerCase();
+  const filteredMoveProjects = useMemo(
+    () =>
+      availableProjects.filter((project) => {
+        if (!normalizedMoveProjectQuery) {
+          return true;
+        }
+
+        return `${project.name} ${project.ticketPrefix}`
+          .toLowerCase()
+          .includes(normalizedMoveProjectQuery);
+      }),
+    [availableProjects, normalizedMoveProjectQuery]
+  );
+  const visibleMoveProjects = normalizedMoveProjectQuery
+    ? filteredMoveProjects
+    : filteredMoveProjects.slice(0, 5);
 
   useDismissableLayer(isMovePopoverOpen, movePopoverRef, () => {
     if (!isMovePending) {
       setIsMovePopoverOpen(false);
     }
   });
+
+  function selectDestinationProject(project: Project) {
+    setMoveError(null);
+    setDestinationProjectId(project.id);
+    setMoveProjectQuery(project.name);
+  }
 
   function clearAutosaveTimer() {
     if (autosaveTimeoutRef.current !== null) {
@@ -1756,6 +1780,7 @@ function TaskEditorDialog({
       persistedTaskRef.current = movedTask;
       setPersistedTask(movedTask);
       setIsMovePopoverOpen(false);
+      setMoveProjectQuery("");
       setDestinationProjectId("");
       setSaveError(null);
       setSaveStatus("saved");
@@ -1843,7 +1868,7 @@ function TaskEditorDialog({
       return;
     }
 
-    moveProjectSelectRef.current?.focus();
+    moveProjectInputRef.current?.focus();
   }, [isMovePopoverOpen]);
 
   useEffect(() => {
@@ -2093,7 +2118,14 @@ function TaskEditorDialog({
                     disabled={isMovePending}
                     onClick={() => {
                       setMoveError(null);
-                      setIsMovePopoverOpen((current) => !current);
+                      setIsMovePopoverOpen((current) => {
+                        const nextIsOpen = !current;
+                        if (nextIsOpen) {
+                          setMoveProjectQuery(destinationProject?.name ?? "");
+                        }
+
+                        return nextIsOpen;
+                      });
                     }}
                     type="button"
                   >
@@ -2126,24 +2158,69 @@ function TaskEditorDialog({
                         <>
                           <label className="field">
                             <span className="field__label">Destination board</span>
-                            <select
+                            <input
+                              aria-controls="move-card-project-results"
+                              aria-expanded="true"
                               aria-label="Destination board"
                               disabled={isMovePending}
                               onChange={(event) => {
+                                const nextValue = event.target.value;
                                 setMoveError(null);
-                                setDestinationProjectId(event.target.value);
+                                setMoveProjectQuery(nextValue);
+
+                                if (
+                                  !destinationProject ||
+                                  nextValue.trim().toLowerCase() !== destinationProject.name.trim().toLowerCase()
+                                ) {
+                                  setDestinationProjectId("");
+                                }
                               }}
-                              ref={moveProjectSelectRef}
-                              value={destinationProjectId}
-                            >
-                              <option value="">Select a board</option>
-                              {availableProjects.map((project) => (
-                                <option key={project.id} value={project.id}>
-                                  {project.name}
-                                </option>
-                              ))}
-                            </select>
+                              onKeyDown={(event) => {
+                                if (event.key !== "Enter") {
+                                  return;
+                                }
+
+                                event.preventDefault();
+                                if (visibleMoveProjects.length === 1) {
+                                  selectDestinationProject(visibleMoveProjects[0]);
+                                }
+                              }}
+                              placeholder={
+                                availableProjects.length > 5
+                                  ? "Search boards"
+                                  : "Type to search boards"
+                              }
+                              ref={moveProjectInputRef}
+                              type="search"
+                              value={moveProjectQuery}
+                            />
                           </label>
+                          <div
+                            className="task-editor__move-project-list"
+                            data-testid="move-card-project-list"
+                            id="move-card-project-results"
+                          >
+                            {visibleMoveProjects.length > 0 ? (
+                              visibleMoveProjects.map((project) => (
+                                <button
+                                  aria-pressed={project.id === destinationProjectId}
+                                  className={`task-editor__move-project-option${project.id === destinationProjectId ? " is-active" : ""}`}
+                                  data-testid={`move-card-project-option-${project.id}`}
+                                  disabled={isMovePending}
+                                  key={project.id}
+                                  onClick={() => selectDestinationProject(project)}
+                                  type="button"
+                                >
+                                  <span className="task-editor__move-project-copy">
+                                    <span className="task-editor__move-project-name">{project.name}</span>
+                                    <span className="task-editor__move-project-meta">{project.ticketPrefix}</span>
+                                  </span>
+                                </button>
+                              ))
+                            ) : (
+                              <p className="task-editor__move-project-empty">No boards match that search.</p>
+                            )}
+                          </div>
                           <div aria-live="polite" className="task-editor__move-preview">
                             <span className="task-editor__move-preview-label">Lane</span>
                             <span
