@@ -1501,6 +1501,7 @@ function TaskEditorDialog({
   const [tagInputValue, setTagInputValue] = useState("");
   const [activeView, setActiveView] = useState<TaskEditorView>("source");
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isMovePopoverOpen, setIsMovePopoverOpen] = useState(false);
   const [persistedTask, setPersistedTask] = useState(task);
   const [destinationProjectId, setDestinationProjectId] = useState("");
   const [moveError, setMoveError] = useState<unknown>(null);
@@ -1514,6 +1515,8 @@ function TaskEditorDialog({
   const persistedDraftRef = useRef(toTaskEditorDraft(task));
   const requestCloseRef = useRef<() => void>(() => {});
   const saveLoopPromiseRef = useRef<Promise<void> | null>(null);
+  const movePopoverRef = useRef<HTMLDivElement | null>(null);
+  const moveProjectSelectRef = useRef<HTMLSelectElement | null>(null);
 
   const bodyRef = useRef(body);
   const persistedTaskRef = useRef(persistedTask);
@@ -1550,6 +1553,12 @@ function TaskEditorDialog({
       ? "This subtask becomes top-level."
       : null;
   const moveSummaryCopy = hierarchyCopy ? `${lanePreviewCopy} ${hierarchyCopy}` : lanePreviewCopy;
+
+  useDismissableLayer(isMovePopoverOpen, movePopoverRef, () => {
+    if (!isMovePending) {
+      setIsMovePopoverOpen(false);
+    }
+  });
 
   function clearAutosaveTimer() {
     if (autosaveTimeoutRef.current !== null) {
@@ -1763,6 +1772,7 @@ function TaskEditorDialog({
       persistedDraftRef.current = toTaskEditorDraft(movedTask);
       persistedTaskRef.current = movedTask;
       setPersistedTask(movedTask);
+      setIsMovePopoverOpen(false);
       setDestinationProjectId("");
       setSaveError(null);
       setSaveStatus("saved");
@@ -1830,6 +1840,10 @@ function TaskEditorDialog({
         return;
       }
 
+      if (isMovePopoverOpen) {
+        return;
+      }
+
       event.preventDefault();
       requestCloseRef.current();
     }
@@ -1839,7 +1853,15 @@ function TaskEditorDialog({
     return () => {
       document.removeEventListener("keydown", handleEscape);
     };
-  }, []);
+  }, [isMovePopoverOpen]);
+
+  useEffect(() => {
+    if (!isMovePopoverOpen) {
+      return;
+    }
+
+    moveProjectSelectRef.current?.focus();
+  }, [isMovePopoverOpen]);
 
   useEffect(() => {
     if (saveStatus === "saving" || saveError !== null) {
@@ -2048,67 +2070,6 @@ function TaskEditorDialog({
                 </div>
               ) : null}
             </div>
-            <section aria-labelledby="move-card-title" className="task-editor__move-card">
-              <div className="task-editor__move-heading">
-                <span className="field__label" id="move-card-title">
-                  Move card
-                </span>
-                <div aria-live="polite" className="task-editor__move-preview">
-                  <span className="task-editor__move-preview-label">Lane</span>
-                  <span
-                    aria-label="Destination lane"
-                    className="task-editor__move-preview-value"
-                    data-testid="move-card-lane-preview"
-                  >
-                    {destinationLaneName}
-                  </span>
-                </div>
-              </div>
-              <div className="task-editor__move-controls">
-                <label className="field task-editor__move-field">
-                  <span className="field__label">Destination board</span>
-                  <select
-                    aria-label="Destination board"
-                    disabled={availableProjects.length === 0 || isMovePending}
-                    onChange={(event) => {
-                      setMoveError(null);
-                      setDestinationProjectId(event.target.value);
-                    }}
-                    value={destinationProjectId}
-                  >
-                    <option value="">Select a board</option>
-                    {availableProjects.map((project) => (
-                      <option key={project.id} value={project.id}>
-                        {project.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button
-                  className="ghost-button task-editor__move-button"
-                  disabled={
-                    destinationProject === null ||
-                    destinationLanePreview === null ||
-                    isMovePending ||
-                    saveStatus === "saving"
-                  }
-                  onClick={() => {
-                    void handleMove();
-                  }}
-                  type="button"
-                >
-                  {isMovePending ? "Moving card..." : "Move card"}
-                </button>
-              </div>
-              <p
-                aria-live="polite"
-                className="field__hint task-editor__move-summary"
-                data-testid="move-card-summary"
-              >
-                {moveSummaryCopy}
-              </p>
-              {moveError ? <ErrorBanner error={moveError} /> : null}
-            </section>
           </div>
           {saveError ? <ErrorBanner error={saveError} /> : null}
           <div className="task-editor__footer">
@@ -2139,6 +2100,114 @@ function TaskEditorDialog({
                 <span>{saveStatusMessage}</span>
               </div>
               <div className="dialog-actions task-editor__actions">
+                <div className="task-editor__move-shell" ref={movePopoverRef}>
+                  <button
+                    aria-controls={isMovePopoverOpen ? "task-editor-move-popover" : undefined}
+                    aria-expanded={isMovePopoverOpen}
+                    aria-haspopup="dialog"
+                    className="ghost-button"
+                    disabled={isMovePending}
+                    onClick={() => {
+                      setMoveError(null);
+                      setIsMovePopoverOpen((current) => !current);
+                    }}
+                    type="button"
+                  >
+                    Move
+                  </button>
+                  {isMovePopoverOpen ? (
+                    <div
+                      aria-label="Move card"
+                      className="task-delete-popover task-editor__move-popover"
+                      data-testid="move-card-popover"
+                      id="task-editor-move-popover"
+                      onClick={(event) => event.stopPropagation()}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      role="group"
+                    >
+                      {availableProjects.length === 0 ? (
+                        <>
+                          <p className="field__hint task-editor__move-summary">{moveSummaryCopy}</p>
+                          <div className="task-delete-popover__actions">
+                            <button
+                              className="text-button"
+                              onClick={() => setIsMovePopoverOpen(false)}
+                              type="button"
+                            >
+                              Close
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <label className="field">
+                            <span className="field__label">Destination board</span>
+                            <select
+                              aria-label="Destination board"
+                              disabled={isMovePending}
+                              onChange={(event) => {
+                                setMoveError(null);
+                                setDestinationProjectId(event.target.value);
+                              }}
+                              ref={moveProjectSelectRef}
+                              value={destinationProjectId}
+                            >
+                              <option value="">Select a board</option>
+                              {availableProjects.map((project) => (
+                                <option key={project.id} value={project.id}>
+                                  {project.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <div aria-live="polite" className="task-editor__move-preview">
+                            <span className="task-editor__move-preview-label">Lane</span>
+                            <span
+                              aria-label="Destination lane"
+                              className="task-editor__move-preview-value"
+                              data-testid="move-card-lane-preview"
+                            >
+                              {destinationLaneName}
+                            </span>
+                          </div>
+                          <p
+                            aria-live="polite"
+                            className="field__hint task-editor__move-summary"
+                            data-testid="move-card-summary"
+                          >
+                            {moveSummaryCopy}
+                          </p>
+                          {moveError ? <ErrorBanner error={moveError} /> : null}
+                          <div className="task-delete-popover__actions">
+                            <button
+                              className="text-button"
+                              disabled={isMovePending}
+                              onClick={() => setIsMovePopoverOpen(false)}
+                              type="button"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              className="ghost-button"
+                              disabled={
+                                destinationProject === null ||
+                                destinationLanePreview === null ||
+                                isMovePending ||
+                                saveStatus === "saving"
+                              }
+                              onClick={() => {
+                                void handleMove();
+                              }}
+                              type="button"
+                            >
+                              {isMovePending ? "Moving card..." : "Move card"}
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
                 <button className="primary-button task-editor__close-button" onClick={() => requestCloseRef.current()} type="button">
                   Close
                 </button>

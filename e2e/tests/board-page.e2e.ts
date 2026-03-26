@@ -537,15 +537,22 @@ test("board page moves a card to another project from the editor and keeps the d
   const editDialog = page.getByRole("dialog");
 
   await expect(editDialog).toBeVisible();
-  await expect(editDialog.getByTestId("move-card-lane-preview")).toHaveText("Select a board first");
+  await expect(editDialog.getByLabel("Destination board")).toHaveCount(0);
+  await expect(editDialog.getByRole("button", { name: "Move card" })).toHaveCount(0);
 
-  await editDialog.getByLabel("Destination board").selectOption("project-2");
-  await expect(editDialog.getByTestId("move-card-lane-preview")).toHaveText("In Progress");
-  await expect(editDialog.getByTestId("move-card-summary")).toHaveText(
+  await editDialog.getByRole("button", { exact: true, name: "Move" }).click();
+
+  const movePopover = editDialog.getByTestId("move-card-popover");
+  await expect(movePopover).toBeVisible();
+  await expect(movePopover.getByTestId("move-card-lane-preview")).toHaveText("Select a board first");
+
+  await movePopover.getByLabel("Destination board").selectOption("project-2");
+  await expect(movePopover.getByTestId("move-card-lane-preview")).toHaveText("In Progress");
+  await expect(movePopover.getByTestId("move-card-summary")).toHaveText(
     "Moves to Roadmap review in In Progress."
   );
 
-  await editDialog.getByRole("button", { name: "Move card" }).click();
+  await movePopover.getByRole("button", { name: "Move card" }).click();
 
   await expect(page).toHaveURL(/\/projects\/ROAD\/ROAD-1\?q=ROAD-1$/);
   await expect(editDialog).toBeVisible();
@@ -612,13 +619,19 @@ test("board page previews Todo fallback when moving a card to a project without 
   const editDialog = page.getByRole("dialog");
 
   await expect(editDialog).toBeVisible();
-  await editDialog.getByLabel("Destination board").selectOption("project-2");
-  await expect(editDialog.getByTestId("move-card-lane-preview")).toHaveText("Todo");
+  await expect(editDialog.getByLabel("Destination board")).toHaveCount(0);
+
+  await editDialog.getByRole("button", { exact: true, name: "Move" }).click();
+
+  const movePopover = editDialog.getByTestId("move-card-popover");
+  await expect(movePopover).toBeVisible();
+  await movePopover.getByLabel("Destination board").selectOption("project-2");
+  await expect(movePopover.getByTestId("move-card-lane-preview")).toHaveText("Todo");
   await expect(
-    editDialog.getByTestId("move-card-summary")
+    movePopover.getByTestId("move-card-summary")
   ).toHaveText("Moves to Roadmap review in Todo because Ready for QA is unavailable there.");
 
-  await editDialog.getByRole("button", { name: "Move card" }).click();
+  await movePopover.getByRole("button", { name: "Move card" }).click();
 
   await expect(page).toHaveURL(/\/projects\/ROAD\/ROAD-1\?q=ROAD-1$/);
   await editDialog.getByLabel("Close edit task dialog").click();
