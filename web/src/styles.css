@@ -2564,14 +2564,16 @@ textarea:focus {
 }
 
 .task-editor__move-preview {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 0.45rem;
+  justify-content: flex-start;
+  gap: 0.55rem;
   width: 100%;
   min-width: 0;
   flex-wrap: wrap;
-  min-height: 2rem;
-  padding: 0.5rem 0.72rem;
+  row-gap: 0.3rem;
+  min-height: 3rem;
+  padding: 0.7rem 0.9rem;
   border: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
   border-radius: 1rem;
   background: var(--surface-muted);
@@ -2579,18 +2581,25 @@ textarea:focus {
 }
 
 .task-editor__move-preview-label {
+  display: inline-flex;
+  align-items: center;
   flex: 0 0 auto;
   font-size: 0.72rem;
   font-weight: 700;
+  line-height: 1;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .task-editor__move-preview-value {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
   min-width: 0;
   color: var(--ink);
   font-size: 0.84rem;
   font-weight: 700;
+  line-height: 1;
   overflow-wrap: anywhere;
 }
 

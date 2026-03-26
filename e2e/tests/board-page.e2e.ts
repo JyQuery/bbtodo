@@ -140,6 +140,31 @@ async function hoverDraggedTaskOver(page: Page, target: Locator, targetYRatio = 
   await page.waitForTimeout(140);
 }
 
+async function expectMoveLanePreviewCentered(preview: Locator) {
+  const metrics = await preview.evaluate((node) => {
+    const label = node.querySelector<HTMLElement>(".task-editor__move-preview-label");
+    const value = node.querySelector<HTMLElement>(".task-editor__move-preview-value");
+
+    if (!label || !value) {
+      throw new Error("Move lane preview label or value is missing.");
+    }
+
+    const previewRect = node.getBoundingClientRect();
+    const labelRect = label.getBoundingClientRect();
+    const valueRect = value.getBoundingClientRect();
+    const centerY = (rect: DOMRect) => rect.top + rect.height / 2;
+
+    return {
+      previewCenterY: centerY(previewRect),
+      labelCenterY: centerY(labelRect),
+      valueCenterY: centerY(valueRect)
+    };
+  });
+
+  expect(Math.abs(metrics.previewCenterY - metrics.labelCenterY)).toBeLessThanOrEqual(4);
+  expect(Math.abs(metrics.previewCenterY - metrics.valueCenterY)).toBeLessThanOrEqual(4);
+}
+
 async function hoverDraggedTaskDirectlyToTarget(page: Page, target: Locator, targetYRatio = 0.5) {
   await page.waitForTimeout(100);
   await expect(target).toBeAttached();
@@ -617,6 +642,7 @@ test("board page moves a card to another project from the editor and keeps the d
   await movePopover.getByTestId("move-card-project-option-project-2").click();
   await expect(movePopover.getByTestId("move-card-lane-preview")).toBeVisible();
   await expect(movePopover.getByTestId("move-card-lane-preview")).toHaveText("In Progress");
+  await expectMoveLanePreviewCentered(movePopover.locator(".task-editor__move-preview"));
   await expect(movePopover.getByTestId("move-card-summary")).toHaveCount(0);
 
   await movePopover.getByRole("button", { name: "Move card" }).click();
@@ -702,6 +728,7 @@ test("board page previews Todo fallback when moving a card to a project without 
   await movePopover.getByTestId("move-card-project-option-project-2").click();
   await expect(movePopover.getByTestId("move-card-lane-preview")).toBeVisible();
   await expect(movePopover.getByTestId("move-card-lane-preview")).toHaveText("Todo");
+  await expectMoveLanePreviewCentered(movePopover.locator(".task-editor__move-preview"));
   await expect(movePopover.getByTestId("move-card-summary")).toHaveCount(0);
 
   await movePopover.getByRole("button", { name: "Move card" }).click();
