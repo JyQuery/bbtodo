@@ -602,7 +602,11 @@ test("board page moves a card to another project from the editor and keeps the d
   await movePopover.getByRole("button", { name: "Move card" }).click();
 
   await expect(page).toHaveURL(/\/projects\/ROAD\/ROAD-1\?q=ROAD-1$/);
-  await expect(page.getByTestId("toast-notice")).toHaveCount(0);
+  const moveToast = page.getByTestId("toast-notice");
+  await expect(moveToast).toBeVisible();
+  await expect(moveToast).toContainText("Card moved");
+  await expect(moveToast).toContainText("BILL-2 has been moved to ROAD-1.");
+  await expect(moveToast).not.toContainText("Ticket not found");
   await expect(editDialog).toBeVisible();
   await expect(editDialog.getByRole("heading", { name: "Edit ROAD-1" })).toBeVisible();
   await expect(editDialog.getByLabel("Title")).toHaveValue("Tighten callback logging");
@@ -680,7 +684,14 @@ test("board page previews Todo fallback when moving a card to a project without 
   await movePopover.getByRole("button", { name: "Move card" }).click();
 
   await expect(page).toHaveURL(/\/projects\/ROAD\/ROAD-1\?q=ROAD-1$/);
-  await editDialog.getByLabel("Close edit task dialog").click();
+  const moveToast = page.getByTestId("toast-notice");
+  await expect(moveToast).toBeVisible();
+  await expect(moveToast).toContainText("Card moved");
+  await expect(moveToast).toContainText("BILL-1 has been moved to ROAD-1.");
+  await expect(moveToast).not.toContainText("Ticket not found");
+  const nextDialog = page.getByRole("dialog");
+  await expect(nextDialog).toBeVisible();
+  await nextDialog.getByLabel("Close edit task dialog").click();
   await expect(page.getByTestId(`board-column-${laneId("project-2", "todo")}`)).toContainText(
     "[ROAD-1] Review retry settings"
   );

@@ -2222,6 +2222,7 @@ export function BoardPage() {
   const [taskDragPreviewWidth, setTaskDragPreviewWidth] = useState<number | null>(null);
   const [toast, setToast] = useState<BoardToast | null>(null);
   const laneDragPreviewRef = useRef<HTMLElement | null>(null);
+  const pendingMoveNavigationTicketIdRef = useRef<string | null>(null);
   const pointerClientYRef = useRef<number | null>(null);
   const previewTasksRef = useRef<Task[] | null>(null);
   const taskDragPreviewUpdatedAtRef = useRef<string | null>(null);
@@ -2559,9 +2560,12 @@ export function BoardPage() {
       destinationProjectId: string;
       taskId: string;
     }) => api.updateTask(resolvedProjectId ?? "", taskId, { destinationProjectId }),
-    onSuccess: async (updatedTask) => {
+    onSuccess: async (updatedTask, { taskId }) => {
+      const previousTicketId =
+        tasks.find((task) => task.id === taskId)?.ticketId ?? ticketId ?? updatedTask.ticketId;
       const destinationProjectTicketPrefix = updatedTask.ticketId.split("-")[0] ?? "";
 
+      pendingMoveNavigationTicketIdRef.current = updatedTask.ticketId;
       await primeBoardData(destinationProjectTicketPrefix, updatedTask.projectId);
 
       const nextParams = new URLSearchParams();
@@ -2573,6 +2577,11 @@ export function BoardPage() {
         },
         { replace: true }
       );
+      setToast({
+        message: `${previousTicketId} has been moved to ${updatedTask.ticketId}.`,
+        title: "Card moved",
+        tone: "success"
+      });
 
       void invalidateBoardData({
         projectIds: [updatedTask.projectId],
@@ -3173,10 +3182,17 @@ export function BoardPage() {
   }, [toast]);
 
   useEffect(() => {
+    if (ticketId && pendingMoveNavigationTicketIdRef.current === ticketId) {
+      pendingMoveNavigationTicketIdRef.current = null;
+    }
+  }, [ticketId]);
+
+  useEffect(() => {
     if (
       !ticketId ||
       editingTask ||
       isProjectLoading ||
+      pendingMoveNavigationTicketIdRef.current !== null ||
       tasksQuery.isPending ||
       tasksQuery.error ||
       !resolvedProjectId ||
