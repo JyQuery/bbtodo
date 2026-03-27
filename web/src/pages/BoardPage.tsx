@@ -2486,7 +2486,9 @@ export function BoardPage() {
       ? committedTaskMap.get(draggedTaskId) ?? taskMap.get(draggedTaskId) ?? null
       : null;
   const draggedTaskSourceLocation =
-    draggedTaskId !== null ? findTaskLocation(tasks, draggedTaskId) : null;
+    draggedTaskId !== null
+      ? findTaskLocation(tasks, draggedTaskId) ?? findTaskLocation(activeTasks, draggedTaskId)
+      : null;
   const pendingDeleteTask =
     pendingDeleteTaskId
       ? committedTaskMap.get(pendingDeleteTaskId) ?? taskMap.get(pendingDeleteTaskId) ?? null
@@ -3021,14 +3023,15 @@ export function BoardPage() {
     }
 
     const activeTaskId = String(event.active.id);
-    const source = findTaskLocation(tasks, activeTaskId);
+    const sourceTasks = tasks.some((task) => task.id === activeTaskId) ? tasks : activeTasks;
+    const source = findTaskLocation(tasks, activeTaskId) ?? findTaskLocation(activeTasks, activeTaskId);
 
     flushSync(() => {
       setPendingDeleteTaskId(null);
       setPendingDeleteTaskLaneId(null);
       setDraggedTaskId(activeTaskId);
       setTaskDragPreviewWidth(event.active.rect.current.initial?.width ?? null);
-      setPreviewTasks(tasks);
+      setPreviewTasks(sourceTasks);
       setDropTarget(
         source
           ? {
@@ -3040,8 +3043,8 @@ export function BoardPage() {
           : null
       );
     });
-    previewTasksRef.current = tasks;
-    taskDragPreviewUpdatedAtRef.current = getTaskPreviewUpdatedAt(tasks);
+    previewTasksRef.current = sourceTasks;
+    taskDragPreviewUpdatedAtRef.current = getTaskPreviewUpdatedAt(sourceTasks);
   }
 
   function handleTaskDragOver(event: DragOverEvent) {
@@ -3054,7 +3057,10 @@ export function BoardPage() {
     const currentTopLevelTaskIdsByLane = buildTopLevelTaskIdsByLane(lanes, currentPreviewTasks);
     const currentSubtaskIdsByParent = buildSubtaskIdsByParent(currentPreviewTasks, lanesById);
     const activeTask = currentPreviewTasks.find((task) => task.id === activeTaskId);
-    const sourceTask = tasks.find((task) => task.id === activeTaskId) ?? null;
+    const sourceTask =
+      tasks.find((task) => task.id === activeTaskId) ??
+      currentPreviewTasks.find((task) => task.id === activeTaskId) ??
+      null;
     const sourceParentTaskId = sourceTask?.parentTaskId ?? null;
     const overData = event.over.data.current;
     if (!overData || !activeTask) {
@@ -3062,10 +3068,12 @@ export function BoardPage() {
     }
 
     function resetPreviewToSource() {
-      const source = findTaskLocation(tasks, activeTaskId);
-      previewTasksRef.current = tasks;
+      const source =
+        findTaskLocation(tasks, activeTaskId) ?? findTaskLocation(currentPreviewTasks, activeTaskId);
+      const sourceTasks = tasks.some((task) => task.id === activeTaskId) ? tasks : currentPreviewTasks;
+      previewTasksRef.current = sourceTasks;
       flushSync(() => {
-        setPreviewTasks(tasks);
+        setPreviewTasks(sourceTasks);
         setDropTarget(
           source
             ? {
@@ -3374,7 +3382,10 @@ export function BoardPage() {
     }
 
     const currentPreviewTasks = previewTasksRef.current ?? previewTasks ?? tasks;
-    const source = findTaskLocation(tasks, activeTaskId);
+    const source =
+      findTaskLocation(tasks, activeTaskId) ??
+      draggedTaskSourceLocation ??
+      findTaskLocation(currentPreviewTasks, activeTaskId);
     const destination = findTaskLocation(currentPreviewTasks, activeTaskId);
     if (!source || !destination) {
       clearTaskDrag();

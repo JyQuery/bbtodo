@@ -1625,6 +1625,50 @@ test("board page adds tasks from the lane header action and keeps the double-cli
   await expect(composer).toHaveCount(0);
 });
 
+test("board page keeps rendering after dragging a newly created note", async ({ page }) => {
+  const todoLaneId = laneId("project-1", "todo");
+  const pageErrors: string[] = [];
+
+  page.on("pageerror", (error) => {
+    pageErrors.push(error.message);
+  });
+
+  await mockAuthenticated(page, { projects: projectsForGrid });
+  await page.goto(billingBoardPath);
+
+  const addTaskButton = page.getByTestId(`add-task-button-${todoLaneId}`);
+  const composer = page.getByTestId(`lane-composer-${todoLaneId}`);
+  const createdTitles = ["Capture mobile tap flow", "Draft release note", "Verify refund copy"];
+
+  for (const title of createdTitles) {
+    await addTaskButton.click();
+    await expect(composer).toBeVisible();
+    await composer.getByLabel("New task title for Todo").fill(title);
+    await composer.getByLabel("New task title for Todo").press("Enter");
+    await expect(page.locator(".task-card__title", { hasText: title })).toBeVisible();
+  }
+
+  const todoColumn = page.getByTestId(`board-column-${todoLaneId}`);
+  const releaseNoteCard = todoColumn
+    .locator("[data-testid^='task-card-']")
+    .filter({ has: page.locator(".task-card__title", { hasText: "Draft release note" }) })
+    .first();
+  const refundCopyCard = todoColumn
+    .locator("[data-testid^='task-card-']")
+    .filter({ has: page.locator(".task-card__title", { hasText: "Verify refund copy" }) })
+    .first();
+
+  await beginTaskDrag(page, releaseNoteCard);
+  await hoverDraggedTaskOver(page, taskCardSurface(refundCopyCard), 0.7);
+  await finishTaskDrag(page);
+
+  await expect(page.getByTestId("board-grid")).toBeVisible();
+  for (const title of createdTitles) {
+    await expect(todoColumn.locator(".task-card__title", { hasText: title })).toBeVisible();
+  }
+  expect(pageErrors).toEqual([]);
+});
+
 test("board page creates lanes from the gap between columns", async ({ page }) => {
   await mockAuthenticated(page, { projects: projectsForGrid });
 
