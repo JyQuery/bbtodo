@@ -2296,6 +2296,8 @@ textarea:focus {
 
 .task-card.is-dragging {
   opacity: 0.46;
+  animation: none;
+  transition: none;
   box-shadow:
     inset 0 1px 0 var(--surface-highlight-strong),
     0 24px 44px -30px rgba(18, 34, 36, 0.4);
@@ -2303,16 +2305,26 @@ textarea:focus {
 
 .task-drag-overlay {
   pointer-events: none;
-  opacity: 0.98;
+  opacity: 1;
 }
 
 .task-card--drag-overlay {
   cursor: grabbing;
+  animation: none;
+  transition: none;
   transform: rotate(0.45deg) scale(1.015);
   box-shadow:
     inset 0 1px 0 var(--surface-highlight-strong),
     0 26px 50px -28px rgba(18, 34, 36, 0.44);
   will-change: transform;
+}
+
+.page-shell--board.is-task-dragging .task-card {
+  animation: none;
+}
+
+.page-shell--board.is-task-dragging .task-card:hover:not(.task-card--shift-down):not(.task-card--shift-up) {
+  transform: none;
 }
 
 .project-card.is-confirm-open {

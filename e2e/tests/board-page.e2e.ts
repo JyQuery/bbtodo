@@ -1023,6 +1023,23 @@ test("board page previews same-lane reordering with an overlay that follows the 
   await expect(copyCard).toHaveClass(/task-card--shift-up/);
   await expect(todoAfterCopySlot).toHaveClass(/is-active/);
   await expect(todoAfterCopySlot).toHaveClass(/is-drag-ready/);
+  await expect(page.locator(".page-shell--board")).toHaveClass(/is-task-dragging/);
+  const dragStyles = await page.evaluate(() => {
+    const sourceCard = document.querySelector<HTMLElement>("[data-testid='task-card-task-1']");
+    const overlayCard = document.querySelector<HTMLElement>(".task-drag-overlay .task-card");
+
+    if (!sourceCard || !overlayCard) {
+      throw new Error("Expected dragged source card and overlay card to be present.");
+    }
+
+    return {
+      overlayAnimationName: window.getComputedStyle(overlayCard).animationName,
+      sourceAnimationName: window.getComputedStyle(sourceCard).animationName
+    };
+  });
+
+  expect(dragStyles.sourceAnimationName).toBe("none");
+  expect(dragStyles.overlayAnimationName).toBe("none");
   await expectDragOverlayNearPoint(
     page,
     (copySurfaceBox?.x ?? 0) + (copySurfaceBox?.width ?? 0) / 2,

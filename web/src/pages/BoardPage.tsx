@@ -2117,6 +2117,7 @@ export function BoardPage() {
     draggedTaskId
       ? committedTaskMap.get(draggedTaskId) ?? null
       : null;
+  const isTaskDragging = draggedTaskId !== null;
   const pendingDeleteTask =
     pendingDeleteTaskId
       ? committedTaskMap.get(pendingDeleteTaskId) ?? null
@@ -2912,7 +2913,7 @@ export function BoardPage() {
   }
 
   return (
-    <main className="page-shell page-shell--board">
+    <main className={`page-shell page-shell--board${isTaskDragging ? " is-task-dragging" : ""}`}>
       <title>{project ? `${project.name} | BBTodo` : "Board | BBTodo"}</title>
       {toast ? (
         <ToastNotice
@@ -3078,7 +3079,7 @@ export function BoardPage() {
                       isDragDisabled={isLaneDragDisabled}
                       isProtected={lane.isProtectedLane}
                       isTaskDeletePending={deleteTaskMutation.isPending}
-                      isTaskDragging={draggedTaskId !== null}
+                                isTaskDragging={isTaskDragging}
                       isTaskTrashVisible={draggedTask?.laneId === lane.id}
                       lane={lane}
                       onAddTask={() => openComposer(lane.id)}
