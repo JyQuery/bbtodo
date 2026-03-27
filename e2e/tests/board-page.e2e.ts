@@ -89,8 +89,7 @@ async function beginTaskDrag(page: Page, source: Locator) {
 
 async function hoverDraggedTaskOver(page: Page, target: Locator, targetYRatio = 0.5) {
   await page.waitForTimeout(100);
-  await expect(target).toBeAttached();
-  const initialTargetBox = await target.boundingBox();
+  const initialTargetBox = (await target.count()) > 0 ? await target.boundingBox() : null;
 
   expect(initialTargetBox).not.toBeNull();
 
@@ -113,24 +112,22 @@ async function hoverDraggedTaskOver(page: Page, target: Locator, targetYRatio = 
 
   // Drag previews can shift the list while the pointer is in flight, so re-center on
   // the live target a few times before releasing.
+  let currentTargetBox = initialTargetBox;
   for (const steps of [20, 12, 8]) {
-    await expect(target).toBeAttached();
-    const targetBox = await target.boundingBox();
-
-    expect(targetBox).not.toBeNull();
+    const targetBox = (await target.count()) > 0 ? await target.boundingBox() : null;
+    if (targetBox !== null) {
+      currentTargetBox = targetBox;
+    }
 
     await page.mouse.move(
-      (targetBox?.x ?? 0) + (targetBox?.width ?? 0) / 2,
-      (targetBox?.y ?? 0) + (targetBox?.height ?? 0) * targetYRatio,
+      (currentTargetBox?.x ?? 0) + (currentTargetBox?.width ?? 0) / 2,
+      (currentTargetBox?.y ?? 0) + (currentTargetBox?.height ?? 0) * targetYRatio,
       { steps }
     );
     await page.waitForTimeout(80);
   }
 
-  await expect(target).toBeAttached();
-  const finalTargetBox = await target.boundingBox();
-
-  expect(finalTargetBox).not.toBeNull();
+  const finalTargetBox = (await target.count()) > 0 ? await target.boundingBox() : currentTargetBox;
 
   await page.mouse.move(
     (finalTargetBox?.x ?? 0) + (finalTargetBox?.width ?? 0) / 2,
@@ -187,23 +184,88 @@ async function hoverDraggedTaskToNestTarget(
   settleTarget?: Locator
 ) {
   const nestTarget = taskCardNestTarget(card);
+  const nestHoverYRatio = Math.min(targetYRatio, 0.22);
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    await hoverDraggedTaskOver(page, nestTarget, targetYRatio);
+  async function waitForNestPreview() {
+    for (let settleAttempt = 0; settleAttempt < 5; settleAttempt += 1) {
+      if (settleTarget && (await settleTarget.count()) > 0) {
+        await page.waitForTimeout(140);
+        return true;
+      }
 
-    if (settleTarget && (await settleTarget.count()) > 0) {
-      await hoverDraggedTaskDirectlyToTarget(page, settleTarget);
-      return;
+      const cardClass = await card.getAttribute("class");
+      if (cardClass?.includes("is-nest-target")) {
+        await page.waitForTimeout(140);
+        return true;
+      }
+
+      await page.waitForTimeout(90);
     }
 
-    const cardClass = await card.getAttribute("class");
-    if (cardClass?.includes("is-nest-target")) {
-      await hoverDraggedTaskDirectlyToTarget(page, nestTarget, targetYRatio);
+    return false;
+  }
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await page.waitForTimeout(100);
+    await expect(nestTarget).toBeAttached();
+    let nestTargetBox = await nestTarget.boundingBox();
+
+    expect(nestTargetBox).not.toBeNull();
+
+    const nestTargetCenterX = (nestTargetBox?.x ?? 0) + (nestTargetBox?.width ?? 0) / 2;
+    const viewportWidth =
+      page.viewportSize()?.width ??
+      Math.ceil((nestTargetBox?.x ?? 0) + (nestTargetBox?.width ?? 0) + 96);
+    const horizontalApproachOffset = Math.min(84, Math.max(((nestTargetBox?.width ?? 0) * 0.65), 48));
+    const approachFromRight = nestTargetCenterX + horizontalApproachOffset < viewportWidth - 16;
+    const approachX = approachFromRight
+      ? nestTargetCenterX + horizontalApproachOffset
+      : Math.max(nestTargetCenterX - horizontalApproachOffset, 16);
+    const approachY =
+      (nestTargetBox?.y ?? 0) + (nestTargetBox?.height ?? 0) * nestHoverYRatio;
+
+    await page.mouse.move(approachX, approachY, { steps: 16 });
+    await page.waitForTimeout(70);
+
+    for (const steps of [18, 12, 8]) {
+      if ((await nestTarget.count()) > 0) {
+        const liveNestTargetBox = await nestTarget.boundingBox();
+        if (liveNestTargetBox) {
+          nestTargetBox = liveNestTargetBox;
+        }
+      }
+
+      await page.mouse.move(
+        (nestTargetBox?.x ?? 0) + (nestTargetBox?.width ?? 0) / 2,
+        (nestTargetBox?.y ?? 0) + (nestTargetBox?.height ?? 0) * nestHoverYRatio,
+        { steps }
+      );
+      await page.waitForTimeout(90);
+
+      if (await waitForNestPreview()) {
+        return;
+      }
+
+    }
+
+    if (await waitForNestPreview()) {
       return;
     }
   }
 
-  await hoverDraggedTaskDirectlyToTarget(page, nestTarget, targetYRatio);
+  if ((await nestTarget.count()) > 0) {
+    await hoverDraggedTaskDirectlyToTarget(page, nestTarget, nestHoverYRatio);
+  }
+
+  for (let settleAttempt = 0; settleAttempt < 5; settleAttempt += 1) {
+    if (await waitForNestPreview()) {
+      return;
+    }
+
+    if ((await nestTarget.count()) > 0) {
+      await hoverDraggedTaskDirectlyToTarget(page, nestTarget, nestHoverYRatio);
+    }
+  }
 }
 
 async function dropDraggedTaskOnHeaderTrashZone(page: Page, header: Locator) {
@@ -239,7 +301,7 @@ function taskCardSurface(card: Locator) {
 }
 
 function taskCardNestTarget(card: Locator) {
-  return card.locator(":scope > .task-card__surface-wrap > .task-card__nest-target");
+  return card.locator(':scope > .task-card__surface-wrap [data-testid^="task-nest-hotspot-"]');
 }
 
 test("board page autosaves cards and filters tasks", async ({ page }) => {
@@ -1043,13 +1105,16 @@ test("board page reorders tasks and manages lanes", async ({ page }) => {
   const retryCardInQa = qaColumn.getByTestId("task-card-task-1");
   await expect(retryCardInQa).toBeVisible();
   await beginTaskDrag(page, retryCardInQa);
-  await hoverDraggedTaskToNestTarget(page, createdCard, 0.35, shipNoteSubtaskSlot);
+  await hoverDraggedTaskDirectlyToTarget(page, taskCardNestTarget(createdCard), 0.22);
+  await page.waitForTimeout(180);
   await finishTaskDrag(page);
   await expect(createdCard.locator(".task-card__subtasks").getByText("Review retry settings")).toBeVisible();
   await expect(todoColumn.getByText("Review retry settings")).toHaveCount(0);
 
   const retrySubtask = createdCard.locator(".task-card__subtasks").getByTestId("task-card-task-1");
-  await dragTaskToTarget(page, retrySubtask, taskCardSurface(releaseChecklistCard), 0.2);
+  await beginTaskDrag(page, retrySubtask);
+  await hoverDraggedTaskDirectlyToTarget(page, taskCardSurface(releaseChecklistCard), 0.2);
+  await finishTaskDrag(page);
   await expect(createdCard.locator(".task-card__subtasks").getByText("Review retry settings")).toHaveCount(0);
   await expect(qaColumn.getByText("Review retry settings")).toBeVisible();
 
@@ -1057,7 +1122,8 @@ test("board page reorders tasks and manages lanes", async ({ page }) => {
   const copyCardInQa = qaColumn.getByTestId("task-card-task-4");
   await expect(copyCardInQa).toBeVisible();
   await beginTaskDrag(page, copyCardInQa);
-  await hoverDraggedTaskToNestTarget(page, createdCard, 0.5, shipNoteSubtaskSlot);
+  await hoverDraggedTaskDirectlyToTarget(page, taskCardNestTarget(createdCard), 0.22);
+  await page.waitForTimeout(180);
   await finishTaskDrag(page);
   await expect(createdCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
   await expect(todoColumn.getByText("Queue copy pass")).toHaveCount(0);
@@ -1091,6 +1157,103 @@ test("board page reorders tasks and manages lanes", async ({ page }) => {
   await expect(laneDeleteToast).toBeVisible();
   await expect(laneDeleteToast).toContainText("Lane deleted");
   await expect(laneDeleteToast).toContainText("Ready for QA was deleted. Cards moved to Done.");
+});
+
+test("board page reorders top-level cards from card-surface overlap without nesting them", async ({ page }) => {
+  const tasksWithExtraTodoCard = structuredClone(tasks);
+
+  tasksWithExtraTodoCard.push({
+    body: "Hold a gap open while QA notes are staged.",
+    createdAt: "2026-03-18T07:25:00.000Z",
+    id: "task-5",
+    laneId: laneId("project-1", "todo"),
+    parentTaskId: null,
+    position: 2,
+    projectId: "project-1",
+    ticketId: "BILL-5",
+    tags: [],
+    title: "Stage QA notes",
+    updatedAt: "2026-03-18T07:28:00.000Z"
+  });
+
+  await mockAuthenticated(page, {
+    projects: projectsForGrid,
+    tasks: tasksWithExtraTodoCard
+  });
+
+  await page.goto(billingBoardPath);
+
+  const todoColumn = page.getByTestId(`board-column-${laneId("project-1", "todo")}`);
+  const retryCard = page.getByTestId("task-card-task-1");
+  const qaNotesCard = page.getByTestId("task-card-task-5");
+  const copyCard = page.getByTestId("task-card-task-4");
+
+  await beginTaskDrag(page, taskCardSurface(retryCard));
+  await hoverDraggedTaskOver(page, taskCardSurface(copyCard), 0.7);
+  await finishTaskDrag(page);
+
+  await expect(todoColumn.locator(".task-card__title")).toHaveText([
+    "[BILL-4] Queue copy pass",
+    "[BILL-1] Review retry settings",
+    "[BILL-5] Stage QA notes"
+  ]);
+  await expect(copyCard.locator(".task-card__subtasks").getByText("Review retry settings")).toHaveCount(0);
+});
+
+test("board page opens a visible reorder gap while a task is held between top-level cards", async ({ page }) => {
+  const tasksWithExtraTodoCard = structuredClone(tasks);
+
+  tasksWithExtraTodoCard.push({
+    body: "Hold a gap open while QA notes are staged.",
+    createdAt: "2026-03-18T07:25:00.000Z",
+    id: "task-5",
+    laneId: laneId("project-1", "todo"),
+    parentTaskId: null,
+    position: 2,
+    projectId: "project-1",
+    ticketId: "BILL-5",
+    tags: [],
+    title: "Stage QA notes",
+    updatedAt: "2026-03-18T07:28:00.000Z"
+  });
+
+  await mockAuthenticated(page, {
+    projects: projectsForGrid,
+    tasks: tasksWithExtraTodoCard
+  });
+
+  await page.goto(billingBoardPath);
+
+  const todoColumn = page.getByTestId(`board-column-${laneId("project-1", "todo")}`);
+  const retryCard = page.getByTestId("task-card-task-1");
+  const copyCard = page.getByTestId("task-card-task-4");
+  const qaNotesCard = page.getByTestId("task-card-task-5");
+  const copyBefore = await copyCard.boundingBox();
+  const qaNotesBefore = await qaNotesCard.boundingBox();
+
+  expect(copyBefore).not.toBeNull();
+  expect(qaNotesBefore).not.toBeNull();
+
+  await beginTaskDrag(page, taskCardSurface(retryCard));
+  await hoverDraggedTaskOver(page, taskCardSurface(copyCard), 0.7);
+
+  const copyAfter = await copyCard.boundingBox();
+  const qaNotesAfter = await qaNotesCard.boundingBox();
+
+  expect(copyAfter).not.toBeNull();
+  expect(qaNotesAfter).not.toBeNull();
+
+  const gapBefore = (qaNotesBefore?.y ?? 0) - ((copyBefore?.y ?? 0) + (copyBefore?.height ?? 0));
+  const gapAfter = (qaNotesAfter?.y ?? 0) - ((copyAfter?.y ?? 0) + (copyAfter?.height ?? 0));
+  expect(gapAfter).toBeGreaterThan(gapBefore + 24);
+
+  await finishTaskDrag(page);
+
+  await expect(todoColumn.locator(".task-card__title")).toHaveText([
+    "[BILL-4] Queue copy pass",
+    "[BILL-1] Review retry settings",
+    "[BILL-5] Stage QA notes"
+  ]);
 });
 
 test("board page previews a dragged task at the top of Done before drop", async ({ page }) => {
@@ -1269,13 +1432,15 @@ test("board page moves a dragged subtask under another empty parent", async ({ p
   const copyCardInQa = page.getByTestId("task-card-task-4");
   await expect(copyCardInQa).toBeVisible();
   await beginTaskDrag(page, copyCardInQa);
-  await hoverDraggedTaskToNestTarget(page, shipNoteCard, 0.35, shipNoteSubtaskSlot);
+  await hoverDraggedTaskDirectlyToTarget(page, taskCardNestTarget(shipNoteCard), 0.22);
+  await page.waitForTimeout(180);
   await finishTaskDrag(page);
   await expect(shipNoteCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
 
   const copySubtask = shipNoteCard.locator(".task-card__subtasks").getByTestId("task-card-task-4");
   await beginTaskDrag(page, copySubtask);
-  await hoverDraggedTaskToNestTarget(page, releaseChecklistCard, 0.5, releaseChecklistSubtaskSlot);
+  await hoverDraggedTaskDirectlyToTarget(page, taskCardNestTarget(releaseChecklistCard), 0.22);
+  await page.waitForTimeout(180);
   await finishTaskDrag(page);
 
   await expect(shipNoteCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toHaveCount(0);
@@ -1337,7 +1502,15 @@ test("board page keeps subtask drags inside the parent group", async ({ page }) 
   const shipNoteCard = page.getByTestId("task-card-task-5");
   const retrySubtask = shipNoteCard.locator(".task-card__subtasks").getByTestId("task-card-task-1");
   const copySubtask = shipNoteCard.locator(".task-card__subtasks").getByTestId("task-card-task-4");
-  await dragTaskToTarget(page, copySubtask, taskCardSurface(retrySubtask), 0.2);
+
+  await beginTaskDrag(page, copySubtask);
+  await hoverDraggedTaskOver(page, retrySubtask, 0.2);
+  const activeSubtaskGap = shipNoteCard.locator(".task-card__subtasks .task-drop-slot.is-preview-target");
+  await expect(activeSubtaskGap).toHaveCount(1);
+  const activeSubtaskGapBox = await activeSubtaskGap.boundingBox();
+  expect(activeSubtaskGapBox).not.toBeNull();
+  expect(activeSubtaskGapBox?.height ?? 0).toBeGreaterThan(32);
+  await finishTaskDrag(page);
 
   await expect(shipNoteCard.locator(".task-card__subtasks .task-card--subtask")).toHaveCount(2);
   await expect(shipNoteCard.locator(".task-card__subtasks").getByText("Review retry settings")).toBeVisible();
@@ -1414,7 +1587,7 @@ test("board page resets a subtask preview when dragged back over its current par
   await beginTaskDrag(page, copySubtask);
   await hoverDraggedTaskDirectlyToTarget(page, taskCardSurface(releaseChecklistCard), 0.5);
 
-  await hoverDraggedTaskOver(page, taskCardSurface(shipNoteCard), 0.3);
+  await hoverDraggedTaskDirectlyToTarget(page, taskCardSurface(shipNoteCard), 0.3);
   await expect(shipNoteCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
 
   await finishTaskDrag(page);

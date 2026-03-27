@@ -2052,20 +2052,23 @@ textarea:focus {
 
 .task-drop-slot {
   position: relative;
-  height: 1rem;
-  padding-top: 2.8rem;
-  margin: -2.8rem 0 -0.8rem;
+  height: 0.18rem;
+  padding-top: 0.3rem;
+  margin: -0.3rem 0 -0.18rem;
   border-radius: 999px;
   opacity: 0;
   transition:
     opacity 180ms var(--ease),
-    transform 220ms var(--ease);
+    transform 220ms var(--ease),
+    height 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    margin 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding-top 240ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .task-drop-slot::before {
   content: "";
   position: absolute;
-  bottom: 0.35rem;
+  bottom: 0.1rem;
   left: 0.5rem;
   right: 0.5rem;
   height: 3px;
@@ -2080,6 +2083,30 @@ textarea:focus {
     transform 220ms var(--ease);
 }
 
+.task-drop-slot::after {
+  content: "";
+  position: absolute;
+  top: 0.8rem;
+  right: 0.35rem;
+  bottom: 0.1rem;
+  left: 0.35rem;
+  border: 1px dashed color-mix(in srgb, var(--accent) 36%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-popover) 92%, transparent), color-mix(in srgb, var(--accent-soft) 18%, transparent)),
+    linear-gradient(90deg, color-mix(in srgb, var(--accent-soft) 55%, transparent), transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--surface-highlight-strong) 78%, transparent),
+    0 18px 28px -30px rgba(18, 34, 36, 0.36);
+  opacity: 0;
+  transform: translateY(-0.45rem) scale(0.98);
+  transform-origin: top center;
+  transition:
+    opacity 200ms var(--ease),
+    transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 200ms var(--ease),
+    background-color 200ms var(--ease);
+}
+
 .task-drop-slot.is-active {
   opacity: 1;
   transform: scaleY(1.04);
@@ -2088,6 +2115,24 @@ textarea:focus {
 .task-drop-slot.is-active::before {
   opacity: 1;
   transform: scaleX(1);
+}
+
+.task-drop-slot.is-preview-target {
+  height: 3.7rem;
+  padding-top: 0.4rem;
+  margin: 0.35rem 0 0.28rem;
+  opacity: 1;
+  transform: none;
+}
+
+.task-drop-slot.is-preview-target::before {
+  opacity: 0.88;
+  transform: scaleX(1);
+}
+
+.task-drop-slot.is-preview-target::after {
+  opacity: 1;
+  transform: none;
 }
 
 .task-card {
@@ -2108,7 +2153,8 @@ textarea:focus {
   transition:
     opacity 180ms var(--ease),
     transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 240ms var(--ease);
+    box-shadow 240ms var(--ease),
+    margin 240ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .task-card.is-draggable .task-card__surface {
@@ -2121,6 +2167,10 @@ textarea:focus {
 
 .task-card__surface-wrap {
   position: relative;
+}
+
+.task-card__surface-wrap.has-nest-hotspot {
+  padding-bottom: 2rem;
 }
 
 .task-card__surface {
@@ -2171,19 +2221,46 @@ textarea:focus {
 
 .task-card__nest-target {
   position: absolute;
-  inset: -0.2rem;
-  border: 1px dashed transparent;
-  background: transparent;
+  left: 0.95rem;
+  right: 0.38rem;
+  bottom: 0.35rem;
+  width: auto;
+  z-index: 2;
+  min-height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.24rem 0.8rem;
+  border: 1px dashed color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: 0.95rem;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent-soft) 44%, transparent), color-mix(in srgb, var(--surface-muted) 74%, transparent));
+  color: color-mix(in srgb, var(--ink-soft) 88%, var(--accent));
+  opacity: 0.86;
   transition:
+    opacity 180ms var(--ease),
     border-color 180ms var(--ease),
     background-color 180ms var(--ease),
-    box-shadow 180ms var(--ease);
+    color 180ms var(--ease),
+    box-shadow 180ms var(--ease),
+    transform 220ms var(--ease);
+}
+
+.task-card__nest-target-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .task-card__nest-target.is-active {
-  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
-  background: color-mix(in srgb, var(--accent-soft) 55%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 58%, transparent);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent-soft) 78%, transparent), color-mix(in srgb, var(--surface-popover) 94%, transparent));
+  color: color-mix(in srgb, var(--ink) 76%, var(--accent));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent),
+    0 12px 22px -24px rgba(18, 34, 36, 0.42);
+  opacity: 1;
+  transform: translateY(-1px);
 }
 
 .task-card.is-nest-target {
@@ -2259,6 +2336,37 @@ textarea:focus {
   box-shadow:
     inset 0 1px 0 var(--surface-highlight-strong),
     0 24px 44px -30px rgba(18, 34, 36, 0.4);
+}
+
+.task-card.is-drag-origin-collapsed {
+  height: 0;
+  min-height: 0;
+  gap: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  box-shadow: none;
+}
+
+.task-card.is-drag-origin-collapsed > * {
+  display: none;
+}
+
+.task-card.is-before-active-gap {
+  margin-bottom: 0.18rem;
+  box-shadow:
+    inset 0 1px 0 var(--surface-highlight-strong),
+    0 22px 34px -34px rgba(18, 34, 36, 0.28);
+}
+
+.task-card.is-after-active-gap {
+  margin-top: 0.18rem;
+  box-shadow:
+    inset 0 1px 0 var(--surface-highlight-strong),
+    0 24px 36px -34px rgba(18, 34, 36, 0.3);
 }
 
 .task-drag-overlay {
