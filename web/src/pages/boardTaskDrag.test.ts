@@ -56,6 +56,14 @@ describe("boardTaskDrag", () => {
   it("normalizes a downward adjacent card hover into a real reorder", () => {
     const tasks = [
       makeTask({ id: "task-1", laneId: "lane-todo", position: 0, ticketId: "BILL-1", title: "One" }),
+      makeTask({
+        id: "task-1-child",
+        laneId: "lane-todo",
+        parentTaskId: "task-1",
+        position: 0,
+        ticketId: "BILL-1A",
+        title: "One child"
+      }),
       makeTask({ id: "task-2", laneId: "lane-todo", position: 1, ticketId: "BILL-2", title: "Two" }),
       makeTask({ id: "task-3", laneId: "lane-todo", position: 2, ticketId: "BILL-3", title: "Three" })
     ];
@@ -161,6 +169,45 @@ describe("boardTaskDrag", () => {
     expect(preview?.taskDropPosition).toBe("before");
   });
 
+  it("treats a standalone task hovering a top-level card body as a nest preview", () => {
+    const tasks = [
+      makeTask({ id: "task-1", laneId: "lane-todo", position: 0, ticketId: "BILL-1", title: "Dragged" }),
+      makeTask({ id: "task-2", laneId: "lane-todo", position: 1, ticketId: "BILL-2", title: "Parent" }),
+      makeTask({
+        id: "task-3",
+        laneId: "lane-todo",
+        parentTaskId: "task-2",
+        position: 0,
+        ticketId: "BILL-3",
+        title: "Existing child"
+      })
+    ];
+
+    const preview = resolveTaskDragPreview({
+      ...buildPreviewArgs(tasks),
+      activeTaskId: "task-1",
+      overData: {
+        activeCenterY: 110,
+        laneId: "lane-todo",
+        rectHeight: 60,
+        rectTop: 100,
+        taskId: "task-2",
+        type: "task"
+      }
+    });
+
+    expect(preview?.kind).toBe("nest");
+    expect(preview?.nestParentTaskId).toBe("task-2");
+    expect(preview?.targetTaskId).toBeNull();
+    expect(preview?.taskDropPosition).toBeNull();
+    expect(preview?.slot.interactive).toBe(false);
+    expect(preview?.moveTarget).toEqual({
+      laneId: "lane-todo",
+      parentTaskId: "task-2",
+      position: 1
+    });
+  });
+
   it("keeps the parent nest preview active when hovering a new parent's subtask slot", () => {
     const tasks = [
       makeTask({ id: "task-1", laneId: "lane-todo", position: 0, ticketId: "BILL-1", title: "Dragged" }),
@@ -185,6 +232,36 @@ describe("boardTaskDrag", () => {
       parentTaskId: "task-2",
       position: 0
     });
+  });
+
+  it("does not mix standalone nesting with subtask body reordering", () => {
+    const tasks = [
+      makeTask({ id: "task-1", laneId: "lane-todo", position: 0, ticketId: "BILL-1", title: "Dragged" }),
+      makeTask({ id: "task-2", laneId: "lane-todo", position: 1, ticketId: "BILL-2", title: "Parent" }),
+      makeTask({
+        id: "task-3",
+        laneId: "lane-todo",
+        parentTaskId: "task-2",
+        position: 0,
+        ticketId: "BILL-3",
+        title: "Existing child"
+      })
+    ];
+
+    const preview = resolveTaskDragPreview({
+      ...buildPreviewArgs(tasks),
+      activeTaskId: "task-1",
+      overData: {
+        activeCenterY: 110,
+        laneId: "lane-todo",
+        rectHeight: 60,
+        rectTop: 100,
+        taskId: "task-3",
+        type: "task"
+      }
+    });
+
+    expect(preview).toBeNull();
   });
 
   it("previews the allowed top insertion when entering Done from another lane", () => {

@@ -144,7 +144,7 @@ function taskHasSubtasks(tasks: Task[], taskId: string) {
   return tasks.some((task) => task.parentTaskId === taskId);
 }
 
-function canTaskBecomeSubtask(tasks: Task[], task: Task) {
+export function canTaskBecomeSubtask(tasks: Task[], task: Task) {
   return task.parentTaskId === null && !taskHasSubtasks(tasks, task.id);
 }
 
@@ -580,8 +580,34 @@ function resolveTaskCardPreview(
     return null;
   }
 
+  const activeTaskCanBecomeSubtask = canTaskBecomeSubtask(tasks, activeTask);
   if (activeTask.parentTaskId === overTaskId) {
     return null;
+  }
+
+  if (activeTaskCanBecomeSubtask) {
+    if (canTaskNestUnderParent(tasks, activeTask, overTaskId)) {
+      const position = (subtaskIdsByParent.get(overTaskId) ?? []).length;
+
+      return createReorderPreview(
+        activeTask.id,
+        tasks,
+        lanesById,
+        {
+          laneId: targetLaneId,
+          parentTaskId: overTaskId,
+          position
+        },
+        {
+          interactiveSlot: false,
+          nestParentTaskId: overTaskId
+        }
+      );
+    }
+
+    if (overTask.parentTaskId !== null) {
+      return null;
+    }
   }
 
   const targetParentTaskId = overTask.parentTaskId ?? null;
@@ -662,6 +688,30 @@ export function resolveTaskDragPreview(args: {
 
     const targetParentTaskId =
       typeof args.overData.parentTaskId === "string" ? args.overData.parentTaskId : null;
+    const activeTaskCanBecomeSubtask = canTaskBecomeSubtask(args.tasks, activeTask);
+    if (
+      activeTaskCanBecomeSubtask &&
+      targetParentTaskId !== null &&
+      canTaskNestUnderParent(args.tasks, activeTask, targetParentTaskId)
+    ) {
+      const position = (args.subtaskIdsByParent.get(targetParentTaskId) ?? []).length;
+
+      return createReorderPreview(
+        activeTask.id,
+        args.tasks,
+        args.lanesById,
+        {
+          laneId: targetLaneId,
+          parentTaskId: targetParentTaskId,
+          position
+        },
+        {
+          interactiveSlot: false,
+          nestParentTaskId: targetParentTaskId
+        }
+      );
+    }
+
     if (!canTaskJoinParentGroup(args.tasks, activeTask, targetParentTaskId)) {
       return null;
     }

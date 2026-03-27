@@ -61,6 +61,7 @@ import {
   applyTaskMove,
   buildSubtaskIdsByParent,
   buildTopLevelTaskIdsByLane,
+  canTaskBecomeSubtask,
   canTaskNestUnderParent,
   findTaskLocation,
   getTaskDropSlotId,
@@ -699,6 +700,7 @@ function TaskCard({
   dropPosition,
   isDragDisabled,
   isNestTarget,
+  nestTargetMode = "zone",
   isTaskDragging,
   laneId,
   onOpen,
@@ -716,6 +718,7 @@ function TaskCard({
   dropPosition: TaskCardDropPosition | null;
   isDragDisabled: boolean;
   isNestTarget: boolean;
+  nestTargetMode?: "body" | "zone";
   isTaskDragging: boolean;
   laneId: string;
   onOpen: (task: Task) => void;
@@ -790,7 +793,7 @@ function TaskCard({
         {showNestTarget ? (
           <div
             aria-hidden="true"
-            className={`task-card__nest-target${isNestTarget ? " is-active" : ""}`}
+            className={`task-card__nest-target task-card__nest-target--${nestTargetMode}${isNestTarget ? " is-active" : ""}`}
             ref={setNestTargetRef}
           />
         ) : null}
@@ -860,6 +863,7 @@ function TaskCard({
                   dropPosition={dropPositionsByTaskId.get(subtask.id) ?? null}
                   isDragDisabled={isDragDisabled}
                   isNestTarget={false}
+                  nestTargetMode="zone"
                   isTaskDragging={isTaskDragging}
                   laneId={laneId}
                   onOpen={onOpen}
@@ -2118,6 +2122,8 @@ export function BoardPage() {
       ? committedTaskMap.get(draggedTaskId) ?? null
       : null;
   const isTaskDragging = draggedTaskId !== null;
+  const draggedTaskCanBecomeSubtask =
+    draggedTask !== null && canTaskBecomeSubtask(tasks, draggedTask);
   const pendingDeleteTask =
     pendingDeleteTaskId
       ? committedTaskMap.get(pendingDeleteTaskId) ?? null
@@ -3037,6 +3043,7 @@ export function BoardPage() {
                 ? `Create lane between ${lane.name} and ${nextLane.name}`
                 : `Create lane after ${lane.name}`;
               const showRootTaskSlots = Boolean(draggedTaskId) && !lane.isDoneLane;
+              const showSubtaskSlots = showRootTaskSlots && !draggedTaskCanBecomeSubtask;
               const showDoneTopPreviewSlot =
                 lane.isDoneLane &&
                 taskDragPreview?.slot.laneId === lane.id &&
@@ -3170,6 +3177,7 @@ export function BoardPage() {
                                 taskDragPreview?.kind === "nest" &&
                                 taskDragPreview.nestParentTaskId === taskGroup.task.id
                               }
+                              nestTargetMode={draggedTaskCanBecomeSubtask ? "body" : "zone"}
                               isTaskDragging={draggedTaskId !== null}
                               laneId={lane.id}
                               onOpen={openTaskDialog}
@@ -3180,7 +3188,7 @@ export function BoardPage() {
                                 draggedTask.id !== taskGroup.task.id &&
                                 canTaskNestUnderParent(tasks, draggedTask, taskGroup.task.id)
                               }
-                              showSubtaskSlots={showRootTaskSlots}
+                              showSubtaskSlots={showSubtaskSlots}
                               subtasks={taskGroup.subtasks}
                               task={taskGroup.task}
                               taskIndex={taskIndex}

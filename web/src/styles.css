@@ -2182,10 +2182,6 @@ textarea:focus {
 
 .task-card__nest-target {
   position: absolute;
-  top: 0.45rem;
-  right: 0.45rem;
-  bottom: 0.45rem;
-  left: 60%;
   border: 1px dashed transparent;
   border-radius: 0.95rem;
   background: transparent;
@@ -2193,6 +2189,17 @@ textarea:focus {
     border-color 180ms var(--ease),
     background-color 180ms var(--ease),
     box-shadow 180ms var(--ease);
+}
+
+.task-card__nest-target--zone {
+  top: 0.45rem;
+  right: 0.45rem;
+  bottom: 0.45rem;
+  left: 60%;
+}
+
+.task-card__nest-target--body {
+  inset: 0.28rem;
 }
 
 .task-card__nest-target.is-active {

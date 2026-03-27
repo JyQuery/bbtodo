@@ -187,21 +187,42 @@ async function hoverDraggedTaskToNestTarget(
   settleTarget?: Locator
 ) {
   const nestTarget = taskCardNestTarget(card);
+  const hasDedicatedNestTarget = (await nestTarget.count()) > 0;
+  const nestTargetClass = hasDedicatedNestTarget ? ((await nestTarget.getAttribute("class")) ?? "") : "";
+  const nestTargetYRatio = nestTargetClass.includes("task-card__nest-target--body")
+    ? Math.min(targetYRatio, 0.24)
+    : targetYRatio;
+  const primaryTarget = hasDedicatedNestTarget ? nestTarget : card;
+
+  if (!hasDedicatedNestTarget) {
+    const bodyTargetYRatio = Math.max(targetYRatio, 0.62);
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await hoverDraggedTaskDirectlyToTarget(page, primaryTarget, bodyTargetYRatio);
+      const cardClass = await card.getAttribute("class");
+      if (cardClass?.includes("is-nest-target")) {
+        return;
+      }
+    }
+
+    await hoverDraggedTaskDirectlyToTarget(page, primaryTarget, bodyTargetYRatio);
+    return;
+  }
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    await hoverDraggedTaskOver(page, nestTarget, targetYRatio);
+    await hoverDraggedTaskOver(page, primaryTarget, nestTargetYRatio);
 
     const cardClass = await card.getAttribute("class");
     if (cardClass?.includes("is-nest-target")) {
-      if (settleTarget && (await settleTarget.count()) > 0) {
+      if (hasDedicatedNestTarget && settleTarget && (await settleTarget.count()) > 0) {
         await hoverDraggedTaskDirectlyToTarget(page, settleTarget);
       } else {
-        await hoverDraggedTaskDirectlyToTarget(page, nestTarget, targetYRatio);
+        await hoverDraggedTaskDirectlyToTarget(page, primaryTarget, nestTargetYRatio);
       }
       return;
     }
 
-    if (settleTarget && (await settleTarget.count()) > 0) {
+    if (hasDedicatedNestTarget && settleTarget && (await settleTarget.count()) > 0) {
       await hoverDraggedTaskDirectlyToTarget(page, settleTarget);
       const settledCardClass = await card.getAttribute("class");
       if (settledCardClass?.includes("is-nest-target")) {
@@ -210,7 +231,7 @@ async function hoverDraggedTaskToNestTarget(
     }
   }
 
-  await hoverDraggedTaskDirectlyToTarget(page, nestTarget, targetYRatio);
+  await hoverDraggedTaskDirectlyToTarget(page, primaryTarget, nestTargetYRatio);
 }
 
 async function dropDraggedTaskOnHeaderTrashZone(page: Page, header: Locator) {
@@ -1075,7 +1096,7 @@ test("board page previews same-lane reordering with an overlay that follows the 
   ]);
 });
 
-test("board page prefers reorder when hovering the body of a nestable card", async ({ page }) => {
+test("board page reorders with seams when a standalone task could otherwise nest", async ({ page }) => {
   await mockAuthenticated(page, {
     projects: projectsForGrid,
     tasks
@@ -1085,15 +1106,14 @@ test("board page prefers reorder when hovering the body of a nestable card", asy
 
   const todoColumn = page.getByTestId(`board-column-${laneId("project-1", "todo")}`);
   const retryCard = page.getByTestId("task-card-task-1");
-  const copyCard = page.getByTestId("task-card-task-4");
+  const todoAfterCopySlot = page.getByTestId(`task-drop-slot-${laneId("project-1", "todo")}-2`);
   const copySubtaskSlot = page.getByTestId("task-drop-slot-task-4-0");
 
   await beginTaskDrag(page, taskCardSurface(retryCard));
-  await hoverDraggedTaskOver(page, taskCardSurface(copyCard), 0.2);
+  await hoverDraggedTaskOver(page, todoAfterCopySlot, 0.5);
 
-  await expect(copyCard).toHaveClass(/task-card--drop-after/);
-  await expect(copyCard).toHaveClass(/task-card--shift-up/);
-  await expect(copyCard).not.toHaveClass(/is-nest-target/);
+  await expect(todoAfterCopySlot).toHaveClass(/is-active/);
+  await expect(todoAfterCopySlot).toHaveClass(/is-drag-ready/);
   await expect(copySubtaskSlot).toHaveCount(0);
 
   await finishTaskDrag(page);
@@ -1416,7 +1436,7 @@ test("board page previews nesting under a top-level card before drop", async ({ 
 
   await expect(shipNoteCard).toHaveClass(/is-nest-target/);
   await expect(shipNoteSubtaskSlot).toHaveClass(/is-active/);
-  await expect(shipNoteSubtaskSlot).toHaveClass(/is-drag-ready/);
+  await expect(shipNoteSubtaskSlot).not.toHaveClass(/is-drag-ready/);
 
   await finishTaskDrag(page);
   await expect(shipNoteCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
