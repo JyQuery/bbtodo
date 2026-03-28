@@ -1483,19 +1483,18 @@ textarea:focus {
 }
 
 .project-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(19rem, 19rem));
-  grid-auto-rows: minmax(15.75rem, auto);
+  display: flex;
+  flex-wrap: wrap;
   gap: 1rem;
-  justify-content: start;
-  align-content: start;
+  align-items: flex-start;
 }
 
 .project-card {
   display: grid;
+  flex: 0 0 19rem;
   gap: 1rem;
-  width: 100%;
-  max-width: none;
+  width: 19rem;
+  max-width: 19rem;
   min-height: 15.75rem;
   height: auto;
   padding: 1.2rem;
@@ -1505,7 +1504,7 @@ textarea:focus {
     var(--shadow-soft);
   overflow: hidden;
   position: relative;
-  justify-self: start;
+  align-self: flex-start;
   cursor: pointer;
   animation: rise-in 620ms var(--ease) both;
   animation-delay: calc(var(--item-index) * 90ms);
@@ -3665,12 +3664,15 @@ textarea:focus {
   }
 
   .project-grid {
+    display: grid;
     grid-template-columns: 1fr;
-    grid-auto-rows: auto;
   }
 
   .project-card {
+    flex: initial;
     height: auto;
+    width: 100%;
+    max-width: none;
     min-height: 14.5rem;
   }
 

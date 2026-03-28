@@ -172,7 +172,12 @@ test("project cards open on click and delete through a confirmation popover", as
 
 test("projects page grows a board card when the title wraps across many lines", async ({ page }) => {
   const projectsWithLongTitle = structuredClone(projectsForGrid);
+  const regularProject = projectsWithLongTitle.find((project) => project.id === "project-1");
   const longTitleProject = projectsWithLongTitle.find((project) => project.id === "project-2");
+
+  if (!regularProject) {
+    throw new Error("Expected project-1 test fixture to exist");
+  }
 
   if (!longTitleProject) {
     throw new Error("Expected project-2 test fixture to exist");
@@ -184,6 +189,7 @@ test("projects page grows a board card when the title wraps across many lines", 
 
   await page.goto("/");
 
+  const regularProjectCard = page.getByTestId("project-card-project-1");
   const longTitleProjectCard = page.getByTestId("project-card-project-2");
 
   await expect(
@@ -194,6 +200,10 @@ test("projects page grows a board card when the title wraps across many lines", 
     await expect(longTitleProjectCard.getByLabel(laneLabel)).toBeVisible();
   }
 
+  const regularProjectLayout = await regularProjectCard.evaluate((element) => ({
+    height: Math.round(element.getBoundingClientRect().height),
+    minHeight: Math.round(Number.parseFloat(getComputedStyle(element).minHeight))
+  }));
   const longTitleLayout = await longTitleProjectCard.evaluate((element) => {
     const lanePills = Array.from(element.querySelectorAll<HTMLElement>(".project-card__lane-pill"));
 
@@ -219,7 +229,9 @@ test("projects page grows a board card when the title wraps across many lines", 
     };
   });
 
+  expect(regularProjectLayout.height).toBe(regularProjectLayout.minHeight);
   expect(longTitleLayout.height).toBeGreaterThan(longTitleLayout.minHeight);
+  expect(longTitleLayout.height).toBeGreaterThan(regularProjectLayout.height);
   expect(longTitleLayout.scrollHeight).toBeLessThanOrEqual(longTitleLayout.clientHeight + 1);
   expect(longTitleLayout.bottomInset).toBeGreaterThanOrEqual(0);
 });
