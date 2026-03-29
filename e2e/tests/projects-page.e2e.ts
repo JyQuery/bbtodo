@@ -2,21 +2,44 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { mockAuthenticated, projectsForGrid, tasks } from "./fixtures";
 
+const GRID_BLANK_RIGHT_INSET = 10;
+const GRID_BLANK_TOP_OFFSET = 18;
+const GRID_BLANK_BOTTOM_OFFSET = 10;
+const GRID_BLANK_BOTTOM_LEFT_INSET = 8;
+const GRID_BLANK_SCAN_X_RATIOS = [0.25, 0.5, 0.75];
+const GRID_BLANK_SCAN_Y_RATIOS = [0.25, 0.5, 0.75];
+
 async function findProjectGridBlankPoint(page: Page) {
   const projectGrid = page.locator(".project-grid");
   await expect(projectGrid).toBeVisible();
 
-  const point = await projectGrid.evaluate((gridElement) => {
-    const gridRect = gridElement.getBoundingClientRect();
-    const cardRects = Array.from(gridElement.querySelectorAll<HTMLElement>(".project-card")).map((card) =>
-      card.getBoundingClientRect()
-    );
-    const candidates = [
-      { x: gridRect.right - 10, y: gridRect.top + 18 },
-      { x: gridRect.right - 10, y: gridRect.top + gridRect.height / 2 },
-      { x: gridRect.left + gridRect.width / 2, y: gridRect.bottom - 10 },
-      { x: gridRect.left + 8, y: gridRect.bottom - 10 }
-    ];
+  const point = await projectGrid.evaluate(
+    (
+      gridElement,
+      { bottomLeftInset, bottomOffset, rightInset, scanXRatios, scanYRatios, topOffset }: {
+        bottomLeftInset: number;
+        bottomOffset: number;
+        rightInset: number;
+        scanXRatios: number[];
+        scanYRatios: number[];
+        topOffset: number;
+      }
+    ) => {
+      const gridRect = gridElement.getBoundingClientRect();
+      const cardRects = Array.from(gridElement.querySelectorAll<HTMLElement>(".project-card")).map((card) =>
+        card.getBoundingClientRect()
+      );
+      const xCandidates = [
+        gridRect.right - rightInset,
+        gridRect.left + bottomLeftInset,
+        ...scanXRatios.map((ratio) => gridRect.left + gridRect.width * ratio)
+      ];
+      const yCandidates = [
+        gridRect.top + topOffset,
+        ...scanYRatios.map((ratio) => gridRect.top + gridRect.height * ratio),
+        gridRect.bottom - bottomOffset
+      ];
+      const candidates = yCandidates.flatMap((y) => xCandidates.map((x) => ({ x, y })));
     const blankCandidate = candidates.find(
       (candidate) =>
         candidate.x > gridRect.left &&
@@ -40,7 +63,16 @@ async function findProjectGridBlankPoint(page: Page) {
       x: blankCandidate.x - gridRect.left,
       y: blankCandidate.y - gridRect.top
     };
-  });
+    },
+    {
+      bottomLeftInset: GRID_BLANK_BOTTOM_LEFT_INSET,
+      bottomOffset: GRID_BLANK_BOTTOM_OFFSET,
+      rightInset: GRID_BLANK_RIGHT_INSET,
+      scanXRatios: GRID_BLANK_SCAN_X_RATIOS,
+      scanYRatios: GRID_BLANK_SCAN_Y_RATIOS,
+      topOffset: GRID_BLANK_TOP_OFFSET
+    }
+  );
 
   return { projectGrid, point };
 }
@@ -187,7 +219,7 @@ test("projects page lists boards, filters project cards, and opens them from the
 });
 
 test("project cards open on click and delete through a confirmation popover", async ({ page }) => {
-  await mockAuthenticated(page);
+  await mockAuthenticated(page, { deleteProjectDelayMs: 1200 });
 
   await page.goto("/");
 
@@ -209,12 +241,14 @@ test("project cards open on click and delete through a confirmation popover", as
 
   await deleteButton.click();
   await page.getByRole("button", { exact: true, name: "Delete" }).click();
+  await page.waitForTimeout(150);
+  await expect(page.getByTestId("toast-notice")).toHaveCount(0);
   const deleteToast = page.getByTestId("toast-notice");
+  await expect(projectCard).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "No boards yet." })).toBeVisible();
   await expect(deleteToast).toBeVisible();
   await expect(deleteToast).toContainText("Board deleted");
   await expect(deleteToast).toContainText("Deleted board Billing cleanup.");
-  await expect(projectCard).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "No boards yet." })).toBeVisible();
 });
 
 test("projects page creates a board from grid double-click and keeps the user on the grid", async ({

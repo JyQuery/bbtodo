@@ -22,6 +22,10 @@ type PageToast = {
   title: string;
   tone: "danger" | "success";
 };
+type DeleteProjectMutationContext = {
+  deletedProject: Project | null;
+  previousProjects: Project[] | undefined;
+};
 
 const projectCardBaseRowSpan = 12;
 
@@ -327,15 +331,33 @@ export function ProjectsPage() {
     });
   }, [deferredProjectSearch, exactTicketPrefixSearch, projects]);
 
-  const deleteProjectMutation = useMutation({
+  const deleteProjectMutation = useMutation<null, Error, string, DeleteProjectMutationContext>({
     mutationFn: (projectId: string) => api.deleteProject(projectId),
-    onSuccess: async (_result, projectId) => {
-      const deletedProject = projects.find((project) => project.id === projectId) ?? null;
+    onMutate: async (projectId) => {
+      await queryClient.cancelQueries({ queryKey: ["projects"] });
+      const previousProjects = queryClient.getQueryData<Project[]>(["projects"]);
+      const deletedProject = previousProjects?.find((project) => project.id === projectId) ?? null;
+
+      queryClient.setQueryData<Project[]>(["projects"], (currentProjects) =>
+        (currentProjects ?? []).filter((project) => project.id !== projectId)
+      );
+
+      return {
+        deletedProject,
+        previousProjects
+      };
+    },
+    onError: (_error, _projectId, context) => {
+      queryClient.setQueryData(["projects"], context?.previousProjects);
+    },
+    onSuccess: async (_result, _projectId, context) => {
       setToast({
-        message: deletedProject ? `Deleted board ${deletedProject.name}.` : "Deleted board.",
+        message: context?.deletedProject ? `Deleted board ${context.deletedProject.name}.` : "Deleted board.",
         title: "Board deleted",
         tone: "success"
       });
+    },
+    onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey: ["projects"] });
     }
   });
