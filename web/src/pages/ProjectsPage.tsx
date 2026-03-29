@@ -329,7 +329,13 @@ export function ProjectsPage() {
 
   const deleteProjectMutation = useMutation({
     mutationFn: (projectId: string) => api.deleteProject(projectId),
-    onSuccess: async () => {
+    onSuccess: async (_result, projectId) => {
+      const deletedProject = projects.find((project) => project.id === projectId) ?? null;
+      setToast({
+        message: deletedProject ? `Deleted board ${deletedProject.name}.` : "Deleted board.",
+        title: "Board deleted",
+        tone: "success"
+      });
       await queryClient.invalidateQueries({ queryKey: ["projects"] });
     }
   });
@@ -340,6 +346,11 @@ export function ProjectsPage() {
       );
       setComposerDraftName("");
       setIsComposerOpen(false);
+      setToast({
+        message: `Created board ${project.name}.`,
+        title: "Board created",
+        tone: "success"
+      });
       updateRouteParams((params) => {
         params.delete("q");
       });

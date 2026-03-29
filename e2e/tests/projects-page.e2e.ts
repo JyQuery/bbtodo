@@ -209,6 +209,10 @@ test("project cards open on click and delete through a confirmation popover", as
 
   await deleteButton.click();
   await page.getByRole("button", { exact: true, name: "Delete" }).click();
+  const deleteToast = page.getByTestId("toast-notice");
+  await expect(deleteToast).toBeVisible();
+  await expect(deleteToast).toContainText("Board deleted");
+  await expect(deleteToast).toContainText("Deleted board Billing cleanup.");
   await expect(projectCard).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "No boards yet." })).toBeVisible();
 });
@@ -238,6 +242,10 @@ test("projects page creates a board from grid double-click and keeps the user on
 
   await expect(page).toHaveURL("/");
   await expect(composer).toHaveCount(0);
+  const createToast = page.getByTestId("toast-notice");
+  await expect(createToast).toBeVisible();
+  await expect(createToast).toContainText("Board created");
+  await expect(createToast).toContainText("Created board Quality checks.");
   await expect(page.getByTestId("project-card-project-7")).toBeVisible();
   await expect(page.getByTestId("project-card-project-7")).toContainText("Quality checks");
   await expect(page.locator(".project-card").first()).toHaveAttribute("data-testid", "project-card-project-7");

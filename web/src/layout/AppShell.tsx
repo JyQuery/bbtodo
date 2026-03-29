@@ -63,7 +63,15 @@ export function AppShell({ user }: { user: User }) {
       setIsProjectSwitcherOpen(false);
       setProjectSwitcherInput("");
       startTransition(() => {
-        navigate(`/projects/${project.ticketPrefix}`);
+        navigate(`/projects/${project.ticketPrefix}`, {
+          state: {
+            toast: {
+              message: `Created board ${project.name}.`,
+              title: "Board created",
+              tone: "success"
+            }
+          }
+        });
       });
     }
   });
