@@ -264,8 +264,10 @@ export function TodosPage() {
                   onClick={() => navigate(`/projects/${group.projectTicketPrefix}`)}
                   type="button"
                 >
-                  <span className="todos-project__eyebrow">{group.projectTicketPrefix}</span>
-                  <h2>{group.projectName}</h2>
+                  <div className="todos-project__title-row">
+                    <h2>{group.projectName}</h2>
+                    <span className="todos-project__eyebrow">{group.projectTicketPrefix}</span>
+                  </div>
                 </button>
                 <div className="todos-project__meta">
                   <span className="label-chip label-chip--soft">{group.visibleTaskCount} visible</span>

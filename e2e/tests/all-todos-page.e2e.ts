@@ -57,6 +57,17 @@ test("all todos page groups todo tasks and supports search and tag filtering", a
   await expect(billingGroup.getByRole("heading", { name: "Billing cleanup" })).toBeVisible();
   await expect(partnerGroup.getByRole("heading", { name: "Partner audit" })).toBeVisible();
 
+  const billingHeading = billingGroup.getByRole("heading", { name: "Billing cleanup" });
+  const billingPrefix = billingGroup.locator(".todos-project__eyebrow");
+  const [billingHeadingBox, billingPrefixBox] = await Promise.all([
+    billingHeading.boundingBox(),
+    billingPrefix.boundingBox()
+  ]);
+  expect(billingHeadingBox).not.toBeNull();
+  expect(billingPrefixBox).not.toBeNull();
+  expect(Math.abs((billingHeadingBox?.y ?? 0) - (billingPrefixBox?.y ?? 0))).toBeLessThan(24);
+  expect((billingPrefixBox?.x ?? 0) - (billingHeadingBox?.x ?? 0)).toBeGreaterThan(24);
+
   const [billingBox, partnerBox] = await Promise.all([billingGroup.boundingBox(), partnerGroup.boundingBox()]);
   expect(billingBox).not.toBeNull();
   expect(partnerBox).not.toBeNull();

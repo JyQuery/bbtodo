@@ -1737,13 +1737,21 @@ textarea:focus {
 }
 
 .todos-project__link {
-  display: grid;
-  gap: 0.3rem;
+  display: flex;
+  min-width: 0;
   padding: 0;
   border: none;
   background: transparent;
   color: var(--ink);
   text-align: left;
+}
+
+.todos-project__title-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .todos-project__link:hover h2,
@@ -1756,6 +1764,7 @@ textarea:focus {
 }
 
 .todos-project__eyebrow {
+  flex: 0 0 auto;
   color: var(--ink-soft);
   font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
   font-size: 0.78rem;
@@ -1766,6 +1775,7 @@ textarea:focus {
 
 .todos-project__link h2 {
   margin: 0;
+  min-width: 0;
   font-size: clamp(1.25rem, 2.5vw, 1.75rem);
   letter-spacing: -0.04em;
   transition: color 220ms var(--ease);
