@@ -257,9 +257,6 @@ function ProjectComposerCard({
         >
           <div className="project-card-composer__copy">
             <p className="project-card-composer__eyebrow">New board</p>
-            <div className="project-card__headline">
-              <h2>Create a board in place</h2>
-            </div>
           </div>
           <label className="field">
             <span className="field__label">Board name</span>

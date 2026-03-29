@@ -228,6 +228,7 @@ test("projects page creates a board from grid double-click and keeps the user on
   const composer = page.getByTestId("project-card-composer");
   await expect(composer).toBeVisible();
   await expect(page).toHaveURL("/");
+  await expect(composer).not.toContainText("Create a board in place");
   await expect(composer).not.toContainText(
     "Add a board with Todo, In Progress, In review, and Done, then keep working from the projects grid."
   );
