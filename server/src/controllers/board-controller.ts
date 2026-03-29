@@ -15,8 +15,10 @@ import {
   taskResponseSchema,
   taskTagsResponseSchema,
   ticketIdParamsSchema,
+  todoProjectGroupsResponseSchema,
   toLaneResponse,
   toProjectResponse,
+  toTodoProjectGroupResponse,
   toTaskResponse,
   updateLaneBodySchema,
   updateProjectBodySchema,
@@ -34,6 +36,7 @@ import {
   getOwnedTaskByTicketId,
   listLanesForProject,
   listProjectsForUser,
+  listTodoProjectGroupsForUser,
   listTaskTagsForUser,
   listTasksForProject,
   updateOwnedLane,
@@ -69,6 +72,29 @@ export function registerBoardController(
       }
 
       return taskTagsResponseSchema.parse(listTaskTagsForUser(database, user.id));
+    }
+  });
+
+  app.route({
+    method: "GET",
+    url: "/api/v1/todos",
+    schema: {
+      security: apiDocsSecurity,
+      response: {
+        200: todoProjectGroupsResponseSchema,
+        401: errorResponseSchema
+      },
+      tags: ["tasks"]
+    },
+    handler: async (request, reply) => {
+      const user = await requireApiUser(app, database, request, reply);
+      if (!user) {
+        return;
+      }
+
+      return todoProjectGroupsResponseSchema.parse(
+        listTodoProjectGroupsForUser(database, user.id).map((group) => toTodoProjectGroupResponse(group))
+      );
     }
   });
 

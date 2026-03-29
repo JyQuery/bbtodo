@@ -46,6 +46,13 @@ export interface Task {
   updatedAt: string;
 }
 
+export interface TodoProjectGroup {
+  projectId: string;
+  projectName: string;
+  projectTicketPrefix: string;
+  tasks: Task[];
+}
+
 export interface ApiTokenSummary {
   createdAt: string;
   id: string;
@@ -167,6 +174,9 @@ export const api = {
   },
   listProjects() {
     return request<Project[]>("/api/v1/projects");
+  },
+  listTodoGroups() {
+    return request<TodoProjectGroup[]>("/api/v1/todos");
   },
   listTaskTags() {
     return request<TaskTag[]>("/api/v1/task-tags");

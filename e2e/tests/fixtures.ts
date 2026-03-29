@@ -7,6 +7,7 @@ import {
   type Task,
   type TaskTag,
   type TaskTagColor,
+  type TodoProjectGroup,
   type UserTheme
 } from "../../web/src/api";
 
@@ -569,6 +570,31 @@ export async function mockAuthenticated(
     return orderedTasks;
   }
 
+  function listTodoGroups() {
+    syncAllProjects();
+
+    return projectState.flatMap((project) => {
+      const todoLane = project.laneSummaries.find((lane) => normalizeLaneName(lane.name) === "todo");
+      if (!todoLane) {
+        return [];
+      }
+
+      const todoTasks = listTasksForBoard(project.id).filter((task) => task.laneId === todoLane.id);
+      if (todoTasks.length === 0) {
+        return [];
+      }
+
+      return [
+        {
+          projectId: project.id,
+          projectName: project.name,
+          projectTicketPrefix: project.ticketPrefix,
+          tasks: todoTasks
+        } satisfies TodoProjectGroup
+      ];
+    });
+  }
+
   function syncAllProjects() {
     projectState.forEach((project) => syncProject(project.id));
   }
@@ -858,6 +884,9 @@ export async function mockAuthenticated(
       case "GET /api/v1/projects":
         syncAllProjects();
         await fulfillJson(route, 200, projectState);
+        return;
+      case "GET /api/v1/todos":
+        await fulfillJson(route, 200, listTodoGroups());
         return;
       case "GET /api/v1/task-tags":
         await fulfillJson(route, 200, listReusableTags());
