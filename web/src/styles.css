@@ -1504,6 +1504,7 @@ textarea:focus {
   gap: var(--project-card-gap);
   justify-content: start;
   align-content: start;
+  padding-bottom: var(--project-card-gap);
 }
 
 .project-card {
