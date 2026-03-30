@@ -290,6 +290,14 @@ export function AppShell({ user }: { user: User }) {
             </Link>
             <nav className="subnav">
               <div className="subnav__cluster subnav__cluster--primary">
+                <NavLink className={({ isActive }) => `subnav__link${isActive ? " is-active" : ""}`} to="/todos">
+                  TODO
+                </NavLink>
+                {todosMatch && !todosQuery.isPending && !todosQuery.error ? (
+                  <span className="label-chip label-chip--soft subnav__meta-chip" data-testid="todos-nav-count">
+                    {totalTodoCount} todos
+                  </span>
+                ) : null}
                 <NavLink className={({ isActive }) => `subnav__link${isActive ? " is-active" : ""}`} end to="/">
                   Projects
                 </NavLink>
@@ -383,14 +391,6 @@ export function AppShell({ user }: { user: User }) {
                       </div>
                     ) : null}
                   </div>
-                ) : null}
-                <NavLink className={({ isActive }) => `subnav__link${isActive ? " is-active" : ""}`} to="/todos">
-                  TODO
-                </NavLink>
-                {todosMatch && !todosQuery.isPending && !todosQuery.error ? (
-                  <span className="label-chip label-chip--soft subnav__meta-chip" data-testid="todos-nav-count">
-                    {totalTodoCount} todos
-                  </span>
                 ) : null}
               </div>
               {showNavSearch ? (
