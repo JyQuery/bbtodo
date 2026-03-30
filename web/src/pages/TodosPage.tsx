@@ -16,7 +16,6 @@ type TodoTaskDisplayGroup = {
 
 type TodoProjectDisplayGroup = TodoProjectGroup & {
   displayTasks: TodoTaskDisplayGroup[];
-  visibleTaskCount: number;
 };
 
 function summarizeTaskBody(body: string) {
@@ -43,10 +42,6 @@ function buildTaskCollections(tasks: Task[]) {
     subtasksByParent,
     topLevelTasks
   };
-}
-
-function countVisibleTasks(displayTasks: TodoTaskDisplayGroup[]) {
-  return displayTasks.reduce((count, displayTask) => count + 1 + displayTask.displaySubtasks.length, 0);
 }
 
 function taskMatchesFilters(task: Task, searchValue: string, activeTagKey: string | null) {
@@ -191,8 +186,7 @@ export function TodosPage() {
 
           return {
             ...group,
-            displayTasks,
-            visibleTaskCount: countVisibleTasks(displayTasks)
+            displayTasks
           };
         })
         .filter((group) => group.displayTasks.length > 0),
@@ -260,7 +254,6 @@ export function TodosPage() {
                   </div>
                 </button>
                 <div className="todos-project__meta">
-                  <span className="label-chip label-chip--soft">{group.visibleTaskCount} visible</span>
                   <span className="label-chip label-chip--soft">{group.tasks.length} total</span>
                 </div>
               </header>

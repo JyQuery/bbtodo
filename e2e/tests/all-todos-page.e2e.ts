@@ -59,6 +59,8 @@ test("all todos page groups todo tasks and supports search and tag filtering", a
 
   await expect(billingGroup.getByRole("heading", { name: "Billing cleanup" })).toBeVisible();
   await expect(partnerGroup.getByRole("heading", { name: "Partner audit" })).toBeVisible();
+  await expect(billingGroup.locator(".todos-project__meta")).toContainText("3 total");
+  await expect(billingGroup.locator(".todos-project__meta")).not.toContainText("visible");
 
   const billingHeading = billingGroup.getByRole("heading", { name: "Billing cleanup" });
   const billingPrefix = billingGroup.locator(".todos-project__eyebrow");
