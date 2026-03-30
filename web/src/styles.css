@@ -231,7 +231,8 @@ h3 {
 }
 
 .page-shell--projects,
-.page-shell--board {
+.page-shell--board,
+.page-shell--todos {
   width: 100%;
   max-width: none;
 }
@@ -596,6 +597,10 @@ h3 {
   display: grid;
   gap: 0.35rem;
   min-width: min(16rem, 34vw);
+}
+
+.subnav__meta-chip {
+  white-space: nowrap;
 }
 
 .subnav__search input {
@@ -1499,6 +1504,7 @@ textarea:focus {
   gap: var(--project-card-gap);
   justify-content: start;
   align-content: start;
+  padding-bottom: var(--project-card-gap);
 }
 
 .project-card {
@@ -1700,6 +1706,114 @@ textarea:focus {
   gap: 1rem;
   align-items: stretch;
   min-height: calc(100dvh - 15rem);
+}
+
+.todos-project-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.todos-project {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 1.6rem;
+  background:
+    linear-gradient(180deg, var(--surface-strong), var(--surface)),
+    var(--surface);
+  box-shadow:
+    inset 0 1px 0 var(--surface-highlight-strong),
+    0 20px 42px -34px rgba(18, 34, 36, 0.3);
+  animation: rise-in 560ms var(--ease) both;
+  animation-delay: calc(var(--item-index) * 90ms);
+  align-content: start;
+}
+
+.todos-project__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.todos-project__link {
+  display: flex;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+
+.todos-project__title-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.todos-project__link:hover h2,
+.todos-project__link:focus-visible h2 {
+  color: var(--accent-strong);
+}
+
+.todos-project__link:focus-visible {
+  outline: none;
+}
+
+.todos-project__eyebrow {
+  flex: 0 0 auto;
+  color: var(--ink-soft);
+  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.todos-project__link h2 {
+  margin: 0;
+  min-width: 0;
+  font-size: clamp(1.25rem, 2.5vw, 1.75rem);
+  letter-spacing: -0.04em;
+  transition: color 220ms var(--ease);
+}
+
+.todos-project__meta {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.todos-project__task-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.todo-task-card__body {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.todo-task-card__footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .board-grid--lanes {

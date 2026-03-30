@@ -463,11 +463,11 @@ function moveSubtasksToLane(db: DatabaseClient, parentTaskId: string, laneId: st
     .run();
 }
 
-function orderTasksForProject(taskRows: TaskRecord[], projectLanes: LaneRecord[]) {
+function orderTasksForProject<T extends TaskRecord>(taskRows: T[], projectLanes: LaneRecord[]) {
   const tasksById = new Map(taskRows.map((task) => [task.id, task]));
-  const topLevelByLane = new Map<string, TaskRecord[]>();
-  const subtasksByParent = new Map<string, TaskRecord[]>();
-  const orderedTasks: TaskRecord[] = [];
+  const topLevelByLane = new Map<string, T[]>();
+  const subtasksByParent = new Map<string, T[]>();
+  const orderedTasks: T[] = [];
   const includedTaskIds = new Set<string>();
 
   taskRows.forEach((task) => {
@@ -513,7 +513,7 @@ function orderTasksForProject(taskRows: TaskRecord[], projectLanes: LaneRecord[]
         orderedTasks.push({
           ...task,
           parentTaskId: null
-        });
+        } as T);
         return;
       }
 
@@ -639,6 +639,78 @@ export function listProjectsForUser(db: DatabaseClient, userId: string) {
         taskCount: laneCounts.get(lane.id) ?? 0
       }))
   }));
+}
+
+export function listTodoProjectGroupsForUser(db: DatabaseClient, userId: string) {
+  const projectRows = db
+    .select()
+    .from(projects)
+    .where(eq(projects.userId, userId))
+    .orderBy(desc(projects.updatedAt))
+    .all();
+
+  if (projectRows.length === 0) {
+    return [];
+  }
+
+  const projectIds = projectRows.map((project) => project.id);
+  const laneRows = db
+    .select()
+    .from(lanes)
+    .where(inArray(lanes.projectId, projectIds))
+    .orderBy(asc(lanes.position), asc(lanes.createdAt))
+    .all();
+  const todoLanesByProjectId = new Map<string, LaneRecord>();
+
+  for (const lane of laneRows) {
+    if (!todoLanesByProjectId.has(lane.projectId) && normalizeLaneName(lane.name) === "todo") {
+      todoLanesByProjectId.set(lane.projectId, lane);
+    }
+  }
+
+  const todoLaneIds = Array.from(todoLanesByProjectId.values(), (lane) => lane.id);
+  if (todoLaneIds.length === 0) {
+    return [];
+  }
+
+  const tasksWithTags = attachTagsToTasks(
+    db,
+    db
+      .select()
+      .from(tasks)
+      .where(inArray(tasks.laneId, todoLaneIds))
+      .all()
+  );
+
+  if (tasksWithTags.length === 0) {
+    return [];
+  }
+
+  const tasksByProjectId = new Map<string, TaskRecordWithTags[]>();
+
+  tasksWithTags.forEach((task) => {
+    const projectTasks = tasksByProjectId.get(task.projectId) ?? [];
+    projectTasks.push(task);
+    tasksByProjectId.set(task.projectId, projectTasks);
+  });
+
+  return projectRows.flatMap((project) => {
+    const todoLane = todoLanesByProjectId.get(project.id);
+    const projectTasks = tasksByProjectId.get(project.id) ?? [];
+
+    if (!todoLane || projectTasks.length === 0) {
+      return [];
+    }
+
+    return [
+      {
+        projectId: project.id,
+        projectName: project.name,
+        projectTicketPrefix: requireProjectTicketPrefix(project),
+        tasks: orderTasksForProject(projectTasks, [todoLane])
+      }
+    ];
+  });
 }
 
 export function backfillTicketIds(db: DatabaseClient) {

@@ -36,6 +36,7 @@ export function AppShell({ user }: { user: User }) {
   const location = useLocation();
   const navigate = useNavigate();
   const boardMatch = useMatch("/projects/:projectTicketPrefix/:ticketId?");
+  const todosMatch = useMatch("/todos");
   const isProjectsRoute = location.pathname === "/";
   const [searchParams, setSearchParams] = useSearchParams();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -56,7 +57,12 @@ export function AppShell({ user }: { user: User }) {
   const taskTagsQuery = useQuery({
     queryKey: ["task-tags"],
     queryFn: () => api.listTaskTags(),
-    enabled: Boolean(boardMatch)
+    enabled: Boolean(boardMatch || todosMatch)
+  });
+  const todosQuery = useQuery({
+    queryKey: ["todos"],
+    queryFn: () => api.listTodoGroups(),
+    enabled: Boolean(todosMatch)
   });
   const createProjectMutation = useCreateProjectMutation({
     onSuccess: async (project) => {
@@ -97,10 +103,11 @@ export function AppShell({ user }: { user: User }) {
     }
   });
   const avatarLetter = getAvatarLetter(user);
-  const showNavSearch = Boolean(boardMatch || isProjectsRoute);
+  const isTaskSearchRoute = Boolean(boardMatch || todosMatch);
+  const showNavSearch = Boolean(isTaskSearchRoute || isProjectsRoute);
   const navSearch = showNavSearch ? searchParams.get("q") ?? "" : "";
-  const navSearchLabel = boardMatch ? "Search cards" : "Search boards";
-  const navTagSearch = boardMatch ? searchParams.get("tags") ?? "" : "";
+  const navSearchLabel = boardMatch ? "Search cards" : todosMatch ? "Search todos" : "Search boards";
+  const navTagSearch = isTaskSearchRoute ? searchParams.get("tags") ?? "" : "";
   const availableTagFilters = taskTagsQuery.data ?? [];
   const availableTagFilterMap = useMemo(
     () => new Map(availableTagFilters.map((tag) => [normalizeTagKey(tag.label), tag])),
@@ -131,6 +138,10 @@ export function AppShell({ user }: { user: User }) {
         ) ?? null
       : null;
   const projectSwitcherLabel = activeProject?.name ?? "All projects";
+  const totalTodoCount = useMemo(
+    () => (todosQuery.data ?? []).reduce((count, group) => count + group.tasks.length, 0),
+    [todosQuery.data]
+  );
   const deferredProjectSwitcherInput = useDeferredValue(projectSwitcherInput.trim().toLowerCase());
   const visibleProjects = useMemo(() => {
     const projects = projectsQuery.data ?? [];
@@ -161,12 +172,12 @@ export function AppShell({ user }: { user: User }) {
   }, [isProjectSwitcherOpen]);
 
   useEffect(() => {
-    if (boardMatch) {
+    if (isTaskSearchRoute) {
       return;
     }
 
     setIsTagFilterOpen(false);
-  }, [boardMatch]);
+  }, [isTaskSearchRoute]);
 
   function updateRouteParams(updater: (params: URLSearchParams) => void) {
     const nextParams = new URLSearchParams(searchParams);
@@ -279,6 +290,14 @@ export function AppShell({ user }: { user: User }) {
             </Link>
             <nav className="subnav">
               <div className="subnav__cluster subnav__cluster--primary">
+                <NavLink className={({ isActive }) => `subnav__link${isActive ? " is-active" : ""}`} to="/todos">
+                  TODO
+                </NavLink>
+                {todosMatch && !todosQuery.isPending && !todosQuery.error ? (
+                  <span className="label-chip label-chip--soft subnav__meta-chip" data-testid="todos-nav-count">
+                    {totalTodoCount} todos
+                  </span>
+                ) : null}
                 <NavLink className={({ isActive }) => `subnav__link${isActive ? " is-active" : ""}`} end to="/">
                   Projects
                 </NavLink>
@@ -386,7 +405,7 @@ export function AppShell({ user }: { user: User }) {
                       value={navSearch}
                     />
                   </label>
-                  {boardMatch ? (
+                  {isTaskSearchRoute ? (
                     <div className="subnav__search subnav__search--tag-filter" ref={tagFilterRef}>
                       <div
                         className={`subnav__search-combo${isTagFilterOpen ? " is-open" : ""}`}

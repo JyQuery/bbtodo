@@ -23,6 +23,179 @@ afterEach(async () => {
 });
 
 describe("projects and tasks API", () => {
+  it("lists todo-lane tasks across projects grouped by board", async () => {
+    const oidc = createMutableMockOidcProvider({
+      subject: "user-1",
+      email: "one@example.com",
+      displayName: "User One"
+    });
+    const app = buildApp({
+      config: testConfig,
+      oidcProvider: oidc.provider,
+      sqlitePath: ":memory:"
+    });
+    createdApps.push(app);
+
+    const session = await loginWithOidc(app);
+
+    const createFirstProjectResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects",
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        name: "Billing cleanup"
+      }
+    });
+    const firstProject = createFirstProjectResponse.json();
+
+    const createSecondProjectResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects",
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        name: "Partner audit"
+      }
+    });
+    const secondProject = createSecondProjectResponse.json();
+
+    const createTodoParentResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/projects/${firstProject.id}/tasks`,
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        title: "Review retry settings",
+        tags: [tag("backend", "sky")]
+      }
+    });
+    const todoParentTask = createTodoParentResponse.json();
+
+    await app.inject({
+      method: "POST",
+      url: `/api/v1/projects/${firstProject.id}/tasks`,
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        title: "Queue copy pass",
+        tags: [tag("copy")]
+      }
+    });
+
+    await app.inject({
+      method: "POST",
+      url: `/api/v1/projects/${firstProject.id}/tasks`,
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        parentTaskId: todoParentTask.id,
+        title: "Capture callback evidence",
+        tags: [tag("retry", "coral")]
+      }
+    });
+
+    await app.inject({
+      method: "POST",
+      url: `/api/v1/projects/${firstProject.id}/tasks`,
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        laneId: firstProject.laneSummaries[1].id,
+        title: "Already in progress"
+      }
+    });
+
+    const createSecondProjectTodoResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/projects/${secondProject.id}/tasks`,
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      },
+      payload: {
+        title: "Check partner scope",
+        tags: [tag("partner", "orchid")]
+      }
+    });
+    const secondProjectTodoTask = createSecondProjectTodoResponse.json();
+
+    const listTodosResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/todos",
+      cookies: {
+        bbtodo_session: session.sessionCookie
+      }
+    });
+
+    expect(listTodosResponse.statusCode).toBe(200);
+    expect(listTodosResponse.json()).toEqual([
+      {
+        projectId: secondProject.id,
+        projectName: "Partner audit",
+        projectTicketPrefix: "PART",
+        tasks: [
+          expect.objectContaining({
+            id: secondProjectTodoTask.id,
+            ticketId: "PART-1",
+            title: "Check partner scope"
+          })
+        ]
+      },
+      {
+        projectId: firstProject.id,
+        projectName: "Billing cleanup",
+        projectTicketPrefix: "BILL",
+        tasks: [
+          expect.objectContaining({
+            parentTaskId: null,
+            ticketId: "BILL-1",
+            title: "Review retry settings"
+          }),
+          expect.objectContaining({
+            parentTaskId: todoParentTask.id,
+            ticketId: "BILL-3",
+            title: "Capture callback evidence"
+          }),
+          expect.objectContaining({
+            parentTaskId: null,
+            ticketId: "BILL-2",
+            title: "Queue copy pass"
+          })
+        ]
+      }
+    ]);
+  });
+
+  it("requires auth to list grouped todos", async () => {
+    const oidc = createMutableMockOidcProvider({
+      subject: "user-1",
+      email: "one@example.com",
+      displayName: "User One"
+    });
+    const app = buildApp({
+      config: testConfig,
+      oidcProvider: oidc.provider,
+      sqlitePath: ":memory:"
+    });
+    createdApps.push(app);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/todos"
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({
+      message: "Authentication required."
+    });
+  });
+
   it("supports the full project and task lifecycle", async () => {
     const oidc = createMutableMockOidcProvider({
       subject: "user-1",
@@ -1651,10 +1824,12 @@ describe("projects and tasks API", () => {
       expect.objectContaining({
         ErrorResponse: expect.any(Object),
         Task: expect.any(Object),
+        TodoProjectGroup: expect.any(Object),
         TaskTagInput: expect.any(Object)
       })
     );
     expect(openApi.paths["/api/v1/task-tags"]).toBeDefined();
+    expect(openApi.paths["/api/v1/todos"]).toBeDefined();
     expect(openApi.paths["/api/v1/projects"]).toBeDefined();
     expect(openApi.paths["/api/v1/projects/by-ticket-prefix/{ticketPrefix}"]).toBeDefined();
     expect(openApi.paths["/api/v1/tasks/by-ticket/{ticketId}"]).toBeDefined();
@@ -1672,6 +1847,9 @@ describe("projects and tasks API", () => {
     expect(swaggerUiJson.components.schemas.TaskTag.$schema).toBeUndefined();
     expect(swaggerUiJson.paths["/api/v1/task-tags"].get.responses["200"].content["application/json"].schema.items).toEqual({
       $ref: "#/components/schemas/TaskTag"
+    });
+    expect(swaggerUiJson.paths["/api/v1/todos"].get.responses["200"].content["application/json"].schema.items).toEqual({
+      $ref: "#/components/schemas/TodoProjectGroup"
     });
     expect(
       openApi.paths["/api/v1/projects/{projectId}/tasks"].post.requestBody.content["application/json"].schema.properties
@@ -1708,6 +1886,19 @@ describe("projects and tasks API", () => {
         "application/json": {
           schema: {
             $ref: "#/components/schemas/Task"
+          }
+        }
+      },
+      description: "Default Response"
+    });
+    expect(openApi.paths["/api/v1/todos"].get.responses["200"]).toEqual({
+      content: {
+        "application/json": {
+          schema: {
+            items: {
+              $ref: "#/components/schemas/TodoProjectGroup"
+            },
+            type: "array"
           }
         }
       },

@@ -76,6 +76,14 @@ export const taskResponseSchema = z.object({
   updatedAt: z.string()
 });
 
+export const todoProjectGroupResponseSchema = z.object({
+  projectId: z.string(),
+  projectName: z.string(),
+  projectTicketPrefix: projectTicketPrefixSchema,
+  tasks: z.array(taskResponseSchema)
+});
+export const todoProjectGroupsResponseSchema = z.array(todoProjectGroupResponseSchema);
+
 export const apiTokenSummarySchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -174,6 +182,7 @@ z.globalRegistry.add(meResponseSchema, { id: "Me" });
 z.globalRegistry.add(laneResponseSchema, { id: "Lane" });
 z.globalRegistry.add(projectResponseSchema, { id: "Project" });
 z.globalRegistry.add(taskResponseSchema, { id: "Task" });
+z.globalRegistry.add(todoProjectGroupResponseSchema, { id: "TodoProjectGroup" });
 z.globalRegistry.add(taskTagSchema, { id: "TaskTag" });
 z.globalRegistry.add(apiTokenSummarySchema, { id: "ApiTokenSummary" });
 z.globalRegistry.add(errorResponseSchema, { id: "ErrorResponse" });
@@ -234,6 +243,24 @@ export function toTaskResponse(
     position: task.position,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt
+  });
+}
+
+export function toTodoProjectGroupResponse(group: {
+  projectId: string;
+  projectName: string;
+  projectTicketPrefix: string;
+  tasks: TaskRecordWithTags[];
+}) {
+  return todoProjectGroupResponseSchema.parse({
+    projectId: group.projectId,
+    projectName: group.projectName,
+    projectTicketPrefix: group.projectTicketPrefix,
+    tasks: group.tasks.map((task) =>
+      toTaskResponse(task, {
+        ticketPrefix: group.projectTicketPrefix
+      })
+    )
   });
 }
 

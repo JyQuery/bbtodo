@@ -25,6 +25,7 @@ export {
   getOwnedTask,
   listLanesForProject,
   listProjectsForUser,
+  listTodoProjectGroupsForUser,
   listTaskTagsForUser,
   listTasksForProject,
   updateOwnedLane,

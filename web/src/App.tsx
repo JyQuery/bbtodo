@@ -10,6 +10,7 @@ import { ApiTokensPage } from "./pages/ApiTokensPage";
 import { BoardPage } from "./pages/BoardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
+import { TodosPage } from "./pages/TodosPage";
 import "./styles.css";
 
 function AuthenticatedApp() {
@@ -49,6 +50,7 @@ function AuthenticatedApp() {
     <Routes>
       <Route element={<AppShell user={meQuery.data} />}>
         <Route element={<ProjectsPage />} path="/" />
+        <Route element={<TodosPage />} path="/todos" />
         <Route element={<BoardPage />} path="/projects/:projectTicketPrefix/:ticketId?" />
         <Route element={<ApiTokensPage />} path="/settings/api-tokens" />
         <Route element={<Navigate replace to="/" />} path="*" />
