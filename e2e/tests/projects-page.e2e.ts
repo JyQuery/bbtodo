@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { mockAuthenticated, projectsForGrid, tasks } from "./fixtures";
 
@@ -6,63 +6,101 @@ const GRID_BLANK_RIGHT_INSET = 10;
 const GRID_BLANK_TOP_OFFSET = 18;
 const GRID_BLANK_BOTTOM_OFFSET = 10;
 const GRID_BLANK_LEFT_INSET = 8;
-const GRID_BLANK_SCAN_STEP = 12;
+const GRID_BLANK_SCAN_STEP = 4;
+
+async function waitForProjectGridCardsToFinishAnimating(projectGrid: Locator) {
+  const projectCards = projectGrid.locator(".project-card");
+  const projectCardCount = await projectCards.count();
+
+  if (projectCardCount === 0) {
+    return;
+  }
+
+  await projectCards.nth(projectCardCount - 1).evaluate(async (element) => {
+    await Promise.all(
+      element.getAnimations().map(async (animation) => {
+        if (animation.playState === "finished" || animation.playState === "idle") {
+          return;
+        }
+
+        try {
+          await animation.finished;
+        } catch {
+          // Ignore animations that get canceled while the grid settles.
+        }
+      })
+    );
+  });
+}
 
 async function findProjectGridBlankPoint(page: Page) {
   const projectGrid = page.locator(".project-grid");
   await expect(projectGrid).toBeVisible();
+  await waitForProjectGridCardsToFinishAnimating(projectGrid);
 
-  const point = await projectGrid.evaluate(
-    (
-      gridElement,
-      { bottomOffset, leftInset, rightInset, scanStep, topOffset }: {
-        bottomOffset: number;
-        leftInset: number;
-        rightInset: number;
-        scanStep: number;
-        topOffset: number;
-      }
-    ) => {
-      const gridRect = gridElement.getBoundingClientRect();
-      const cardRects = Array.from(gridElement.querySelectorAll<HTMLElement>(".project-card")).map((card) =>
-        card.getBoundingClientRect()
+  let point: { x: number; y: number } | null = null;
+
+  await expect
+    .poll(async () => {
+      point = await projectGrid.evaluate(
+        (
+          gridElement,
+          { bottomOffset, leftInset, rightInset, scanStep, topOffset }: {
+            bottomOffset: number;
+            leftInset: number;
+            rightInset: number;
+            scanStep: number;
+            topOffset: number;
+          }
+        ) => {
+          const gridRect = gridElement.getBoundingClientRect();
+          const cardRects = Array.from(gridElement.querySelectorAll<HTMLElement>(".project-card")).map((card) =>
+            card.getBoundingClientRect()
+          );
+
+          const minX = gridRect.left + leftInset;
+          const maxX = gridRect.right - rightInset;
+          const minY = gridRect.top + topOffset;
+          const maxY = gridRect.bottom - bottomOffset;
+
+          const isBlankPoint = (x: number, y: number) =>
+            x > gridRect.left &&
+            x < gridRect.right &&
+            y > gridRect.top &&
+            y < gridRect.bottom &&
+            !cardRects.some(
+              (cardRect) => x >= cardRect.left && x <= cardRect.right && y >= cardRect.top && y <= cardRect.bottom
+            );
+
+          for (let y = maxY; y >= minY; y -= scanStep) {
+            for (let x = maxX; x >= minX; x -= scanStep) {
+              if (isBlankPoint(x, y)) {
+                return {
+                  x: x - gridRect.left,
+                  y: y - gridRect.top
+                };
+              }
+            }
+          }
+
+          return null;
+        },
+        {
+          bottomOffset: GRID_BLANK_BOTTOM_OFFSET,
+          leftInset: GRID_BLANK_LEFT_INSET,
+          rightInset: GRID_BLANK_RIGHT_INSET,
+          scanStep: GRID_BLANK_SCAN_STEP,
+          topOffset: GRID_BLANK_TOP_OFFSET
+        }
       );
 
-      const minX = gridRect.left + leftInset;
-      const maxX = gridRect.right - rightInset;
-      const minY = gridRect.top + topOffset;
-      const maxY = gridRect.bottom - bottomOffset;
+      return point !== null;
+    })
+    .toBe(true);
 
-      const isBlankPoint = (x: number, y: number) =>
-        x > gridRect.left &&
-        x < gridRect.right &&
-        y > gridRect.top &&
-        y < gridRect.bottom &&
-        !cardRects.some(
-          (cardRect) => x >= cardRect.left && x <= cardRect.right && y >= cardRect.top && y <= cardRect.bottom
-        );
-
-      for (let y = maxY; y >= minY; y -= scanStep) {
-        for (let x = maxX; x >= minX; x -= scanStep) {
-          if (isBlankPoint(x, y)) {
-            return {
-              x: x - gridRect.left,
-              y: y - gridRect.top
-            };
-          }
-        }
-      }
-
-      throw new Error("Could not find a blank point inside the project grid.");
-    },
-    {
-      bottomOffset: GRID_BLANK_BOTTOM_OFFSET,
-      leftInset: GRID_BLANK_LEFT_INSET,
-      rightInset: GRID_BLANK_RIGHT_INSET,
-      scanStep: GRID_BLANK_SCAN_STEP,
-      topOffset: GRID_BLANK_TOP_OFFSET
-    }
-  );
+  if (!point) {
+    throw new Error("Could not find a blank point inside the project grid.");
+  }
 
   return { projectGrid, point };
 }
