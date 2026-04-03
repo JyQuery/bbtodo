@@ -111,20 +111,6 @@ export function getSessionWithUser(db: DatabaseClient, sessionId: string) {
   };
 }
 
-export function getUserForSession(db: DatabaseClient, sessionId: string) {
-  const sessionWithUser = getSessionWithUser(db, sessionId);
-  if (!sessionWithUser) {
-    return null;
-  }
-
-  if (new Date(sessionWithUser.session.expiresAt).getTime() <= Date.now()) {
-    db.delete(sessions).where(eq(sessions.id, sessionId)).run();
-    return null;
-  }
-
-  return sessionWithUser.user;
-}
-
 export function updateSession(
   db: DatabaseClient,
   input: {

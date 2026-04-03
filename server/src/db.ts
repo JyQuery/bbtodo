@@ -4,7 +4,6 @@ export {
   deleteSession,
   getSession,
   getSessionWithUser,
-  getUserForSession,
   updateSession,
   updateUserTheme,
   upsertUser
