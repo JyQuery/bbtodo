@@ -2124,7 +2124,7 @@ export function BoardPage() {
   const lanesById = useMemo(() => new Map(lanes.map((lane) => [lane.id, lane])), [lanes]);
   const committedTasks = tasksQuery.data ?? [];
   const taskMoveMutationKey = ["task-move", resolvedProjectId] as const;
-  const pendingTaskMoves = useMutationState<PendingTaskMove | null>({
+  const pendingTaskMovesState = useMutationState<PendingTaskMove | null>({
     filters: {
       mutationKey: taskMoveMutationKey,
       status: "pending"
@@ -2140,7 +2140,11 @@ export function BoardPage() {
         submittedAt: mutation.state.submittedAt
       };
     }
-  }).filter((pendingMove): pendingMove is PendingTaskMove => pendingMove !== null);
+  });
+  const pendingTaskMoves = useMemo(
+    () => pendingTaskMovesState.filter((pendingMove): pendingMove is PendingTaskMove => pendingMove !== null),
+    [pendingTaskMovesState]
+  );
   const tasks = useMemo(
     () => applyPendingTaskMoves(committedTasks, pendingTaskMoves, lanesById),
     [committedTasks, lanesById, pendingTaskMoves]
