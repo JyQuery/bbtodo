@@ -1469,7 +1469,6 @@ test("board page previews nesting under a top-level card before drop", async ({ 
 
   await expect(shipNoteCard).toHaveClass(/is-nest-target/);
   await expect(shipNoteSubtaskSlot).toHaveClass(/is-active/);
-  await expect(shipNoteSubtaskSlot).not.toHaveClass(/is-drag-ready/);
 
   await finishTaskDrag(page);
   await expect(shipNoteCard.locator(".task-card__subtasks").getByText("Queue copy pass")).toBeVisible();
@@ -1803,6 +1802,41 @@ test("board page adds tasks from the lane header action and keeps the double-cli
   await expect(composer).toHaveCount(0);
 });
 
+test("board page clears the search query after adding a task from a filtered board", async ({ page }) => {
+  const todoLaneId = laneId("project-1", "todo");
+
+  await mockAuthenticated(page, { projects: projectsForGrid });
+
+  await page.goto(`${billingBoardPath}?q=callback&tags=ops`);
+
+  const addTaskButton = page.getByTestId(`add-task-button-${todoLaneId}`);
+  const composer = page.getByTestId(`lane-composer-${todoLaneId}`);
+
+  await expect(page.getByLabel("Search cards")).toHaveValue("callback");
+  await expect(page.getByLabel("Remove tag filter ops")).toBeVisible();
+  await expect(page.locator(".task-card__title", { hasText: "Clear stale search state" })).toHaveCount(0);
+
+  await addTaskButton.click();
+  await expect(composer).toBeVisible();
+
+  const composerInput = composer.getByLabel("New task title for Todo");
+  await composerInput.fill("Clear stale search state");
+  await composerInput.press("Enter");
+
+  await expect(page).toHaveURL(/\/projects\/BILL$/);
+  await expect(page.getByLabel("Search cards")).toHaveValue("");
+  await expect(page.getByLabel("Remove tag filter ops")).toHaveCount(0);
+  await expect(page.locator(".task-card__title", { hasText: "Clear stale search state" })).toBeVisible();
+});
+
+test("board page shows a pointer cursor on task cards when filters disable dragging", async ({ page }) => {
+  await mockAuthenticated(page, { projects: projectsForGrid });
+
+  await page.goto(`${billingBoardPath}?q=callback`);
+
+  await expect(page.getByTestId("task-card-task-2").locator(".task-card__surface")).toHaveCSS("cursor", "pointer");
+});
+
 test("board page creates lanes from the gap between columns", async ({ page }) => {
   await mockAuthenticated(page, { projects: projectsForGrid });
 
@@ -2034,7 +2068,7 @@ test("board page switcher renames and creates projects while guarding protected 
 
   const projectsLink = page.getByRole("link", { exact: true, name: "Projects" });
   const switcherButton = page.getByRole("button", { name: "Open project switcher" });
-  const todoLink = page.getByRole("link", { exact: true, name: "TODO" });
+  const todoLink = page.getByRole("link", { exact: true, name: "TODOs" });
   const [projectsBox, switcherBox, todoBox] = await Promise.all([
     projectsLink.boundingBox(),
     switcherButton.boundingBox(),

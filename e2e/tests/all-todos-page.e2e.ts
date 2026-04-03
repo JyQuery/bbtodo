@@ -54,7 +54,7 @@ test("all todos page groups todo tasks and supports search and tag filtering", a
   });
 
   await page.goto("/");
-  await page.getByRole("link", { exact: true, name: "TODO" }).click();
+  await page.getByRole("link", { exact: true, name: "TODOs" }).click();
 
   await expect(page).toHaveURL("/todos");
   await expect(page).toHaveTitle("All TODOs | BBTodo");
@@ -95,6 +95,7 @@ test("all todos page groups todo tasks and supports search and tag filtering", a
   await expect(billingGroup.getByTestId("todo-task-card-task-1")).toBeVisible();
   await expect(billingGroup.getByTestId("todo-task-card-task-5")).toBeVisible();
   await expect(billingGroup.getByTestId("todo-task-card-task-4")).toBeVisible();
+  await expect(billingGroup.getByLabel("Open todo BILL-1")).toHaveCSS("cursor", "pointer");
 
   const billingTaskOrder = await billingGroup
     .locator("[data-testid^='todo-task-card-'] .task-card__title")
@@ -134,7 +135,7 @@ test("all todos page links into boards and task detail boards", async ({ page })
 
   await page.goto("/todos");
   await page.getByLabel("Open todo PART-1").click();
-  await expect(page).toHaveURL(/\/projects\/PART\/PART-1\?q=PART-1$/);
+  await expect(page).toHaveURL("/projects/PART/PART-1");
   await expect(page.getByTestId("todos-nav-count")).toHaveCount(0);
 });
 

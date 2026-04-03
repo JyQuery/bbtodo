@@ -2319,6 +2319,7 @@ textarea:focus {
 }
 
 .task-card__surface {
+  cursor: pointer;
   display: grid;
   gap: 0.4rem;
   position: relative;
