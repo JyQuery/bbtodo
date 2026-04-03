@@ -1,4 +1,4 @@
-import { type DragEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type DragEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import {
   closestCorners,
@@ -2257,9 +2257,10 @@ export function BoardPage() {
     return nextDropPositions;
   }, [taskDragPreview]);
 
-  function laneUsesDoneOrdering(laneId: string | null) {
-    return laneId ? isDoneLaneName(lanesById.get(laneId)?.name ?? "") : false;
-  }
+  const laneUsesDoneOrdering = useCallback(
+    (laneId: string | null) => (laneId ? isDoneLaneName(lanesById.get(laneId)?.name ?? "") : false),
+    [lanesById]
+  );
 
   function taskDragPreviewEquals(left: TaskDragPreview | null, right: TaskDragPreview | null) {
     if (left === right) {
@@ -2659,51 +2660,57 @@ export function BoardPage() {
     taskDragPreviewUpdatedAtRef.current = null;
   }
 
-  function removeQueuedTaskMove(clientOrder: number) {
+  const removeQueuedTaskMove = useCallback((clientOrder: number) => {
     setTaskMoveQueue((currentQueue) => currentQueue.filter((queuedMove) => queuedMove.clientOrder !== clientOrder));
-  }
+  }, []);
 
-  function sendTaskMove(taskMove: TaskMoveMutationVariables) {
-    moveTaskMutation.mutate(taskMove, {
-      onSettled: () => {
-        removeQueuedTaskMove(taskMove.clientOrder);
+  const sendTaskMove = useCallback(
+    (taskMove: TaskMoveMutationVariables) => {
+      moveTaskMutation.mutate(taskMove, {
+        onSettled: () => {
+          removeQueuedTaskMove(taskMove.clientOrder);
+        }
+      });
+    },
+    [moveTaskMutation, removeQueuedTaskMove]
+  );
+
+  const enqueueTaskMove = useCallback(
+    (taskMove: Omit<TaskMoveMutationVariables, "clientOrder">) => {
+      const nextTaskMove = {
+        ...taskMove,
+        clientOrder: taskMoveClientOrderRef.current + 1
+      } satisfies TaskMoveMutationVariables;
+      taskMoveClientOrderRef.current = nextTaskMove.clientOrder;
+
+      if (!laneUsesDoneOrdering(taskMove.laneId)) {
+        setTaskMoveQueue((currentQueue) => [
+          ...currentQueue,
+          {
+            ...nextTaskMove,
+            queueStatus: "sending"
+          }
+        ]);
+        sendTaskMove(nextTaskMove);
+        return;
       }
-    });
-  }
 
-  function enqueueTaskMove(taskMove: Omit<TaskMoveMutationVariables, "clientOrder">) {
-    const nextTaskMove = {
-      ...taskMove,
-      clientOrder: taskMoveClientOrderRef.current + 1
-    } satisfies TaskMoveMutationVariables;
-    taskMoveClientOrderRef.current = nextTaskMove.clientOrder;
-
-    if (!laneUsesDoneOrdering(taskMove.laneId)) {
+      const shouldSendImmediately = !taskMoveQueue.some(
+        (queuedMove) => queuedMove.queueStatus === "sending" && laneUsesDoneOrdering(queuedMove.laneId)
+      );
       setTaskMoveQueue((currentQueue) => [
         ...currentQueue,
         {
           ...nextTaskMove,
-          queueStatus: "sending"
+          queueStatus: shouldSendImmediately ? "sending" : "queued"
         }
       ]);
-      sendTaskMove(nextTaskMove);
-      return;
-    }
-
-    const shouldSendImmediately = !taskMoveQueue.some(
-      (queuedMove) => queuedMove.queueStatus === "sending" && laneUsesDoneOrdering(queuedMove.laneId)
-    );
-    setTaskMoveQueue((currentQueue) => [
-      ...currentQueue,
-      {
-        ...nextTaskMove,
-        queueStatus: shouldSendImmediately ? "sending" : "queued"
+      if (shouldSendImmediately) {
+        sendTaskMove(nextTaskMove);
       }
-    ]);
-    if (shouldSendImmediately) {
-      sendTaskMove(nextTaskMove);
-    }
-  }
+    },
+    [laneUsesDoneOrdering, sendTaskMove, taskMoveQueue]
+  );
 
   useEffect(() => {
     const nextQueuedDoneMove = taskMoveQueue.find(
@@ -2727,7 +2734,7 @@ export function BoardPage() {
       )
     );
     sendTaskMove(nextQueuedDoneMove);
-  }, [taskMoveQueue]);
+  }, [taskMoveQueue, laneUsesDoneOrdering, sendTaskMove]);
 
   function handleLaneDragStart(event: DragEvent<HTMLElement>, laneId: string) {
     if (isLaneDragDisabled) {
