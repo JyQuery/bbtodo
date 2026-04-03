@@ -2400,6 +2400,7 @@ export function BoardPage() {
       setDraftTitle("");
       updateBoardParams((params) => {
         params.delete("q");
+        params.delete("tags");
       });
       await invalidateBoardData();
     }

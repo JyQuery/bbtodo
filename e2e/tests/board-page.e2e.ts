@@ -1807,12 +1807,13 @@ test("board page clears the search query after adding a task from a filtered boa
 
   await mockAuthenticated(page, { projects: projectsForGrid });
 
-  await page.goto(`${billingBoardPath}?q=callback`);
+  await page.goto(`${billingBoardPath}?q=callback&tags=ops`);
 
   const addTaskButton = page.getByTestId(`add-task-button-${todoLaneId}`);
   const composer = page.getByTestId(`lane-composer-${todoLaneId}`);
 
   await expect(page.getByLabel("Search cards")).toHaveValue("callback");
+  await expect(page.getByLabel("Remove tag filter ops")).toBeVisible();
   await expect(page.locator(".task-card__title", { hasText: "Clear stale search state" })).toHaveCount(0);
 
   await addTaskButton.click();
@@ -1824,7 +1825,16 @@ test("board page clears the search query after adding a task from a filtered boa
 
   await expect(page).toHaveURL(/\/projects\/BILL$/);
   await expect(page.getByLabel("Search cards")).toHaveValue("");
+  await expect(page.getByLabel("Remove tag filter ops")).toHaveCount(0);
   await expect(page.locator(".task-card__title", { hasText: "Clear stale search state" })).toBeVisible();
+});
+
+test("board page shows a pointer cursor on task cards when filters disable dragging", async ({ page }) => {
+  await mockAuthenticated(page, { projects: projectsForGrid });
+
+  await page.goto(`${billingBoardPath}?q=callback`);
+
+  await expect(page.getByTestId("task-card-task-2").locator(".task-card__surface")).toHaveCSS("cursor", "pointer");
 });
 
 test("board page creates lanes from the gap between columns", async ({ page }) => {
