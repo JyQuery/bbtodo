@@ -95,6 +95,7 @@ test("all todos page groups todo tasks and supports search and tag filtering", a
   await expect(billingGroup.getByTestId("todo-task-card-task-1")).toBeVisible();
   await expect(billingGroup.getByTestId("todo-task-card-task-5")).toBeVisible();
   await expect(billingGroup.getByTestId("todo-task-card-task-4")).toBeVisible();
+  await expect(billingGroup.getByLabel("Open todo BILL-1")).toHaveCSS("cursor", "pointer");
 
   const billingTaskOrder = await billingGroup
     .locator("[data-testid^='todo-task-card-'] .task-card__title")
