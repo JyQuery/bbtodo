@@ -1,7 +1,6 @@
 import { and, eq } from "drizzle-orm";
 
 import { type DatabaseClient, type UserTheme, sessions, users } from "./schema.js";
-import { type OidcOAuthToken, serializeOidcOAuthToken } from "../oidc.js";
 
 export async function upsertUser(
   db: DatabaseClient,
@@ -72,7 +71,7 @@ export function updateUserTheme(
 export function createSession(
   db: DatabaseClient,
   input: {
-    oidcToken: OidcOAuthToken | null;
+    oidcToken: string | null;
     userId: string;
     expiresAt: string;
   }
@@ -81,7 +80,7 @@ export function createSession(
     id: crypto.randomUUID(),
     userId: input.userId,
     expiresAt: input.expiresAt,
-    oidcToken: input.oidcToken ? serializeOidcOAuthToken(input.oidcToken) : null,
+    oidcToken: input.oidcToken,
     createdAt: new Date().toISOString()
   };
 
@@ -129,7 +128,7 @@ export function getUserForSession(db: DatabaseClient, sessionId: string) {
 export function updateSession(
   db: DatabaseClient,
   input: {
-    oidcToken: OidcOAuthToken | null;
+    oidcToken: string | null;
     sessionId: string;
     expiresAt: string;
   }
@@ -138,7 +137,7 @@ export function updateSession(
     .update(sessions)
     .set({
       expiresAt: input.expiresAt,
-      oidcToken: input.oidcToken ? serializeOidcOAuthToken(input.oidcToken) : null
+      oidcToken: input.oidcToken
     })
     .where(eq(sessions.id, input.sessionId))
     .run();

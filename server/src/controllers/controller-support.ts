@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 
@@ -13,9 +15,9 @@ import {
   deserializeOidcOAuthToken,
   mergeOidcRefreshToken,
   normalizeOidcOAuthToken,
-  OIDC_OAUTH_NAMESPACE,
   type OidcOAuth2Namespace
 } from "../oidc.js";
+import { decryptSessionToken, encryptSessionToken } from "../session-token-crypto.js";
 
 export const SESSION_COOKIE = "bbtodo_session";
 export const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -23,8 +25,15 @@ export const SESSION_COOKIE_MAX_AGE_SECONDS = 400 * 24 * 60 * 60;
 export const SESSION_SUPPORT_DECORATION = "bbtodoSessionSupport";
 
 export interface SessionSupportState {
+  encryptionKey: Buffer;
   oauth2Namespace: OidcOAuth2Namespace | null;
   secureCookie: boolean;
+}
+
+declare module "fastify" {
+  interface FastifyInstance {
+    bbtodoSessionSupport: SessionSupportState;
+  }
 }
 
 export const apiDocsSecurity: Array<Record<string, string[]>> = [
@@ -41,10 +50,6 @@ export type TypedApp = ReturnType<typeof withZodTypeProvider>;
 
 type AuthRequest = Pick<FastifyRequest, "headers" | "cookies">;
 type AuthReply = Pick<FastifyReply, "clearCookie" | "setCookie" | "status" | "send">;
-type AppWithSessionSupport = FastifyInstance & {
-  [SESSION_SUPPORT_DECORATION]: SessionSupportState;
-};
-
 interface SessionAuthContext {
   renewed: boolean;
   source: "session";
@@ -59,7 +64,7 @@ export interface ApiAuthContext {
 const pendingSessionRefreshes = new Map<string, Promise<SessionAuthContext | null>>();
 
 function getSessionSupport(app: FastifyInstance) {
-  return (app as AppWithSessionSupport)[SESSION_SUPPORT_DECORATION];
+  return app[SESSION_SUPPORT_DECORATION];
 }
 
 function getSessionCookieExpiresAt() {
@@ -100,6 +105,31 @@ export function getSignedCookieValue(
   return unsigned.value;
 }
 
+export function encryptOidcTokenForStorage(
+  app: FastifyInstance,
+  oidcToken: Parameters<typeof encryptSessionToken>[0]
+) {
+  return encryptSessionToken(oidcToken, getSessionSupport(app).encryptionKey);
+}
+
+export function decryptStoredOidcToken(
+  app: FastifyInstance,
+  rawToken: string | null | undefined
+) {
+  if (!rawToken) {
+    return null;
+  }
+
+  return (
+    decryptSessionToken(rawToken, getSessionSupport(app).encryptionKey) ??
+    deserializeOidcOAuthToken(rawToken)
+  );
+}
+
+function formatSessionIdForLog(sessionId: string) {
+  return createHash("sha256").update(sessionId).digest("hex").slice(0, 12);
+}
+
 async function resolveSessionAuthContext(
   app: FastifyInstance,
   db: DatabaseClient,
@@ -120,7 +150,7 @@ async function resolveSessionAuthContext(
 
   const sessionSupport = getSessionSupport(app);
   const oauth2Namespace = sessionSupport.oauth2Namespace;
-  const sessionToken = deserializeOidcOAuthToken(sessionWithUser.session.oidcToken);
+  const sessionToken = decryptStoredOidcToken(app, sessionWithUser.session.oidcToken);
 
   if (!oauth2Namespace || !sessionToken) {
     deleteSession(db, sessionId);
@@ -144,7 +174,7 @@ async function resolveSessionAuthContext(
           } satisfies SessionAuthContext;
         }
 
-        const latestSessionToken = deserializeOidcOAuthToken(latestSessionWithUser.session.oidcToken);
+        const latestSessionToken = decryptStoredOidcToken(app, latestSessionWithUser.session.oidcToken);
         if (!latestSessionToken) {
           deleteSession(db, sessionId);
           return null;
@@ -160,7 +190,7 @@ async function resolveSessionAuthContext(
         );
         const refreshedSession = updateSession(db, {
           expiresAt: new Date(Date.now() + SESSION_TTL_MS).toISOString(),
-          oidcToken: refreshedToken,
+          oidcToken: encryptOidcTokenForStorage(app, refreshedToken),
           sessionId
         });
 
@@ -174,7 +204,10 @@ async function resolveSessionAuthContext(
           user: latestSessionWithUser.user
         } satisfies SessionAuthContext;
       } catch (error) {
-        app.log.warn({ err: error, sessionId }, "OIDC session refresh failed.");
+        app.log.warn(
+          { err: error, sessionFingerprint: formatSessionIdForLog(sessionId) },
+          "OIDC session refresh failed."
+        );
         deleteSession(db, sessionId);
         return null;
       } finally {

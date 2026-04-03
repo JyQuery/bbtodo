@@ -211,7 +211,7 @@ export function AppShell({ user }: { user: User }) {
 
     const timeoutId = window.setTimeout(() => {
       setToast(null);
-    }, 4000);
+    }, toast.tone === "warning" ? 9000 : 4000);
 
     return () => {
       window.clearTimeout(timeoutId);

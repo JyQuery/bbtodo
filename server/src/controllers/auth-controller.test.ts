@@ -13,6 +13,10 @@ import {
 } from "../oidc.js";
 import { SESSION_COOKIE_MAX_AGE_SECONDS } from "./controller-support.js";
 import {
+  decryptSessionToken,
+  deriveSessionTokenEncryptionKey
+} from "../session-token-crypto.js";
+import {
   createMutableMockOidcProvider,
   loginWithOidc,
   testConfig
@@ -74,6 +78,18 @@ function getPersistedSession(sqlitePath: string, sessionId: string) {
       } | undefined) ?? null
     );
   });
+}
+
+function getDecryptedPersistedToken(sqlitePath: string, sessionId: string) {
+  const persistedSession = getPersistedSession(sqlitePath, sessionId);
+  if (!persistedSession?.oidc_token) {
+    return null;
+  }
+
+  return decryptSessionToken(
+    persistedSession.oidc_token,
+    deriveSessionTokenEncryptionKey(testConfig.sessionSecret)
+  );
 }
 
 function expireSession(sqlitePath: string, sessionId: string) {
@@ -165,6 +181,7 @@ describe("auth routes", () => {
     expect(session.callbackResponse.headers.location).toBe("/");
     expect(session.sessionCookieRecord.maxAge).toBe(SESSION_COOKIE_MAX_AGE_SECONDS);
     expect(persistedSession?.oidc_token).not.toBeNull();
+    expect(persistedSession?.oidc_token).not.toContain("test-refresh-token");
 
     const meResponse = await app.inject({
       method: "GET",
@@ -244,13 +261,7 @@ describe("auth routes", () => {
     });
 
     const refreshedSession = getPersistedSession(sqlitePath, sessionId);
-    const refreshedToken =
-      refreshedSession?.oidc_token !== null && refreshedSession?.oidc_token !== undefined
-        ? (JSON.parse(refreshedSession.oidc_token) as {
-            access_token: string;
-            refresh_token?: string;
-          })
-        : null;
+    const refreshedToken = getDecryptedPersistedToken(sqlitePath, sessionId);
 
     expect(response.statusCode).toBe(200);
     expect(response.cookies).toEqual(
@@ -335,13 +346,7 @@ describe("auth routes", () => {
     });
 
     const persistedSession = getPersistedSession(sqlitePath, sessionId);
-    const refreshedToken =
-      persistedSession?.oidc_token !== null && persistedSession?.oidc_token !== undefined
-        ? (JSON.parse(persistedSession.oidc_token) as {
-            access_token: string;
-            refresh_token?: string;
-          })
-        : null;
+    const refreshedToken = getDecryptedPersistedToken(sqlitePath, sessionId);
 
     expect(response.statusCode).toBe(200);
     expect(refreshedToken).toMatchObject({

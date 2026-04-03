@@ -24,15 +24,14 @@ import {
   buildAuthorizationRedirectUrl,
   createOidcNonce,
   normalizeOidcOAuthToken,
-  type JwksSecretResolver,
   type JwtVerifier,
-  type OidcOAuth2Namespace,
   verifyOidcIdToken
 } from "../oidc.js";
 import {
   SESSION_COOKIE,
   SESSION_TTL_MS,
   apiDocsSecurity,
+  encryptOidcTokenForStorage,
   getSignedCookieValue,
   requireApiUser,
   setSessionCookie,
@@ -54,11 +53,6 @@ export function registerAuthController(
   }
 ) {
   const { config, database, secureCookie } = options;
-  const authApp = app as TypedApp & {
-    [OIDC_OAUTH_NAMESPACE]: OidcOAuth2Namespace;
-    jwt: JwtVerifier;
-    oidcJwksSecretResolver?: JwksSecretResolver;
-  };
 
   function clearOidcCookies(reply: {
     clearCookie: FastifyReply["clearCookie"];
@@ -94,7 +88,7 @@ export function registerAuthController(
         signed: true
       });
 
-      const authorizationUri = await authApp[OIDC_OAUTH_NAMESPACE].generateAuthorizationUri(
+      const authorizationUri = await app[OIDC_OAUTH_NAMESPACE].generateAuthorizationUri(
         request,
         reply
       );
@@ -124,11 +118,11 @@ export function registerAuthController(
 
       let tokenResponse:
         | Awaited<
-            ReturnType<OidcOAuth2Namespace["getAccessTokenFromAuthorizationCodeFlow"]>
+            ReturnType<TypedApp[typeof OIDC_OAUTH_NAMESPACE]["getAccessTokenFromAuthorizationCodeFlow"]>
           >
         | undefined;
       try {
-        tokenResponse = await authApp[
+        tokenResponse = await app[
           OIDC_OAUTH_NAMESPACE
         ].getAccessTokenFromAuthorizationCodeFlow(request, reply);
       } catch {
@@ -150,8 +144,8 @@ export function registerAuthController(
       try {
         verifiedClaims = await verifyOidcIdToken({
           idToken,
-          jwtVerifier: authApp.jwt,
-          jwksSecretResolver: authApp.oidcJwksSecretResolver
+          jwtVerifier: app.jwt as JwtVerifier,
+          jwksSecretResolver: app.oidcJwksSecretResolver
         });
       } catch (error) {
         app.log.warn({ err: error }, "OIDC id_token validation failed.");
@@ -182,7 +176,7 @@ export function registerAuthController(
         ? normalizeOidcOAuthToken(tokenResponse.token)
         : null;
       const session = createSession(database, {
-        oidcToken: sessionToken,
+        oidcToken: sessionToken ? encryptOidcTokenForStorage(app, sessionToken) : null,
         userId: user.id,
         expiresAt
       });
