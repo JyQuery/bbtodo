@@ -5,7 +5,8 @@ import {
   DndContext,
   DragOverlay,
   MeasuringStrategy,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   pointerWithin,
   useDroppable,
   useSensor,
@@ -107,6 +108,10 @@ const taskMeasuring = {
     strategy: MeasuringStrategy.Always
   }
 } as const;
+const taskMouseActivationDistance = 8;
+const taskTouchActivationDelayMs = 180;
+const taskTouchActivationTolerance = 8;
+const taskClickSuppressDurationMs = 300;
 
 const projectTicketPrefixPattern = /^[A-Z]{2,4}$/;
 
@@ -742,7 +747,9 @@ function TaskCard({
   task: Task;
   taskIndex: number;
 }) {
-  const suppressClickRef = useRef(false);
+  const suppressClickUntilRef = useRef(0);
+  const touchPressStartedAtRef = useRef<number | null>(null);
+  const wasDraggingRef = useRef(false);
   const nestTargetDropTargetId = `nest:${task.id}`;
   const isDragDisabled = isBoardDragDisabled || pendingMoveTaskIds.has(task.id);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -776,19 +783,21 @@ function TaskCard({
   const showSubtaskPreviewContainer =
     subtasks.length > 0 || activePreviewSlotId === getTaskDropSlotId(laneId, task.id, 0);
 
+  function suppressTaskOpen(durationMs = taskClickSuppressDurationMs) {
+    suppressClickUntilRef.current = Math.max(suppressClickUntilRef.current, Date.now() + durationMs);
+  }
+
   useEffect(() => {
     if (isDragging) {
-      suppressClickRef.current = true;
+      wasDraggingRef.current = true;
+      suppressTaskOpen();
       return;
     }
 
-    const timeoutId = window.setTimeout(() => {
-      suppressClickRef.current = false;
-    }, 0);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
+    if (wasDraggingRef.current) {
+      wasDraggingRef.current = false;
+      suppressTaskOpen();
+    }
   }, [isDragging]);
 
   return (
@@ -814,8 +823,28 @@ function TaskCard({
           {...attributes}
           {...listeners}
           className="task-card__surface"
+          onTouchCancelCapture={() => {
+            touchPressStartedAtRef.current = null;
+            if (isDragging || wasDraggingRef.current) {
+              suppressTaskOpen();
+            }
+          }}
+          onTouchEndCapture={() => {
+            const touchPressStartedAt = touchPressStartedAtRef.current;
+
+            touchPressStartedAtRef.current = null;
+            if (
+              touchPressStartedAt !== null &&
+              Date.now() - touchPressStartedAt >= taskTouchActivationDelayMs
+            ) {
+              suppressTaskOpen();
+            }
+          }}
+          onTouchStartCapture={() => {
+            touchPressStartedAtRef.current = Date.now();
+          }}
           onClick={() => {
-            if (suppressClickRef.current) {
+            if (Date.now() < suppressClickUntilRef.current) {
               return;
             }
 
@@ -2189,9 +2218,15 @@ export function BoardPage() {
     [lanesById, tasks]
   );
   const taskSensors = useSensors(
-    useSensor(PointerSensor, {
+    useSensor(MouseSensor, {
       activationConstraint: {
-        distance: 8
+        distance: taskMouseActivationDistance
+      }
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: taskTouchActivationDelayMs,
+        tolerance: taskTouchActivationTolerance
       }
     })
   );
