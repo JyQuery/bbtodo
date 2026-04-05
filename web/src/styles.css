@@ -2325,6 +2325,7 @@ textarea:focus {
   position: relative;
   z-index: 1;
   outline: none;
+  touch-action: manipulation;
 }
 
 .task-card__surface:focus-visible {

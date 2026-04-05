@@ -262,6 +262,71 @@ async function dragTaskToTarget(page: Page, source: Locator, target: Locator, ta
   await finishTaskDrag(page);
 }
 
+async function getLocatorTouchPoint(target: Locator, targetYRatio = 0.5) {
+  await target.scrollIntoViewIfNeeded();
+  await expect(target).toBeVisible();
+  const targetBox = await target.boundingBox();
+
+  expect(targetBox).not.toBeNull();
+
+  return {
+    x: Math.round((targetBox?.x ?? 0) + (targetBox?.width ?? 0) / 2),
+    y: Math.round((targetBox?.y ?? 0) + (targetBox?.height ?? 0) * targetYRatio)
+  };
+}
+
+async function dispatchTouchPoint(
+  client: { send(method: string, params?: object): Promise<unknown> },
+  type: "touchEnd" | "touchMove" | "touchStart",
+  point?: { x: number; y: number }
+) {
+  await client.send("Input.dispatchTouchEvent", {
+    touchPoints: point
+      ? [
+          {
+            force: 1,
+            id: 1,
+            radiusX: 12,
+            radiusY: 12,
+            x: point.x,
+            y: point.y
+          }
+        ]
+      : [],
+    type
+  });
+}
+
+async function dragTaskWithTouch(page: Page, source: Locator, target: Locator, targetYRatio = 0.5) {
+  const client = await page.context().newCDPSession(page);
+  const sourcePoint = await getLocatorTouchPoint(source);
+
+  try {
+    await dispatchTouchPoint(client, "touchStart", sourcePoint);
+    await page.waitForTimeout(260);
+
+    const steps = 8;
+    let currentPoint = sourcePoint;
+
+    for (let step = 1; step <= steps; step += 1) {
+      const dragTargetPoint = await getLocatorTouchPoint(target, targetYRatio);
+      currentPoint =
+        step === steps
+          ? dragTargetPoint
+          : {
+              x: Math.round(currentPoint.x + (dragTargetPoint.x - currentPoint.x) / 2),
+              y: Math.round(currentPoint.y + (dragTargetPoint.y - currentPoint.y) / 2)
+            };
+      await dispatchTouchPoint(client, "touchMove", currentPoint);
+      await page.waitForTimeout(step === steps ? 120 : 40);
+    }
+
+    await dispatchTouchPoint(client, "touchEnd");
+  } finally {
+    await client.detach();
+  }
+}
+
 async function expectDragOverlayNearPoint(page: Page, expectedX: number, expectedY: number, tolerance = 40) {
   const dragOverlay = page.locator(".task-drag-overlay");
   await expect(dragOverlay).toBeVisible();
@@ -1933,6 +1998,66 @@ test("board page keeps a tall lane gap marker in the first screen", async ({ pag
 test.describe("mobile board page", () => {
   test.use({
     ...iPhone13
+  });
+
+  test("board page opens a task from a single mobile tap", async ({ page }) => {
+    await mockAuthenticated(page, { projects: projectsForGrid });
+
+    await page.goto(billingBoardPath);
+
+    const firstTaskCard = page.getByTestId("task-card-task-1");
+
+    await firstTaskCard.locator(".task-card__title").tap();
+
+    await expect(page).toHaveURL(/\/projects\/BILL\/BILL-1$/);
+    await expect(page.getByRole("dialog", { name: "Edit BILL-1" })).toBeVisible();
+  });
+
+  test("board page moves a task between lanes with a mobile long press drag", async ({ page }) => {
+    const mobileProjects = structuredClone(projectsForGrid);
+    const mobileTasks = structuredClone(tasks).filter(
+      (task) => task.id === "task-1" || task.id === "task-2"
+    );
+    const billingCleanupProject = mobileProjects.find((project) => project.id === "project-1");
+    if (!billingCleanupProject) {
+      throw new Error("Expected project-1 test fixture to exist");
+    }
+
+    billingCleanupProject.laneSummaries = billingCleanupProject.laneSummaries.map((laneSummary) => ({
+      ...laneSummary,
+      taskCount:
+        laneSummary.id === laneId("project-1", "todo")
+          ? 1
+          : laneSummary.id === laneId("project-1", "in_progress")
+            ? 1
+            : 0
+    }));
+
+    await mockAuthenticated(page, {
+      projects: mobileProjects,
+      tasks: mobileTasks
+    });
+
+    await page.goto(billingBoardPath);
+
+    const todoLaneId = laneId("project-1", "todo");
+    const inProgressLaneId = laneId("project-1", "in_progress");
+    const todoColumn = page.getByTestId(`board-column-${todoLaneId}`);
+    const inProgressColumn = page.getByTestId(`board-column-${inProgressLaneId}`);
+    const sourceCard = todoColumn.getByTestId("task-card-task-1");
+    const targetRootSlot = page.getByTestId(`task-drop-slot-${inProgressLaneId}-0`);
+
+    // Use Chromium touch events here so the test exercises the real mobile long-press path.
+    await dragTaskWithTouch(page, taskCardSurface(sourceCard), targetRootSlot);
+
+    await expect(page).toHaveURL(/\/projects\/BILL$/);
+    await expect(page.getByRole("dialog", { name: /Edit BILL-/ })).toHaveCount(0);
+    await expect(todoColumn.getByTestId("task-card-task-1")).toHaveCount(0);
+    await expect(inProgressColumn.getByTestId("task-card-task-1")).toBeVisible();
+    await expect(inProgressColumn.locator(".task-card__title")).toHaveText([
+      "[BILL-1] Review retry settings",
+      "[BILL-2] Tighten callback logging"
+    ]);
   });
 
   test("board page lets the mobile header scroll out of view instead of covering content", async ({ page }) => {
