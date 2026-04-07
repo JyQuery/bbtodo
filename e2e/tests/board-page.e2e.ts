@@ -2059,6 +2059,96 @@ test.describe("mobile board page", () => {
     await expect(editDialog).toHaveCount(0);
   });
 
+  test("board page keeps footer metadata below the editor in mobile fullscreen", async ({ page }) => {
+    const mobileTasks = structuredClone(tasks);
+    const longBodyTask = mobileTasks.find((task) => task.id === "task-1");
+
+    if (!longBodyTask) {
+      throw new Error("Expected task-1 fixture to exist");
+    }
+
+    longBodyTask.body = Array.from({ length: 24 }, (_, index) => `- Mobile fullscreen note ${index + 1}`).join("\n");
+
+    await mockAuthenticated(page, {
+      projects: projectsForGrid,
+      tasks: mobileTasks
+    });
+
+    await page.goto(billingBoardPath);
+
+    await page.getByTestId("task-card-task-1").locator(".task-card__title").tap();
+
+    const editDialog = page.getByRole("dialog", { name: "Edit BILL-1" });
+    const fullscreenButton = editDialog.getByRole("button", { name: "Enter full screen" });
+    const bodyField = editDialog.locator(".field--editor");
+    const bodyPanel = editDialog.locator(".task-editor__panel");
+    const bodyTextarea = editDialog.getByLabel("Task body");
+    const footerMeta = editDialog.locator(".task-editor__meta--footer");
+
+    await expect(editDialog).toBeVisible();
+    await fullscreenButton.tap();
+    await expect(editDialog.getByRole("button", { name: "Exit full screen" })).toBeVisible();
+    await expect(bodyPanel).toBeVisible();
+    await expect(bodyTextarea).toBeVisible();
+    await expect(footerMeta).toBeVisible();
+
+    const bodyFieldBox = await bodyField.boundingBox();
+    const bodyPanelBox = await bodyPanel.boundingBox();
+    const footerMetaBox = await footerMeta.boundingBox();
+
+    expect(bodyFieldBox).not.toBeNull();
+    expect(bodyPanelBox).not.toBeNull();
+    expect(footerMetaBox).not.toBeNull();
+    const bodyPanelBottom = bodyPanelBox!.y + bodyPanelBox!.height;
+    const bodyFieldBottom = bodyFieldBox!.y + bodyFieldBox!.height;
+
+    expect(bodyPanelBottom).toBeLessThanOrEqual(bodyFieldBottom + 1);
+    expect(bodyFieldBottom).toBeLessThanOrEqual(footerMetaBox!.y + 1);
+  });
+
+  test("board page uses compact task editor controls on small screens", async ({ page }) => {
+    const mobileTasks = structuredClone(tasks);
+    const compactTask = mobileTasks.find((task) => task.id === "task-1");
+
+    if (!compactTask) {
+      throw new Error("Expected task-1 fixture to exist");
+    }
+
+    compactTask.body = "";
+    compactTask.tags = [];
+    compactTask.title = "Compact mobile edit";
+
+    await mockAuthenticated(page, {
+      projects: projectsForGrid,
+      tasks: mobileTasks
+    });
+
+    await page.goto(billingBoardPath);
+
+    await page.getByTestId("task-card-task-1").locator(".task-card__title").tap();
+
+    const editDialog = page.getByRole("dialog", { name: "Edit BILL-1" });
+    const fullscreenButton = editDialog.getByRole("button", { name: "Enter full screen" });
+    const previewTab = editDialog.getByRole("tab", { name: "Rendered preview" });
+    const titleInput = editDialog.getByLabel("Title");
+    const tagInputShell = editDialog.locator(".task-tag-editor__input-shell");
+
+    await expect(editDialog).toBeVisible();
+    await fullscreenButton.tap();
+    await previewTab.tap();
+    await expect(editDialog.getByRole("button", { name: "Exit full screen" })).toBeVisible();
+
+    const titleInputBox = await titleInput.boundingBox();
+    const tagInputShellBox = await tagInputShell.boundingBox();
+
+    expect(titleInputBox).not.toBeNull();
+    expect(tagInputShellBox).not.toBeNull();
+    expect(titleInputBox!.height).toBeLessThanOrEqual(48);
+    expect(tagInputShellBox!.height).toBeLessThanOrEqual(48);
+    await expect(previewTab).toHaveCSS("width", "36px");
+    await expect(previewTab).toHaveCSS("height", "36px");
+  });
+
   test("board page moves a task between lanes with a mobile long press drag", async ({ page }) => {
     const mobileProjects = structuredClone(projectsForGrid);
     const mobileTasks = structuredClone(tasks).filter(
