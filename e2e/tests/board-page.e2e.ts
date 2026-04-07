@@ -2106,6 +2106,49 @@ test.describe("mobile board page", () => {
     expect(bodyFieldBottom).toBeLessThanOrEqual(footerMetaBox!.y + 1);
   });
 
+  test("board page uses compact task editor controls on small screens", async ({ page }) => {
+    const mobileTasks = structuredClone(tasks);
+    const compactTask = mobileTasks.find((task) => task.id === "task-1");
+
+    if (!compactTask) {
+      throw new Error("Expected task-1 fixture to exist");
+    }
+
+    compactTask.body = "";
+    compactTask.tags = [];
+    compactTask.title = "Compact mobile edit";
+
+    await mockAuthenticated(page, {
+      projects: projectsForGrid,
+      tasks: mobileTasks
+    });
+
+    await page.goto(billingBoardPath);
+
+    await page.getByTestId("task-card-task-1").locator(".task-card__title").tap();
+
+    const editDialog = page.getByRole("dialog", { name: "Edit BILL-1" });
+    const fullscreenButton = editDialog.getByRole("button", { name: "Enter full screen" });
+    const previewTab = editDialog.getByRole("tab", { name: "Rendered preview" });
+    const titleInput = editDialog.getByLabel("Title");
+    const tagInputShell = editDialog.locator(".task-tag-editor__input-shell");
+
+    await expect(editDialog).toBeVisible();
+    await fullscreenButton.tap();
+    await previewTab.tap();
+    await expect(editDialog.getByRole("button", { name: "Exit full screen" })).toBeVisible();
+
+    const titleInputBox = await titleInput.boundingBox();
+    const tagInputShellBox = await tagInputShell.boundingBox();
+
+    expect(titleInputBox).not.toBeNull();
+    expect(tagInputShellBox).not.toBeNull();
+    expect(titleInputBox!.height).toBeLessThanOrEqual(48);
+    expect(tagInputShellBox!.height).toBeLessThanOrEqual(48);
+    await expect(previewTab).toHaveCSS("width", "36px");
+    await expect(previewTab).toHaveCSS("height", "36px");
+  });
+
   test("board page moves a task between lanes with a mobile long press drag", async ({ page }) => {
     const mobileProjects = structuredClone(projectsForGrid);
     const mobileTasks = structuredClone(tasks).filter(
