@@ -2196,6 +2196,110 @@ test.describe("mobile board page", () => {
     ]);
   });
 
+  test("board page deletes tasks from the floating mobile trash dock", async ({ page }) => {
+    const todoLaneId = laneId("project-1", "todo");
+
+    await mockAuthenticated(page, {
+      projects: projectsForGrid,
+      tasks
+    });
+
+    await page.goto(billingBoardPath);
+
+    const sourceCard = page.getByTestId("task-card-task-1");
+    const mobileTrashTarget = page.getByTestId("mobile-task-trash-target");
+    const headerTrashTarget = page.getByTestId(`lane-task-trash-target-${todoLaneId}`);
+    const deleteDialog = page.getByRole("alertdialog", { name: "Delete task Review retry settings" });
+
+    await expect(mobileTrashTarget).toHaveCount(0);
+    await expect(headerTrashTarget).toBeHidden();
+
+    await dragTaskWithTouch(page, taskCardSurface(sourceCard), mobileTrashTarget);
+
+    await expect(deleteDialog).toBeVisible();
+    await deleteDialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(sourceCard).toBeVisible();
+    await expect(mobileTrashTarget).toHaveCount(0);
+    await expect(headerTrashTarget).toBeHidden();
+
+    await dragTaskWithTouch(page, taskCardSurface(sourceCard), mobileTrashTarget);
+
+    await expect(deleteDialog).toBeVisible();
+    await deleteDialog.getByRole("button", { exact: true, name: "Delete" }).click();
+    await expect(sourceCard).toHaveCount(0);
+    await expect(page.getByTestId("task-card-task-4")).toBeVisible();
+    await expect(mobileTrashTarget).toHaveCount(0);
+    const taskDeleteToast = page.getByTestId("toast-notice");
+    await expect(taskDeleteToast).toBeVisible();
+    await expect(taskDeleteToast).toContainText("Task deleted");
+    await expect(taskDeleteToast).toContainText("Review retry settings (BILL-1) was deleted.");
+  });
+
+  test("board page deletes a scrolled mobile task with the floating trash dock", async ({ page }) => {
+    const projectsWithTallTodo = structuredClone(projectsForGrid);
+    const tasksWithTallTodo = structuredClone(tasks);
+    const billingCleanupProject = projectsWithTallTodo.find((project) => project.id === "project-1");
+    if (!billingCleanupProject) {
+      throw new Error("Expected project-1 test fixture to exist");
+    }
+
+    const todoLaneSummary = billingCleanupProject.laneSummaries.find(
+      (laneSummary) => laneSummary.id === laneId("project-1", "todo")
+    );
+    if (!todoLaneSummary) {
+      throw new Error("Expected the Todo lane summary to exist");
+    }
+
+    for (let taskIndex = 0; taskIndex < 18; taskIndex += 1) {
+      tasksWithTallTodo.push({
+        body: "",
+        createdAt: `2026-03-18T09:${String(taskIndex).padStart(2, "0")}:00.000Z`,
+        id: `task-mobile-tall-${taskIndex + 1}`,
+        laneId: laneId("project-1", "todo"),
+        parentTaskId: null,
+        position: tasks.length + taskIndex,
+        projectId: "project-1",
+        ticketId: `BILL-${taskIndex + 10}`,
+        tags: [],
+        title: `Mobile tall backlog ${taskIndex + 1}`,
+        updatedAt: `2026-03-18T09:${String(taskIndex).padStart(2, "0")}:30.000Z`
+      });
+    }
+
+    todoLaneSummary.taskCount = tasksWithTallTodo.filter(
+      (task) => task.projectId === "project-1" && task.laneId === laneId("project-1", "todo")
+    ).length;
+
+    await mockAuthenticated(page, {
+      projects: projectsWithTallTodo,
+      tasks: tasksWithTallTodo
+    });
+
+    await page.goto(billingBoardPath);
+
+    const todoLaneHeader = page.getByTestId(`lane-header-${laneId("project-1", "todo")}`);
+    const sourceCard = page.getByTestId("task-card-task-mobile-tall-12");
+    const mobileTrashTarget = page.getByTestId("mobile-task-trash-target");
+    const deleteDialog = page.getByRole("alertdialog", { name: "Delete task Mobile tall backlog 12" });
+
+    await sourceCard.scrollIntoViewIfNeeded();
+    await expect.poll(async () => page.evaluate(() => window.scrollY)).toBeGreaterThan(300);
+    await expect
+      .poll(async () => todoLaneHeader.evaluate((element) => element.getBoundingClientRect().bottom))
+      .toBeLessThanOrEqual(0);
+
+    await dragTaskWithTouch(page, taskCardSurface(sourceCard), mobileTrashTarget);
+
+    await expect(deleteDialog).toBeVisible();
+    await deleteDialog.getByRole("button", { exact: true, name: "Delete" }).click();
+    await expect(sourceCard).toHaveCount(0);
+    await expect(mobileTrashTarget).toHaveCount(0);
+    const taskDeleteToast = page.getByTestId("toast-notice");
+    await expect(taskDeleteToast).toBeVisible();
+    await expect(taskDeleteToast).toContainText("Task deleted");
+    await expect(taskDeleteToast).toContainText("Mobile tall backlog 12 (BILL-21) was deleted.");
+  });
+
   test("board page lets the mobile header scroll out of view instead of covering content", async ({ page }) => {
     const projectsWithTallTodo = structuredClone(projectsForGrid);
     const tasksWithTallTodo = structuredClone(tasks);
