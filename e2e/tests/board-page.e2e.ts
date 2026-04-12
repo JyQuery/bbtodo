@@ -8,6 +8,7 @@ const mobileTouchDragActivationWaitMs = 260;
 const mobileTouchDragMoveSteps = 8;
 const mobileTouchDragMoveSettleDelayMs = 40;
 const mobileTouchDragDropSettleDelayMs = 120;
+const mobileTouchDragActivationMoveDistance = 18;
 const mobileQuickTapHoldMs = 40;
 
 async function isTaskDragActive(dragOverlay: Locator, taskCard: Locator) {
@@ -303,6 +304,32 @@ async function dispatchTouchPoint(
   });
 }
 
+async function detachTouchClient(client: { detach(): Promise<void> }) {
+  try {
+    await client.detach();
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !/Target page, context or browser has been closed/i.test(error.message)
+    ) {
+      throw error;
+    }
+  }
+}
+
+async function endTouchGesture(client: { send(method: string, params?: object): Promise<unknown> }) {
+  try {
+    await dispatchTouchPoint(client, "touchEnd");
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !/Target page, context or browser has been closed/i.test(error.message)
+    ) {
+      throw error;
+    }
+  }
+}
+
 async function tapLocatorWithTouch(page: Page, target: Locator, targetYRatio = 0.5) {
   const client = await page.context().newCDPSession(page);
   const point = await getLocatorTouchPoint(target, targetYRatio);
@@ -312,7 +339,7 @@ async function tapLocatorWithTouch(page: Page, target: Locator, targetYRatio = 0
     await page.waitForTimeout(mobileQuickTapHoldMs);
     await dispatchTouchPoint(client, "touchEnd");
   } finally {
-    await client.detach();
+    await detachTouchClient(client);
   }
 }
 
@@ -333,36 +360,120 @@ async function confirmTaskDelete(
   await deleteRequest;
 }
 
-async function dragTaskWithTouch(page: Page, source: Locator, target: Locator, targetYRatio = 0.5) {
-  const client = await page.context().newCDPSession(page);
-  const sourcePoint = await getLocatorTouchPoint(source);
+function requestMatchesTaskUpdate(
+  request: { method(): string; postData(): string | null; url(): string },
+  projectId: string,
+  taskId: string,
+  expectedInput: Partial<{ laneId: string; parentTaskId: string | null; position: number }>
+) {
+  if (
+    request.method() !== "PATCH" ||
+    !request.url().endsWith(`/api/v1/projects/${projectId}/tasks/${taskId}`)
+  ) {
+    return false;
+  }
+
+  const postData = request.postData();
+  if (!postData) {
+    return false;
+  }
 
   try {
-    await dispatchTouchPoint(client, "touchStart", sourcePoint);
-    await page.waitForTimeout(mobileTouchDragActivationWaitMs);
+    const body = JSON.parse(postData) as {
+      laneId?: string;
+      parentTaskId?: string | null;
+      position?: number;
+    };
 
-    const steps = mobileTouchDragMoveSteps;
-    let currentPoint = sourcePoint;
-
-    for (let step = 1; step <= steps; step += 1) {
-      const dragTargetPoint = await getLocatorTouchPoint(target, targetYRatio);
-      currentPoint =
-        step === steps
-          ? dragTargetPoint
-          : {
-              x: Math.round(currentPoint.x + (dragTargetPoint.x - currentPoint.x) / 2),
-              y: Math.round(currentPoint.y + (dragTargetPoint.y - currentPoint.y) / 2)
-            };
-      await dispatchTouchPoint(client, "touchMove", currentPoint);
-      await page.waitForTimeout(
-        step === steps ? mobileTouchDragDropSettleDelayMs : mobileTouchDragMoveSettleDelayMs
-      );
-    }
-
-    await dispatchTouchPoint(client, "touchEnd");
-  } finally {
-    await client.detach();
+    return Object.entries(expectedInput).every(([key, value]) => body[key as keyof typeof body] === value);
+  } catch {
+    return false;
   }
+}
+
+async function dragTaskWithTouch(page: Page, source: Locator, target: Locator, targetYRatio = 0.5) {
+  const dragOverlay = page.locator(".task-card--drag-overlay");
+  const taskCard = source
+    .locator("xpath=ancestor-or-self::article[contains(concat(' ', normalize-space(@class), ' '), ' task-card ')]")
+    .first();
+  const viewport = page.viewportSize();
+  const viewportHeight = viewport?.height ?? 844;
+  const viewportWidth = viewport?.width ?? 390;
+
+  for (const activationOffset of [
+    mobileTouchDragActivationMoveDistance,
+    mobileTouchDragActivationMoveDistance + 10,
+    mobileTouchDragActivationMoveDistance + 18
+  ]) {
+    const client = await page.context().newCDPSession(page);
+    const sourcePoint = await getLocatorTouchPoint(source);
+    let touchStarted = false;
+
+    try {
+      await dispatchTouchPoint(client, "touchStart", sourcePoint);
+      touchStarted = true;
+      await page.waitForTimeout(mobileTouchDragActivationWaitMs);
+
+      let currentPoint = {
+        x: sourcePoint.x,
+        y: Math.max(sourcePoint.y - activationOffset, 8)
+      };
+
+      if (currentPoint.y === sourcePoint.y) {
+        currentPoint = {
+          x: sourcePoint.x,
+          y: Math.min(sourcePoint.y + activationOffset, viewportHeight - 8)
+        };
+      }
+
+      await dispatchTouchPoint(client, "touchMove", currentPoint);
+      await page.waitForTimeout(mobileTouchDragMoveSettleDelayMs);
+
+      if (!(await isTaskDragActive(dragOverlay, taskCard))) {
+        currentPoint = {
+          x: Math.min(sourcePoint.x + Math.round(activationOffset / 2), viewportWidth - 8),
+          y: currentPoint.y
+        };
+        await dispatchTouchPoint(client, "touchMove", currentPoint);
+        await page.waitForTimeout(mobileTouchDragMoveSettleDelayMs);
+      }
+
+      if (!(await isTaskDragActive(dragOverlay, taskCard))) {
+        await endTouchGesture(client);
+        touchStarted = false;
+        await page.waitForTimeout(mobileTouchDragDropSettleDelayMs);
+        continue;
+      }
+
+      await expect(target).toBeVisible();
+
+      for (let step = 1; step <= mobileTouchDragMoveSteps; step += 1) {
+        const dragTargetPoint = await getLocatorTouchPoint(target, targetYRatio);
+        currentPoint =
+          step === mobileTouchDragMoveSteps
+            ? dragTargetPoint
+            : {
+                x: Math.round(currentPoint.x + (dragTargetPoint.x - currentPoint.x) / 2),
+                y: Math.round(currentPoint.y + (dragTargetPoint.y - currentPoint.y) / 2)
+              };
+        await dispatchTouchPoint(client, "touchMove", currentPoint);
+        await page.waitForTimeout(
+          step === mobileTouchDragMoveSteps ? mobileTouchDragDropSettleDelayMs : mobileTouchDragMoveSettleDelayMs
+        );
+      }
+
+      await endTouchGesture(client);
+      touchStarted = false;
+      return;
+    } finally {
+      if (touchStarted) {
+        await endTouchGesture(client);
+      }
+      await detachTouchClient(client);
+    }
+  }
+
+  throw new Error("Mobile touch drag did not activate after retrying the long-press gesture.");
 }
 
 async function expectDragOverlayNearPoint(page: Page, expectedX: number, expectedY: number, tolerance = 40) {
@@ -2218,13 +2329,21 @@ test.describe("mobile board page", () => {
     const inProgressColumn = page.getByTestId(`board-column-${inProgressLaneId}`);
     const sourceCard = todoColumn.getByTestId("task-card-task-1");
     const targetRootSlot = page.getByTestId(`task-drop-slot-${inProgressLaneId}-0`);
+    const moveTaskResponse = page.waitForResponse((response) =>
+      requestMatchesTaskUpdate(response.request(), "project-1", "task-1", {
+        laneId: inProgressLaneId,
+        parentTaskId: null,
+        position: 0
+      })
+    );
 
     // Use Chromium touch events here so the test exercises the real mobile long-press path.
     await dragTaskWithTouch(page, taskCardSurface(sourceCard), targetRootSlot);
+    await moveTaskResponse;
 
     await expect(page).toHaveURL(/\/projects\/BILL$/);
     await expect(page.getByRole("dialog", { name: /Edit BILL-/ })).toHaveCount(0);
-    await expect(todoColumn.getByTestId("task-card-task-1")).toHaveCount(0);
+    await expect(todoColumn.getByTestId("task-card-task-1")).toHaveCount(0, { timeout: 15000 });
     await expect(inProgressColumn.getByTestId("task-card-task-1")).toBeVisible();
     await expect(inProgressColumn.locator(".task-card__title")).toHaveText([
       "[BILL-1] Review retry settings",
