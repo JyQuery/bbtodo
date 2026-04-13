@@ -66,8 +66,6 @@ test("all todos page groups todo tasks and supports search and tag filtering", a
   await expect(page.getByText("Cross-project view")).toHaveCount(0);
   await expect(page.getByText("Everything still sitting in Todo, grouped by board so you can review the queue before diving into a lane.")).toHaveCount(0);
   await expect(page.locator(".metric-ribbon")).toHaveCount(0);
-  await expect(page.locator(".todos-project-list")).toHaveCSS("column-width", "352px");
-  await expect(page.locator(".todos-project-list")).toHaveCSS("column-gap", "16px");
 
   const billingGroup = page.getByTestId("todo-project-group-project-1");
   const partnerGroup = page.getByTestId("todo-project-group-project-6");
@@ -76,6 +74,19 @@ test("all todos page groups todo tasks and supports search and tag filtering", a
   await expect(partnerGroup.getByRole("heading", { name: "Partner audit" })).toBeVisible();
   await expect(billingGroup.locator(".todos-project__meta")).toContainText("3 total");
   await expect(billingGroup.locator(".todos-project__meta")).not.toContainText("visible");
+
+  const [billingGroupBox, partnerGroupBox] = await Promise.all([
+    billingGroup.boundingBox(),
+    partnerGroup.boundingBox()
+  ]);
+  expect(billingGroupBox).not.toBeNull();
+  expect(partnerGroupBox).not.toBeNull();
+  const columnOffset = Math.abs((partnerGroupBox?.x ?? 0) - (billingGroupBox?.x ?? 0));
+  const rowOffset = Math.abs((partnerGroupBox?.y ?? 0) - (billingGroupBox?.y ?? 0));
+  const columnThreshold = (billingGroupBox?.width ?? 0) * 0.5;
+  const rowThreshold = (billingGroupBox?.height ?? 0) * 0.5;
+  expect(columnOffset).toBeGreaterThan(columnThreshold);
+  expect(rowOffset).toBeLessThan(rowThreshold);
 
   const billingHeading = billingGroup.getByRole("heading", { name: "Billing cleanup" });
   const billingPrefix = billingGroup.locator(".todos-project__eyebrow");
