@@ -66,6 +66,8 @@ test("all todos page groups todo tasks and supports search and tag filtering", a
   await expect(page.getByText("Cross-project view")).toHaveCount(0);
   await expect(page.getByText("Everything still sitting in Todo, grouped by board so you can review the queue before diving into a lane.")).toHaveCount(0);
   await expect(page.locator(".metric-ribbon")).toHaveCount(0);
+  await expect(page.locator(".todos-project-list")).toHaveCSS("column-width", "352px");
+  await expect(page.locator(".todos-project-list")).toHaveCSS("column-gap", "16px");
 
   const billingGroup = page.getByTestId("todo-project-group-project-1");
   const partnerGroup = page.getByTestId("todo-project-group-project-6");
@@ -85,12 +87,6 @@ test("all todos page groups todo tasks and supports search and tag filtering", a
   expect(billingPrefixBox).not.toBeNull();
   expect(Math.abs((billingHeadingBox?.y ?? 0) - (billingPrefixBox?.y ?? 0))).toBeLessThan(24);
   expect((billingPrefixBox?.x ?? 0) - (billingHeadingBox?.x ?? 0)).toBeGreaterThan(24);
-
-  const [billingBox, partnerBox] = await Promise.all([billingGroup.boundingBox(), partnerGroup.boundingBox()]);
-  expect(billingBox).not.toBeNull();
-  expect(partnerBox).not.toBeNull();
-  expect(Math.abs((billingBox?.y ?? 0) - (partnerBox?.y ?? 0))).toBeLessThan(24);
-  expect(Math.abs((billingBox?.x ?? 0) - (partnerBox?.x ?? 0))).toBeGreaterThan(24);
 
   await expect(billingGroup.getByTestId("todo-task-card-task-1")).toBeVisible();
   await expect(billingGroup.getByTestId("todo-task-card-task-5")).toBeVisible();
