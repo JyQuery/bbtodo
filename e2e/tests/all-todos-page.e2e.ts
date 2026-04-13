@@ -75,6 +75,19 @@ test("all todos page groups todo tasks and supports search and tag filtering", a
   await expect(billingGroup.locator(".todos-project__meta")).toContainText("3 total");
   await expect(billingGroup.locator(".todos-project__meta")).not.toContainText("visible");
 
+  const [billingGroupBox, partnerGroupBox] = await Promise.all([
+    billingGroup.boundingBox(),
+    partnerGroup.boundingBox()
+  ]);
+  expect(billingGroupBox).not.toBeNull();
+  expect(partnerGroupBox).not.toBeNull();
+  const columnOffset = Math.abs((partnerGroupBox?.x ?? 0) - (billingGroupBox?.x ?? 0));
+  const rowOffset = Math.abs((partnerGroupBox?.y ?? 0) - (billingGroupBox?.y ?? 0));
+  const columnThreshold = (billingGroupBox?.width ?? 0) * 0.5;
+  const rowThreshold = (billingGroupBox?.height ?? 0) * 0.5;
+  expect(columnOffset).toBeGreaterThan(columnThreshold);
+  expect(rowOffset).toBeLessThan(rowThreshold);
+
   const billingHeading = billingGroup.getByRole("heading", { name: "Billing cleanup" });
   const billingPrefix = billingGroup.locator(".todos-project__eyebrow");
   const [billingHeadingBox, billingPrefixBox] = await Promise.all([
@@ -85,12 +98,6 @@ test("all todos page groups todo tasks and supports search and tag filtering", a
   expect(billingPrefixBox).not.toBeNull();
   expect(Math.abs((billingHeadingBox?.y ?? 0) - (billingPrefixBox?.y ?? 0))).toBeLessThan(24);
   expect((billingPrefixBox?.x ?? 0) - (billingHeadingBox?.x ?? 0)).toBeGreaterThan(24);
-
-  const [billingBox, partnerBox] = await Promise.all([billingGroup.boundingBox(), partnerGroup.boundingBox()]);
-  expect(billingBox).not.toBeNull();
-  expect(partnerBox).not.toBeNull();
-  expect(Math.abs((billingBox?.y ?? 0) - (partnerBox?.y ?? 0))).toBeLessThan(24);
-  expect(Math.abs((billingBox?.x ?? 0) - (partnerBox?.x ?? 0))).toBeGreaterThan(24);
 
   await expect(billingGroup.getByTestId("todo-task-card-task-1")).toBeVisible();
   await expect(billingGroup.getByTestId("todo-task-card-task-5")).toBeVisible();
